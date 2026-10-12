@@ -11,7 +11,7 @@ Library에서 확인한 파일:
 
 `library download request failed: Library prepare_materialize is not available`
 
-HTML/ZIP 생성·읽기 확인은 실패했다. helper 패치, 임의 URL 재구성, raw URL 다운로드, Library read를 이용한 원본 코드 재구성을 하지 않았다. 이전 os.setxattr 실패는 이번 실행에서 재현시키지 않았다. 검증 문서는 Library read로 내용만 확인했다.
+HTML/ZIP 생성·읽기 확인은 실패했다. helper 패치, 임의 URL 재구성, raw URL 다운로드, Library read를 이용한 원본 코드 재구성을 하지 않았다. 초기 자동 다운로드 경로에서는 xattr 단계에 도달하지 않았다. 검증 문서는 Library read로 내용만 확인했다.
 
 공통 규칙 기준: bloom-reference 76625d708de290134973758d5a62b3900bc291ba.
 bloom-bounko는 public, license=null, Pages build_type=workflow. 관련 checkout에서 AGENTS.md/.agents/skills/SKILL.md를 찾지 못했다.
@@ -28,3 +28,7 @@ bloom-bounko는 public, license=null, Pages build_type=workflow. 관련 checkout
 
 외부 NAT 멀티플레이와 실기기 검증은 별도 범위다. 원본의 GameKit 시험용 API 주입 결과는 실제 SDK 통합 검증이 아니다.
 
+
+## 공식 resolved-reference 경로 추가 확인
+
+부모가 확정 reference에 대한 공식 직접 전송 경로를 명시해 재개했다. PC 절대 목적지를 지정한 library_prepare_materialize는 정상 signed transfer를 반환했고 workspace_path는 null이었다. 완전한 transfer 객체를 변경 없이 현재 library_file_transfer.py의 materialize 인자와 stdin으로 전달했다. Python 3.13.7/Windows에서 메타데이터 기록 시 AttributeError: module 'os' has no attribute 'setxattr'로 종료됐다. 인증 거절이 아니라 공식 helper의 Windows xattr 미지원 오류다. 최종 목적지 HTML 파일은 존재하지 않는다. helper 수정, 메타데이터 생략, 임시 파일 회수, raw URL 다운로드는 하지 않았다.
