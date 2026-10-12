@@ -1,3 +1,10 @@
+const BIOMES=Object.freeze({
+ meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',trees:18,fungus:false,ore:'coalOre',oreBonus:0},
+ forest:{name:'포자 수림',surface:'grass',soil:'dirt',trees:82,fungus:false,ore:'coalOre',oreBonus:.025},
+ fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',trees:64,fungus:true,ore:'ironOre',oreBonus:.015},
+ dry:{name:'모래 구릉',surface:'sand',soil:'sand',trees:5,fungus:false,ore:'goldOre',oreBonus:.025},
+ cold:{name:'서리 고원',surface:'snow',soil:'dirt',trees:24,fungus:false,ore:'ironOre',oreBonus:.025}
+});
 const BLOCKS=[
  {id:'air',name:'공기',color:'#ffffff',solid:false},
  {id:'grass',name:'풀흙',color:'#80b966',hardness:650,drop:'dirt',tool:'shovel',tier:0},
@@ -22,6 +29,8 @@ const BLOCKS=[
  {id:'stem',name:'버섯 줄기',color:'#e8d9b8',hardness:900,drop:'log',tool:'axe',tier:0},
  {id:'trophy',name:'화원 수호의 증표',color:'#eec565',hardness:800,tier:0,light:12},
  {id:'crystalBloom',name:'공명 수정',color:'#8eddeb',hardness:1400,tool:'pick',tier:2,drop:'crystalShard',light:9},
+ {id:'snow',name:'눈덮인 흙',color:'#dae9ed',hardness:650,drop:'dirt',tool:'shovel',tier:0},
+ {id:'mycelium',name:'균사 흙',color:'#b79bc4',hardness:650,drop:'dirt',tool:'shovel',tier:0},
  {id:'lootChest',name:'봉인된 보물함',color:'#bf935d',hardness:Infinity,tier:99,station:'loot'}
 ];
 const BID=Object.fromEntries(BLOCKS.map((b,i)=>[b.id,i]));

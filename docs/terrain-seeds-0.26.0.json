@@ -1,0 +1,271 @@
+[
+  {
+    "seed": 0,
+    "biomes": {
+      "cold": {
+        "count": 992,
+        "min": 0,
+        "max": 18
+      },
+      "meadow": {
+        "count": 319,
+        "min": -2,
+        "max": 11
+      },
+      "fungal": {
+        "count": 471,
+        "min": -2,
+        "max": 11
+      },
+      "forest": {
+        "count": 316,
+        "min": -4,
+        "max": 11
+      },
+      "dry": {
+        "count": 2127,
+        "min": -6,
+        "max": 15
+      }
+    },
+    "waterColumns": 549,
+    "caves": [
+      {
+        "key": "cave:-2:-1",
+        "x": -59,
+        "z": -22,
+        "y": 6,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      },
+      {
+        "key": "cave:0:-2",
+        "x": 29,
+        "z": -60,
+        "y": 7,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      },
+      {
+        "key": "cave:0:1",
+        "x": 11,
+        "z": 63,
+        "y": 9,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      },
+      {
+        "key": "cave:start",
+        "x": 0,
+        "z": -20,
+        "y": 4,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      }
+    ],
+    "deterministic": true
+  },
+  {
+    "seed": 1,
+    "biomes": {
+      "dry": {
+        "count": 1434,
+        "min": -7,
+        "max": 14
+      },
+      "fungal": {
+        "count": 753,
+        "min": -2,
+        "max": 13
+      },
+      "cold": {
+        "count": 1618,
+        "min": -2,
+        "max": 20
+      },
+      "forest": {
+        "count": 215,
+        "min": -4,
+        "max": 13
+      },
+      "meadow": {
+        "count": 205,
+        "min": -4,
+        "max": 14
+      }
+    },
+    "waterColumns": 220,
+    "caves": [
+      {
+        "key": "cave:-2:0",
+        "x": -59,
+        "z": 23,
+        "y": 8,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      },
+      {
+        "key": "cave:start",
+        "x": 0,
+        "z": -20,
+        "y": 4,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      }
+    ],
+    "deterministic": true
+  },
+  {
+    "seed": 77,
+    "biomes": {
+      "cold": {
+        "count": 1410,
+        "min": -3,
+        "max": 21
+      },
+      "forest": {
+        "count": 251,
+        "min": -6,
+        "max": 9
+      },
+      "dry": {
+        "count": 1481,
+        "min": -8,
+        "max": 11
+      },
+      "meadow": {
+        "count": 224,
+        "min": -5,
+        "max": 8
+      },
+      "fungal": {
+        "count": 859,
+        "min": -5,
+        "max": 9
+      }
+    },
+    "waterColumns": 1651,
+    "caves": [
+      {
+        "key": "cave:start",
+        "x": 0,
+        "z": -20,
+        "y": 4,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      }
+    ],
+    "deterministic": true
+  },
+  {
+    "seed": 190725,
+    "biomes": {
+      "cold": {
+        "count": 1718,
+        "min": -2,
+        "max": 18
+      },
+      "fungal": {
+        "count": 319,
+        "min": -2,
+        "max": 11
+      },
+      "meadow": {
+        "count": 253,
+        "min": -4,
+        "max": 11
+      },
+      "dry": {
+        "count": 1608,
+        "min": -8,
+        "max": 17
+      },
+      "forest": {
+        "count": 327,
+        "min": -5,
+        "max": 12
+      }
+    },
+    "waterColumns": 569,
+    "caves": [
+      {
+        "key": "cave:1:0",
+        "x": 61,
+        "z": 28,
+        "y": 8,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      },
+      {
+        "key": "cave:start",
+        "x": 0,
+        "z": -20,
+        "y": 4,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      }
+    ],
+    "deterministic": true
+  },
+  {
+    "seed": 995591,
+    "biomes": {
+      "meadow": {
+        "count": 202,
+        "min": -2,
+        "max": 10
+      },
+      "forest": {
+        "count": 187,
+        "min": -4,
+        "max": 11
+      },
+      "dry": {
+        "count": 946,
+        "min": -6,
+        "max": 11
+      },
+      "fungal": {
+        "count": 965,
+        "min": -2,
+        "max": 15
+      },
+      "cold": {
+        "count": 1925,
+        "min": 0,
+        "max": 18
+      }
+    },
+    "waterColumns": 370,
+    "caves": [
+      {
+        "key": "cave:-1:0",
+        "x": -27,
+        "z": 22,
+        "y": 7,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      },
+      {
+        "key": "cave:start",
+        "x": 0,
+        "z": -20,
+        "y": 4,
+        "blocked": 0,
+        "unsupported": 0,
+        "flooded": 0
+      }
+    ],
+    "deterministic": true
+  }
+]

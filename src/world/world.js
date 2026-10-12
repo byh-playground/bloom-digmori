@@ -28,10 +28,9 @@ class FluidWorld {
   if(present){if(!entries){entries=new Set();index.set(ck,entries);}entries.add(key);}
   else if(entries){entries.delete(key);if(!entries.size)index.delete(ck);}}
  inBounds(x,y,z){return y>CFG.bottom&&y<CFG.top&&Math.abs(x)<8190&&Math.abs(z)<8190;}
- springAt(x,y,z){const C=32,gx=Math.floor(x/C),gz=Math.floor(z/C),h=hash3(gx,0,gz,this.terrain.seed+3111);
-  if(h%4!==0)return false;const px=gx*C+5+((h>>>4)%22),pz=gz*C+5+((h>>>12)%22);if(x!==px||z!==pz)return false;
-  const ground=this.terrain.height(x,z);return y===ground+1&&ground>=CFG.sea+2&&ground<=18&&Math.hypot(x,z)>12;}
- naturalSource(x,y,z){const ground=this.terrain.height(x,z);return ground<CFG.sea&&y>ground&&y<=CFG.sea||this.springAt(x,y,z);}
+ // Natural water is confined to terrain depressions below the shared sea level.
+ // No hash-selected source is placed above dry land; deep cavities are not aquifers.
+ naturalSource(x,y,z){const ground=this.terrain.height(x,z);return ground<CFG.sea&&y>ground&&y<=CFG.sea&&this.terrain.isSolid(this.terrain.get(x,ground,z));}
  isSource(x,y,z){const key=this.key(x,y,z);return !this.removed.has(key)&&(this.sources.has(key)||this.naturalSource(x,y,z));}
  level(x,y,z){x=Math.floor(x);y=Math.floor(y);z=Math.floor(z);if(!this.inBounds(x,y,z))return 0;
   if(this.terrain.isSolid(this.terrain.get(x,y,z)))return 0;
@@ -91,7 +90,7 @@ class FluidWorld {
   const activePlayers=players.filter(p=>p&&!p.dead&&!p.suspended).sort((a,b)=>cmp(a.id,b.id));
   for(const p of activePlayers){const x0=Math.floor(p.pos.x),z0=Math.floor(p.pos.z);
    for(let z=z0-radius;z<=z0+radius;z++)for(let x=x0-radius;x<=x0+radius;x++){
-    const h=this.terrain.height(x,z),sy=h<CFG.sea?CFG.sea:h+1;
+    const sy=CFG.sea;
     if(Math.abs(sy-p.pos.y)>18||!this.naturalSource(x,sy,z)||!this.inBounds(x,sy,z))continue;
     if(this.removed.has(this.key(x,sy,z)))continue;
     for(const [dx,dz]of [[1,0],[-1,0],[0,1],[0,-1]])this.schedule(x+dx,sy,z+dz);
@@ -146,16 +145,48 @@ class FluidWorld {
 }
 
 class VoxelWorld {
- constructor(seed){this.seed=seed>>>0;this.edits=new Map();this.editBuckets=new Map();this.chunks=new Map();this.heights=new Map();this.meshes=new Map();this.revisions=new Map();this.dirty=new Set();this.editSerial=0;this.physicsRevisions=new Map();this.physicsChanges=new Map();this.editJournal=[];this.lightBuckets=new Map();this.spawn={x:.5,y:5.1,z:.5};this.altar={x:24,y:5,z:-14};this.water=new FluidWorld(this);}
+ constructor(seed){this.seed=seed>>>0;this.edits=new Map();this.editBuckets=new Map();this.chunks=new Map();this.heights=new Map();this.climates=new Map();this.caves=new Map();this.meshes=new Map();this.revisions=new Map();this.dirty=new Set();this.editSerial=0;this.physicsRevisions=new Map();this.physicsChanges=new Map();this.editJournal=[];this.lightBuckets=new Map();this.spawn={x:.5,y:5.1,z:.5};this.altar={x:24,y:5,z:-14};this.water=new FluidWorld(this);}
+ climate(x,z){x=Math.floor(x);z=Math.floor(z);const key=columnKey(x,z);let value=this.climates.get(key);if(value)return value;
+  const heat=noise(x*.018,0,z*.018,this.seed+831),wet=noise(x*.019,0,z*.019,this.seed+839);
+  const id=Math.hypot(x,z)<12?'meadow':heat>.15?'dry':heat<-.15?'cold':wet>.10?'forest':wet<-.13?'fungal':'meadow';
+  value={id,heat,wet};this.climates.set(key,value);return value;}
  height(x,z){const key=x+','+z;let h=this.heights.get(key);if(h!==undefined)return h;
   const wx=fbm(x*.01,z*.01,this.seed+141)*14,wz=fbm(x*.009+7,z*.012,this.seed+333)*14;
-  h=Math.floor(4+fbm((x+wx)*.014,(z+wz)*.014,this.seed)*13+fbm(x*.085,z*.085,this.seed+95)*2.5);
+  const climate=this.climate(x,z),ridge=Math.max(0,-climate.heat)*12,dunes=Math.max(0,climate.heat)*noise(x*.065,0,z*.065,this.seed+844)*9;
+  h=Math.floor(4+fbm((x+wx)*.014,(z+wz)*.014,this.seed)*13+fbm(x*.085,z*.085,this.seed+95)*2.5+ridge+dunes);
   // A small safe landing, not a prebuilt village. The rest remains seeded.
   const d=Math.hypot(x,z);if(d<12)h=Math.round(lerp(4,h,clamp((d-5)/7,0,1)));
+  // A gentle approach from the landing to the first natural cave, not a ladder shaft.
+  const approach=Math.hypot(x,Math.max(0,-20-z,z));if(approach<7)h=Math.round(lerp(4,h,clamp((approach-2)/5,0,1)));
+  const caveBank=Math.hypot(x,Math.max(0,-60-z,z+20));if(caveBank<8)h=Math.max(h,Math.floor(lerp(4,h,clamp((caveBank-4)/4,0,1))));
   if(Math.abs(x-24)<=4&&Math.abs(z+14)<=4)h=4;
   h=clamp(h,-8,24);this.heights.set(key,h);return h;
  }
- biome(x,z){const h=this.height(Math.floor(x),Math.floor(z));if(h<3)return '이슬 해안';const n=noise(x*.008,0,z*.008,this.seed+831);if(h>13)return '바위 능선';return n>.13?'포자 수림':n<-.25?'균사 정원':'꽃잎 초원';}
+ biome(x,z){const h=this.height(Math.floor(x),Math.floor(z));return h<3?'이슬 해안':BIOMES[this.climate(x,z).id].name;}
+ caveAnchors(minX,minZ,maxX,maxZ){const out=[],spacing=CFG.worldgen.caveSpacing,margin=CFG.worldgen.caveLength+8;
+  const add=c=>{if(c&&c.x+margin>=minX&&c.x-margin<=maxX&&c.z+margin>=minZ&&c.z-margin<=maxZ)out.push(c);};
+  add({key:'cave:start',x:0,z:-20,y:4,dx:0,dz:-1});
+  for(let gz=Math.floor((minZ-margin)/spacing);gz<=Math.floor((maxZ+margin)/spacing);gz++)for(let gx=Math.floor((minX-margin)/spacing);gx<=Math.floor((maxX+margin)/spacing);gx++){
+   const key=gx+':'+gz;let c=this.caves.get(key);
+   if(c===undefined){const h=hash3(gx,0,gz,this.seed+684),x=gx*spacing+10+h%28,z=gz*spacing+10+(h>>>8)%28,y=this.height(x,z);
+    c=null;if(h%4!==0&&y>=CFG.sea+3&&y<=18&&Math.hypot(x,z+20)>48){
+     const directions=[[0,-1],[1,0],[0,1],[-1,0]],rank=directions.map(([dx,dz],i)=>({dx,dz,i,height:this.height(x+dx*12,z+dz*12)+this.height(x+dx*24,z+dz*24)})).filter(d=>{for(let t=-3;t<=CFG.worldgen.caveLength+6;t+=3)for(const w of [-5,0,5])if(this.height(x+d.dx*t-d.dz*w,z+d.dz*t+d.dx*w)<CFG.sea+2)return false;return true;}).sort((a,b)=>b.height-a.height||a.i-b.i),d=rank[0];
+     if(d)c={key:'cave:'+key,x,z,y,dx:d.dx,dz:d.dz};}this.caves.set(key,c);
+   }add(c);
+  }return out.sort((a,b)=>cmp(a.key,b.key));}
+ caveFloor(c,step){const count=clamp(step,0,CFG.worldgen.caveLength-6),phase=hash3(c.x,0,c.z,this.seed+685)%5;let drop=0;for(let i=1;i<=count;i++)if((i+phase)%5===0||(i+phase)%5===2)drop++;return c.y-drop;}
+ applyNaturalCaves(out,x0,y0,z0,C,caves){const put=(x,y,z,id)=>{if(x>=x0&&x<x0+C&&y>=y0&&y<y0+C&&z>=z0&&z<z0+C&&y>CFG.bottom&&y<CFG.top)out[x-x0+C*(y-y0+C*(z-z0))]=id;};
+  for(const c of caves){const sideX=-c.dz,sideZ=c.dx;
+   for(let step=-3;step<=CFG.worldgen.caveLength;step++){const bend=step<2?0:Math.round(noise(step*.14,0,0,this.seed+hash3(c.x,0,c.z))*1.5),x=c.x+c.dx*step+sideX*bend,z=c.z+c.dz*step+sideZ*bend,floor=this.caveFloor(c,step),width=2+(hash3(Math.floor(step/3),c.x,c.z,this.seed)%3===0?1:0);
+    // Natural stone ramp keeps a continuous sole even across existing underground cavities.
+    for(let w=-width;w<=width;w++){const px=x+sideX*w,pz=z+sideZ*w;const surface=this.height(px,pz),material=surface-floor<2?BID[BIOMES[this.climate(px,pz).id].surface]:BID.stone;
+     put(px,floor,pz,material);const headroom=3+(Math.abs(w)<2?1:0)+(w===0&&hash3(step,c.x,c.z,this.seed)%3===0?1:0);for(let dy=1;dy<=headroom;dy++)put(px,floor+dy,pz,0);}
+    if(step===12||step===13)for(const side of [-1,1])for(let dy=1;dy<=2;dy++)put(x+sideX*(width+1)*side,floor+dy,z+sideZ*(width+1)*side,BID.coalOre);
+   }
+   const end=CFG.worldgen.caveLength,ex=c.x+c.dx*end,ez=c.z+c.dz*end,floor=this.caveFloor(c,end);
+   for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++){if(dx*dx+dz*dz>25)continue;put(ex+dx,floor,ez+dz,BID.stone);for(let dy=1;dy<=5;dy++)put(ex+dx,floor+dy,ez+dz,0);}
+   for(const side of [-1,1])for(let dy=1;dy<=2;dy++)for(let t=-1;t<=1;t++)put(ex+sideX*5*side+c.dx*t,floor+dy,ez+sideZ*5*side+c.dz*t,BID.ironOre);
+  }}
  oreBand(y,min,max,peak){if(y<min||y>max)return 0;return y<=peak?(y-min)/Math.max(1,peak-min):(max-y)/Math.max(1,max-peak);}
   resourceInfo(){return RESOURCE_DEFS;}
   dungeonTheme(structure){return DUNGEON_THEMES[structure.hash%DUNGEON_THEMES.length];}
@@ -177,11 +208,12 @@ class VoxelWorld {
  rawTerrain(x,y,z,h){if(y<=CFG.bottom)return BID.bedrock;if(y>=CFG.top||y>h)return 0;
   const depth=h-y;
   if(this.caveCarve(x,y,z,depth))return 0;
-  if(y===h)return h<CFG.sea+2?BID.sand:BID.grass;
-  if(depth<=2)return h<CFG.sea+2?BID.sand:BID.dirt;
+  const biome=BIOMES[this.climate(x,z).id];
+  if(y===h)return h<CFG.sea+2?BID.sand:BID[biome.surface];
+  if(depth<=2)return h<CFG.sea+2?BID.sand:BID[biome.soil];
   const vein=(salt,scale=.17)=>noise(x*scale,y*scale*.91,z*scale,this.seed+salt)*.68+noise(x*scale*.47,y*scale*.51,z*scale*.47,this.seed+salt+1)*.32;
   // Resource depth/rarity comes from RESOURCE_DEFS; worldgen and UI never duplicate the bands.
-  for(let i=RESOURCE_DEFS.length-1;i>=0;i--){const r=RESOURCE_DEFS[i],band=this.oreBand(y,r.min,r.max,r.peak);if(band>0&&vein(r.salt,r.scale)>r.threshold-band*r.peakBonus)return BID[r.id];}
+  for(let i=RESOURCE_DEFS.length-1;i>=0;i--){const r=RESOURCE_DEFS[i],band=this.oreBand(y,r.min,r.max,r.peak);if(band>0&&vein(r.salt,r.scale)>r.threshold-band*r.peakBonus-(r.id===biome.ore?biome.oreBonus:0))return BID[r.id];}
   if(y<CFG.bottom+3&&noise(x*.12,0,z*.12,this.seed+543)>.4)return BID.obsidian;
   return BID.stone;
  }
@@ -274,7 +306,8 @@ class VoxelWorld {
  generate(cx,cy,cz){const it=this.generateSteps(cx,cy,cz);let r;do{r=it.next();}while(!r.done);return r.value;}
  *generateSteps(cx,cy,cz){const C=CFG.chunk,out=new Uint8Array(C*C*C),x0=cx*C,y0=cy*C,z0=cz*C;
   for(let z=0;z<C;z++){for(let x=0;x<C;x++){const h=this.height(x0+x,z0+z);for(let y=0;y<C;y++)out[x+C*(y+C*z)]=this.rawTerrain(x0+x,y0+y,z0+z,h);}yield;}
-  const generatedStructures=this.structureAnchors(x0-8,z0-8,x0+C+8,z0+C+8);this.applyStructures(out,x0,y0,z0,C,generatedStructures);yield;
+  const generatedStructures=this.structureAnchors(x0-8,z0-8,x0+C+8,z0+C+8);this.applyStructures(out,x0,y0,z0,C,generatedStructures);
+  const naturalCaves=this.caveAnchors(x0,z0,x0+C-1,z0+C-1);this.applyNaturalCaves(out,x0,y0,z0,C,naturalCaves);yield;
    // Cave floor formations. World-space grid keys keep chunk seams deterministic.
    if(y0<0&&y0+C>CFG.bottom+3){
     for(let gz=Math.floor(z0/5);gz<=Math.floor((z0+C-1)/5);gz++)for(let gx=Math.floor(x0/5);gx<=Math.floor((x0+C-1)/5);gx++){
@@ -291,8 +324,9 @@ class VoxelWorld {
   for(let gz=Math.floor((z0-4)/7);gz<=Math.floor((z0+C+4)/7);gz++)for(let gx=Math.floor((x0-4)/7);gx<=Math.floor((x0+C+4)/7);gx++){
    const hsh=hash3(gx,0,gz,this.seed+701),tx=gx*7+(hsh%5)+1,tz=gz*7+((hsh>>>4)%5)+1,h=this.height(tx,tz);
    if(h<3||h>18||Math.hypot(tx,tz)<7||Math.hypot(tx-24,tz+14)<6||generatedStructures.some(s=>Math.hypot(tx-s.x,tz-s.z)<12))continue;
-   const biome=this.biome(tx,tz),limit=biome==='꽃잎 초원'?35:74;if(hsh%100>limit)continue;
-   const tall=4+(hsh>>>8)%3,fungus=biome==='균사 정원'||((hsh>>>14)%5===0);
+   if(naturalCaves.some(c=>{const dx=tx-c.x,dz=tz-c.z,t=dx*c.dx+dz*c.dz,w=Math.abs(-dx*c.dz+dz*c.dx);return t>=-6&&t<=CFG.worldgen.caveLength+6&&w<7;}))continue;
+   const biome=BIOMES[this.climate(tx,tz).id];if(hsh%100>biome.trees)continue;
+   const tall=4+(hsh>>>8)%3,fungus=biome.fungus;
    for(let y=h+1;y<=h+tall;y++)write(tx,y,tz,fungus?BID.stem:BID.log);
    for(let y=h+tall-1;y<=h+tall+1;y++)for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++){
     if(Math.abs(dx)+Math.abs(dz)>3-(y===h+tall+1?1:0))continue;

@@ -2,7 +2,7 @@
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.25.0**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.26.0**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
@@ -82,11 +82,14 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 ## 버전·저장 호환
 
-게임과 snapshotVersion은 **0.25.0**입니다. 이전 0.21 및 0.24.x 저장과 비호환이므로 **새 월드가 필요합니다**. 자동 변환 어댑터나 이전 저장 삭제 기능은 추가하지 않았습니다. 기존 IndexedDB·설정 키 및 `.bloom` 파일 포맷을 유지하며 내보내기 파일 표시 이름만 Digmori로 바꿨습니다.
+게임과 snapshotVersion은 **0.26.0**입니다. 바이옴·동굴 지형 생성과 블록 정의가 바뀌어 0.25.0을 포함한 이전 저장과 비호환이므로 **새 월드가 필요합니다**. 자동 변환 어댑터나 이전 저장 삭제 기능은 추가하지 않았습니다. 기존 IndexedDB·설정 키 및 `.bloom` 파일 포맷을 유지하며 내보내기 파일 표시 이름만 Digmori로 바꿨습니다.
 
-브라우저 저장은 출처에 종속됩니다. 기존 로컬/다른 사이트 저장이 새 Pages 주소로 자동 이동하지 않습니다. 0.25.0 월드는 게임의 내보내기·가져오기를 사용할 수 있습니다.
+브라우저 저장은 출처에 종속됩니다. 기존 로컬/다른 사이트 저장이 새 Pages 주소로 자동 이동하지 않습니다. 0.26.0 월드는 게임의 내보내기·가져오기를 사용할 수 있습니다.
 
 ## 검증
+
+[0.26.0 지형 검증](docs/terrain-0.26.0.md): 무작위 지상 수원 대신 해수면 아래 지형에 물을 생성합니다. 초원·수림·균사·모래·서리 바이옴은 지표, 식생 밀도, 높이와 광맥 분포가 다릅니다. 시작점에서 정면 약 20블록에 자연 동굴 입구가 있으며 석탄·철을 볼 수 있는 지하 공간으로 걸어 내려갈 수 있습니다. 다른 자연 동굴은 시드와 건조한 지형 조건에 따라 생성됩니다. 기존 갱도와 6방 던전은 별도 구조입니다.
+
 
 [실제 실행 기록](docs/verification-initial.json): Windows Edge 155, 고정 실제 SDK, 정적 `/bloom-digmori/` 경로에서 새 게임 → WASD 이동 → 풀흙 채굴 → 흙 회수·설치 → 저장 → 새로고침 → 복원을 검증합니다. 게임 상태를 주입하거나 SDK를 mock하지 않고 UI 입력과 읽기 전용 상태 관측을 사용합니다. 5개 GameKit 모듈의 HTTP 응답과 SHA-256도 대조합니다. 모바일 844×390 터치 에뮬레이션의 모험창을 확인합니다.
 
@@ -94,7 +97,7 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 ## 원본·개발 규칙·권리
 
-사용자가 내려받은 Bloom Sandbox 0.25.0 HTML을 이관했습니다. 원본 크기·SHA 및 무손실 재조합 확인은 [origin.json](docs/origin.json), 변경 범위는 [이관 기록](docs/import-status.md)에 있습니다. 기존 게임 기능과 저장 계약을 유지하고 표시 이름·진단 버전·개발/배포 구성만 정리했습니다.
+사용자가 내려받은 Bloom Sandbox 0.25.0 HTML을 이관했습니다. 원본 크기·SHA 및 무손실 재조합 확인은 [origin.json](docs/origin.json), 변경 범위는 [이관 기록](docs/import-status.md)에 있습니다. 초기 이관에서는 기존 기능과 저장 계약을 유지했습니다. 이후 0.26.0 지형 변경과 저장 비호환 범위는 위 기록에 별도로 명시합니다.
 
 [공통 개발 규칙](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/development.html) · [프로젝트 관리·검증 정책](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/project-management.html)
 
