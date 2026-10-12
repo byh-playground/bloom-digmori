@@ -1,0 +1,101 @@
+{
+  "scenes": [
+    {
+      "kind": "cold",
+      "position": {
+        "x": -109.5,
+        "z": -109.5,
+        "y": 10
+      },
+      "observed": {
+        "pos": {
+          "x": -109.5,
+          "y": 9.99996738433838,
+          "z": -109.5
+        },
+        "label": "서리 고원 · 낮 12:05\n-110 / 9 / -110",
+        "worker": "worker",
+        "workerFailures": 0,
+        "contextLost": false
+      }
+    },
+    {
+      "kind": "dry",
+      "position": {
+        "x": 10.5,
+        "z": -109.5,
+        "y": 4
+      },
+      "observed": {
+        "pos": {
+          "x": 10.5,
+          "y": 3.999965953826904,
+          "z": -109.5
+        },
+        "label": "모래 구릉 · 낮 12:11\n10 / 3 / -110",
+        "worker": "worker",
+        "workerFailures": 0,
+        "contextLost": false
+      }
+    },
+    {
+      "kind": "water",
+      "position": {
+        "x": 106.5,
+        "z": -106.5,
+        "y": 2
+      },
+      "observed": {
+        "pos": {
+          "x": 106.5,
+          "y": 1.999965000152588,
+          "z": -106.5
+        },
+        "label": "이슬 해안 · 낮 12:17\n106 / 1 / -107",
+        "worker": "worker",
+        "workerFailures": 0,
+        "contextLost": false
+      }
+    },
+    {
+      "kind": "fungal",
+      "position": {
+        "x": 25.5,
+        "z": 22.5,
+        "y": 9
+      },
+      "observed": {
+        "pos": {
+          "x": 25.5,
+          "y": 8.99996738433838,
+          "z": 22.5
+        },
+        "label": "균사 정원 · 낮 12:22\n25 / 8 / 22",
+        "worker": "worker",
+        "workerFailures": 0,
+        "contextLost": false
+      }
+    },
+    {
+      "kind": "forest",
+      "position": {
+        "x": 97.5,
+        "z": 43.5,
+        "y": 10
+      },
+      "observed": {
+        "pos": {
+          "x": 97.5,
+          "y": 9.99996738433838,
+          "z": 43.5
+        },
+        "label": "포자 수림 · 낮 12:28\n97 / 9 / 43",
+        "worker": "worker",
+        "workerFailures": 0,
+        "contextLost": false
+      }
+    }
+  ],
+  "errors": [],
+  "method": "Observer positioning fixture for visual coverage; actual physics, WebGL and SDK. Core cave walk is separately natural input."
+}

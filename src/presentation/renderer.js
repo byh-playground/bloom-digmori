@@ -242,7 +242,7 @@ class Renderer {
    seen.add(key);if(water.level(x,y,z)>0)cells.push([x,y,z]);};
   for(let z=z0;z<z0+C;z++)for(let x=x0;x<x0+C;x++){
    const h=terrain.height(x,z);if(h<CFG.sea)for(let y=Math.max(y0,h+1);y<=Math.min(CFG.sea,yMax);y++)add(x,y,z);
-   const sy=h+1;if(sy>=y0&&sy<=yMax&&water.springAt(x,sy,z))add(x,sy,z);
+
   }
   if(sourceKeys)for(const key of sourceKeys){const [x,y,z]=key.split(',').map(Number);add(x,y,z);}
   if(flowKeys)for(const key of flowKeys){const [x,y,z]=key.split(',').map(Number);add(x,y,z);}

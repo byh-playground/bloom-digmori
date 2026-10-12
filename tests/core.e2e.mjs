@@ -19,6 +19,7 @@ try {
  page.on('pageerror',error=>errors.push(error.message));
  page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText));
  const config=fs.readFileSync(new URL('../src/core/config.js',import.meta.url),'utf8');
+ const expectedVersion=config.match(/const VERSION='([^']+)'/)[1];
  const sdkSHA=config.match(/distCommit:'([a-f0-9]{40})'/)[1];
  const hashes=new Map([...config.matchAll(/file:'([^']+)',sha256:'([^']+)'/g)].map(m=>[m[1],m[2]]));
  page.on('response',response=>{if(response.url().includes('@'+sdkSHA+'/'))pending.push((async()=>{
@@ -55,8 +56,17 @@ try {
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('복원했어요'));
  const restored=await state();assert.deepEqual(restored.edits,saved.edits);assert.deepEqual(restored.slots,saved.slots);assert(Math.hypot(restored.pos.x-saved.pos.x,restored.pos.z-saved.pos.z)<0.05);
  const diagnostic=await page.evaluate(()=>JSON.parse(window.BloomDiagnostics.format()));
- assert.equal(diagnostic.version,'0.25.0');assert.equal(diagnostic.snapshotVersion,'0.25.0');assert.equal(diagnostic.diagnostics.total,0);
+ assert.equal(diagnostic.version,expectedVersion);assert.equal(diagnostic.snapshotVersion,expectedVersion);assert.equal(diagnostic.diagnostics.total,0);
  if(process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT});
+ await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
+ await page.keyboard.down('KeyW');await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-14,null,{timeout:12000});await page.keyboard.up('KeyW');await page.waitForTimeout(300);
+ const entrance=await state();if(process.env.CAVE_SCREENSHOT)await page.screenshot({path:process.env.CAVE_SCREENSHOT});
+ await page.keyboard.press('KeyV');await page.keyboard.down('KeyW');
+ await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-52,null,{timeout:20000});await page.keyboard.up('KeyW');await page.waitForTimeout(500);
+ const cave=await page.evaluate(()=>{const b=window.Bloom,a=b.app.actor(),w=b.app.sim.terrain;let ores=new Set();for(let z=-60;z<=-27;z++)for(let x=-5;x<=5;x++)for(let y=-9;y<=3;y++){const id=w.get(x,y,z);if(b.BLOCKS[id]?.id?.endsWith('Ore'))ores.add(b.BLOCKS[id].id);}return{pos:{...a.pos},hp:a.hp,water:a.swim.inWater,ores:[...ores],workerFailures:b.app.renderer.meshBuilder.stats.failed};});
+ assert(cave.pos.y<0&&cave.hp>0&&!cave.water);assert(cave.ores.includes('coalOre')&&cave.ores.includes('ironOre'));assert.equal(cave.workerFailures,0);
+ if(process.env.CAVE_INTERIOR_SCREENSHOT)await page.screenshot({path:process.env.CAVE_INTERIOR_SCREENSHOT});
+ report.exploration={entrance,cave,input:'WASD walk from fresh spawn to underground gallery; no teleport'};
  const mobile=await browser.newPage({viewport:{width:844,height:390},isMobile:true,hasTouch:true});
  mobile.on('pageerror',error=>errors.push(error.message));await mobile.goto(url);
  await mobile.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});

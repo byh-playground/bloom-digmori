@@ -11,7 +11,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5,poise:5,stamina:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.25.0',SNAPSHOT_VERSION='0.25.0';
+const VERSION='0.26.0',SNAPSHOT_VERSION='0.26.0';
 const CFG=Object.freeze({stepMs:25,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
   player:{hp:100,stamina:100,poise:100,load:50,walk:4.6,run:6.0,acceleration:36,jump:7.8,gravity:20,radius:.35,halfHeight:.60,eyeHeight:1.65},
   stamina:{delay:700,regen:25,sprintPerMeter:.55,hitRefund:.45,finisherRefund:.65,chargedRefund:.55,minHitRefund:5},poise:{delay:2000,regen:25,stagger:600},input:{hold:250,buffer:180,sprintOuter:1.35,sprintForward:.78},
@@ -30,7 +30,7 @@ const CFG=Object.freeze({stepMs:25,chunk:16,bottom:-32,top:48,sea:1,view:3,reach
    feedback:{particles:220,bursts:32,numbers:24,flash:130,poseHold:45,heavyHold:70,shake:.045,volume:.20,afterimages:3}},
   textures:{enabled:true,minifyStart:.8,minifyEnd:2.5},
   mobs:{nightSpawn:false,dungeonEncounters:true},
-  worldgen:{mineSpacing:64,dungeonSpacing:112,resourceGuideRadius:128,rooms:6},rpg:{maxLevel:25,xp:{beetle:20,spore:25,guardian:45,crystalWisp:30,cryptKnight:55,boss:250},mining:{coalOre:3,ironOre:5,goldOre:8,diamondOre:15,crystalBloom:12},dungeonClear:120,chest:18},
+  worldgen:{caveSpacing:48,caveLength:34,mineSpacing:64,dungeonSpacing:112,resourceGuideRadius:128,rooms:6},rpg:{maxLevel:25,xp:{beetle:20,spore:25,guardian:45,crystalWisp:30,cryptKnight:55,boss:250},mining:{coalOre:3,ironOre:5,goldOre:8,diamondOre:15,crystalBloom:12},dungeonClear:120,chest:18},
   camera:{initialDistance:{desktop:7.5,mobile:11},minDistance:2.5,maxDistance:11},
   timing:{maxCatchUp:4,maxBacklogTicks:32},worldSeed:190725,presentation:{maxBuffered:2048,retentionTicks:160},net:{maxPlayers:4,inputSize:20}});
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),lerp=(a,b,t)=>a+(b-a)*t,TAU=Math.PI*2;
