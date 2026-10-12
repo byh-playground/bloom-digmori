@@ -1,0 +1,34 @@
+
+#inventory-hotbar{display:grid;grid-template-columns:repeat(9,42px);gap:4px;margin-top:5px}
+#inventory-hotbar .slot{width:42px;height:42px}
+#inventory-grid{margin-top:5px}
+.inv-label{font-size:11px;letter-spacing:.04em;color:var(--dim);font-weight:700;margin-top:9px}
+.hot-label{margin-top:12px}
+#inventory .slot{touch-action:none}
+#inventory .slot:active{border-color:#e6e3a2;filter:brightness(1.15)}
+@media(pointer:coarse){
+ .touch-actions{display:flex!important;flex-direction:column!important;grid-template-columns:none!important;grid-template-rows:none!important;align-items:center;gap:12px!important;right:max(19px,env(safe-area-inset-right))!important;bottom:max(19px,env(safe-area-inset-bottom))!important}
+ .touch-actions .mobile-button{display:flex;flex-direction:column;align-items:center;justify-content:center;width:61px!important;height:61px!important;border-radius:50%!important;font-size:23px!important;line-height:1.06;background:#324f41da!important;border:2px solid #a8c7a7!important;box-shadow:0 4px 14px #091b145e}
+ .touch-actions .mobile-button small{font-size:9px;font-weight:650;letter-spacing:.02em}
+ .touch-actions #mobile-skill{background:#5d4f74d9!important;border-color:#d7bbf5!important}
+ .touch-actions #mobile-skill[hidden]{display:none!important}
+ #inventory .panel{width:min(97vw,860px);max-height:96dvh;overflow:auto;padding:10px 12px}
+ #inventory-panel{display:flex;flex-direction:row;gap:14px;align-items:flex-start}
+ #recipe-book{width:clamp(125px,22vw,175px)!important;flex-shrink:0;display:block!important;overflow:auto;max-height:72dvh}
+ .inv-main{min-width:0;flex:1}
+ #inventory-grid,#inventory-hotbar{display:grid;grid-template-columns:repeat(9,min(4.1vw,38px));gap:3px}
+ #inventory-grid .slot,#inventory-hotbar .slot{width:min(4.1vw,38px)!important;height:min(4.1vw,38px)!important;min-width:29px;min-height:29px}
+ #inventory .slot .icon{font-size:clamp(14px,2.3vw,21px)}
+ #inventory .slot .count{font-size:10px}
+ #inventory .top-inventory{min-height:105px;padding:4px 0}
+ #inventory .armor-list{gap:3px}
+ #inventory .armor-list .slot{width:36px;height:36px}
+ #inventory .craft-grid .slot{width:36px;height:36px}
+ #inventory .panel-head{margin-bottom:5px}
+ #inventory .panel-head h2{font-size:18px}
+ .inv-footer{font-size:10px;flex-wrap:wrap}
+ #cursor-display{z-index:195}
+ #topbar #guide{pointer-events:none}
+ #joystick:after{content:'바깥까지 앞으로 밀기: 달리기';position:absolute;top:-15px;left:2px;color:#b4c8b5;font-size:9px;white-space:nowrap}#joystick.sprinting{border-color:#f2dc76!important;box-shadow:0 0 0 3px #d9c95b2e,0 0 16px #f2dc7655}#joystick.sprinting:after{content:'달리기';color:#ffe887;font-weight:800}#joystick.sprinting #stick{background:#dfe28e88;border-color:#fff0a1}
+}
+@media(pointer:coarse) and (max-height:440px){#inventory .top-inventory{min-height:90px}#inventory #recipe-book{max-height:69dvh}}

@@ -1,0 +1,19 @@
+[
+  "core/config.js",
+  "data/content.js",
+  "progression/rpg.js",
+  "inventory/inventory.js",
+  "world/world.js",
+  "world/meshing.js",
+  "simulation/physics.js",
+  "simulation/combat.js",
+  "simulation/simulation.js",
+  "presentation/animation.js",
+  "presentation/art.js",
+  "presentation/renderer.js",
+  "ui/hud.js",
+  "input/controls.js",
+  "runtime/session.js",
+  "runtime/app.js",
+  "runtime/boot.js"
+]

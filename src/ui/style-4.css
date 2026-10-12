@@ -1,0 +1,15 @@
+
+#block-action-fx{position:fixed;left:50%;top:50%;width:18px;height:18px;pointer-events:none;transform:translate(-50%,-50%);z-index:7;opacity:0}
+#block-action-fx i{position:absolute;inset:-17px;border:2px solid #e8dfa4;border-radius:5px;opacity:0;transform:scale(.5)}
+#block-action-fx i:nth-child(2){inset:-25px;border-width:1px;transform:rotate(24deg) scale(.6)}
+#block-action-fx i:nth-child(3){inset:-32px;border:1px dashed #e9d7a5;transform:rotate(-18deg) scale(.6)}
+#block-action-fx.play{animation:block-fx-appear .36s ease-out both}
+#block-action-fx.play i{animation:block-fx-ring .36s cubic-bezier(.2,.8,.25,1) both}
+#block-action-fx.play i:nth-child(2){animation-delay:.035s}
+#block-action-fx.play i:nth-child(3){animation-delay:.06s}
+#block-action-fx.effect-place i{border-color:#a9efd1}
+#block-action-fx.effect-blocked i{border-color:#e67d68}
+#crosshair.mining:before,#crosshair.mining:after{background:#ffce71!important;box-shadow:0 0 7px #f0ac45}
+@keyframes block-fx-appear{0%{opacity:1;transform:translate(-50%,-50%) scale(.65)}50%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(1.15)}}
+@keyframes block-fx-ring{0%{opacity:.95;transform:rotate(0) scale(.45)}75%{opacity:.5}100%{opacity:0;transform:rotate(16deg) scale(1.5)}}
+@media(prefers-reduced-motion:reduce){#block-action-fx.play,#block-action-fx.play i{animation-duration:.1s}}

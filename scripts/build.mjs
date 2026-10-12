@@ -1,31 +1,22 @@
-import { existsSync, readFileSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
-import { spawnSync, execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-
+import {readFileSync, mkdirSync, writeFileSync} from 'node:fs';
+import {spawnSync, execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
 process.chdir(fileURLToPath(new URL('../', import.meta.url)));
-for (const path of ['src/game.mjs', 'build.py']) {
-  if (!existsSync(path)) throw new Error('Original source is not materialized: ' + path + '. Do not publish an empty game.');
-}
-const syntax = spawnSync(process.execPath, ['--check', 'src/game.mjs'], { stdio: 'inherit' });
-if (syntax.status !== 0) process.exit(syntax.status ?? 1);
-const build = spawnSync(process.env.PYTHON || 'python', ['build.py'], { stdio: 'inherit' });
-if (build.error) throw build.error;
-if (build.status !== 0) process.exit(build.status ?? 1);
-const html = readFileSync('index.html');
-const text = html.toString('utf8');
-if (!/<html[\s>]/i.test(text) || !/<script[\s>]/i.test(text)) throw new Error('Expected a playable single HTML artifact.');
-const version = text.match(/\bVERSION\s*=\s*['"]([^'"]+)['"]/)?.[1];
-if (!version) throw new Error('Game VERSION is missing.');
-const gamekit = '87cac89042256297c025e880aa70ad9cd25ef8ab';
-if (!text.includes(gamekit)) throw new Error('Expected pinned GameKit SHA is missing. Review actual imports before updating the pin.');
-const commit = process.env.GITHUB_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-mkdirSync('dist', { recursive: true });
-copyFileSync('index.html', 'dist/index.html');
-writeFileSync('dist/.nojekyll', '');
-writeFileSync('dist/build.json', JSON.stringify({
-  commit, version, gamekit_dist_commit: gamekit,
-  index_sha256: createHash('sha256').update(html).digest('hex'),
-  built_at_utc: new Date().toISOString()
-}, null, 2) + '\n');
-
+const order=JSON.parse(readFileSync('src/order.json','utf8'));
+const game=order.map(file=>readFileSync('src/'+file,'utf8')).join('');
+const syntax=spawnSync(process.execPath,['--input-type=module','--check'],{input:game,encoding:'utf8'});
+if(syntax.status!==0)throw Error(syntax.stderr);
+let html=readFileSync('src/ui/shell.html','utf8').replace('<!-- DIGMORI_GAME -->',()=>game);
+html=html.replace(/<!-- DIGMORI_STYLE:([^>]+) -->/g,(_,file)=>readFileSync('src/'+file,'utf8'));
+if(/<!-- DIGMORI_/.test(html))throw Error('Unresolved build marker');
+const version=game.match(/\bVERSION\s*=\s*['"]([^'"]+)['"]/)?.[1];
+const gamekit=game.match(/distCommit:'([a-f0-9]{40})'/)?.[1];
+if(!version||!gamekit)throw Error('Missing version or pinned SDK SHA');
+html=html.replaceAll('__GAME_VERSION__',version).replaceAll('__SNAPSHOT_VERSION__',game.match(/SNAPSHOT_VERSION='([^']+)'/)[1]);
+const commit=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+mkdirSync('dist',{recursive:true});
+writeFileSync('dist/index.html',html);
+writeFileSync('dist/.nojekyll','');
+writeFileSync('dist/build.json',JSON.stringify({commit,version,gamekit_dist_commit:gamekit,index_sha256:createHash('sha256').update(html).digest('hex'),built_at_utc:new Date().toISOString()},null,2)+'\n');
+console.log('Built Digmori '+version+' ('+Buffer.byteLength(html)+' bytes)');

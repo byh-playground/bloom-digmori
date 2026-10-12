@@ -1,57 +1,101 @@
 # 디그모리 · Digmori
 
-2.5D 세계에서 탐험하고, 자원을 채굴하고, 건설하는 샌드박스 게임입니다. 이관 기준 후보는 Bloom Sandbox 0.25.0이며 동굴, 6방 던전, 봉인 보물함, 수호체, XP·레벨·스탯, 모험창을 포함합니다.
+작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**현재 상태: 초기 구성 Candidate. 원본 파일 전송이 막혀 게임은 아직 들어오지 않았고 실행·배포도 완료되지 않았습니다.**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.25.0**
 
-## 실행
-
-예정 실행 주소: https://byh-playground.github.io/bloom-digmori/ (아직 배포되지 않음).
-
-원본 이관 후 생성되는 `dist/index.html`이 단일 HTML 실행 산출물입니다. 외부 GameKit·물리 SDK 로딩을 위한 인터넷 연결이 필요합니다. 직접 file:// 실행 지원 여부는 원본 확보 후 확인합니다.
+![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
 ## 조작
 
-원본 검증 문서에서 확인한 키는 F 상호작용, E 가방, J 모험창입니다. PC 이동·채굴·설치와 모바일 터치 조작의 정확한 매핑은 원본 UI/입력 코드를 확인한 후 문서화합니다. 모바일 가로 844×390 에뮬레이션 기록은 있으나 실제 기기 검증은 아닙니다.
+| 동작 | PC | 모바일 |
+| --- | --- | --- |
+| 이동·달리기 | WASD, Ctrl+앞 이동 | 왼쪽 조이스틱, 앞으로 바깥까지 밀면 달리기 |
+| 시야·시점 | 화면 클릭 후 마우스, V | 화면 드래그, 시점 버튼; 두 손가락 벌리기/모으기로 거리 조절 |
+| 공격·채굴 | 좌클릭, 길게 누르기; 무기는 누른 뒤 놓으면 차지 공격 | 공격 버튼 또는 대상 탭; 블록은 길게 누르기 |
+| 기술·설치 | 우클릭 | 보조 행동 버튼 또는 블록을 든 상태에서 화면 탭 |
+| 사용·메뉴 | F 사용, E 가방, J 모험 | 해당 대상 탭, 상단 가방·모험 버튼 |
+| 점프·회피·수영 | Space 점프/상승, Shift 회피/잠수 | 점프·회피 버튼 |
+| 아이템 선택·버리기 | 1–9 또는 휠, Q 1개/Ctrl+Q 묶음 버리기 | 하단 슬롯 탭 |
 
-## 로컬 개발·빌드
+모바일은 가로 화면을 권장합니다. 상단 **세계**에서 새 월드, 저장·불러오기, 파일 내보내기·가져오기를 사용할 수 있습니다. 가방이나 모험창을 열어도 월드 시간은 진행됩니다.
 
-필요 도구: Git, Node.js 22, Python 3.13.
+## 로컬 실행·개발
+
+Node.js 22 이상. 빌드는 외부 패키지 설치 없이 실행할 수 있고, 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
 
 ```sh
 git clone https://github.com/byh-playground/bloom-digmori.git
 cd bloom-digmori
-node scripts/build.mjs
-python -m http.server 8000 --directory dist
+npm run build
+npm run dev
 ```
 
-현재는 원본 `src/game.mjs`와 `build.py`가 없어 빌드가 명시적으로 실패합니다. 빈 페이지를 정상 빌드로 처리하지 않습니다.
+브라우저에서 http://127.0.0.1:8000/bloom-digmori/ 를 엽니다. 배포 산출물은 **dist/index.html 하나**이며 게임 CSS·로직을 포함합니다. 외부 SDK까지 내장한 오프라인 HTML은 아닙니다. `file://` 직접 실행은 이번 검증 범위가 아닙니다.
 
-원본 ZIP의 모듈별 계층과 빌더를 확인해 가져온 후, 원본 빌더가 루트 `index.html`을 생성하도록 빌드 연결을 확정합니다. 편집 원본은 `src/`와 `build.py`, 루트 `index.html`과 `dist/`는 재생성 산출물이며 직접 수정하거나 커밋하지 않습니다. 게임 로직을 README나 빌드 스크립트에 복제하지 않습니다.
+```sh
+npm ci
+# Windows: 설치된 Microsoft Edge 사용
+npm test
+# Linux: Chromium 설치 후 실행
+npx playwright install --with-deps chromium
+npm test
+```
 
-## 기술 구성과 배포
+`BROWSER_CHANNEL`로 실행 브라우저를 지정하고 `TEST_URL`로 공개 사이트에 같은 E2E를 실행할 수 있습니다. `TEST_REPORT`는 JSON 기록 목적지입니다. 전체 검증 상한은 180초입니다.
 
-- 원본 보고 기준: Rapier deterministic compat 0.21.0, GameKit dist `87cac89042256297c025e880aa70ad9cd25ef8ab`.
-- 이 SHA는 원본 검증 문서의 선언이며 실제 배포 SDK 파일/API 연결은 아직 미검증입니다. 원본 import와 실제 CDN을 대조해야 합니다.
-- `scripts/build.mjs`: 원본 빌더 실행, 단일 HTML과 배포 provenance 생성.
-- `.github/workflows/pages.yml`: PR 빌드 확인, main 빌드 후 Pages Actions 자동 배포.
-- `dist/build.json`: 배포 Git SHA, HTML SHA-256, 버전, GameKit SHA, UTC 빌드 시각.
-- 현재 원본 검증 기록은 실제 GameKit 대신 시험용 API를 사용했습니다. 이를 SDK 통합 PASS로 간주하지 않습니다.
+## 소스·빌드 구성
+
+```text
+src/
+  core/           버전·설정·공통 수학
+  data/           블록·아이템·제작·진척 정의
+  progression/    RPG
+  inventory/      슬롯·제작 상태
+  world/          지형·물·청크 메시
+  simulation/     물리·전투·시뮬레이션
+  presentation/   애니메이션·아트·렌더
+  input/          PC·터치 입력
+  runtime/        세션·앱·저장·SDK 부팅
+  ui/             HTML 틀·CSS·HUD
+  order.json      단일 모듈 조립 순서
+scripts/          빌드·로컬 정적 서버
+tests/            고정 사용자 흐름 E2E
+dist/             자동 생성; Git에 넣지 않음
+```
+
+**소스 SSOT는 src/**입니다. 원본 HTML의 기능 경계를 따라 나눈 소스 조각을 `order.json` 순서로 하나의 ESM 스코프에 합칩니다. 파일 사이에 별도 런타임 래퍼나 호환 계층을 추가하지 않았습니다. 생성 HTML을 직접 수정하지 않습니다. 원본의 심볼·저장 키는 불필요하게 바꾸지 않습니다.
+
+빌드는 조립된 모듈의 구문 검사 후 HTML과 `build.json`을 만듭니다. CI는 PR에서 빌드하고, main 변경 시 같은 정적 artifact를 GitHub Actions Pages로 배포합니다. [배포 정보](https://byh-playground.github.io/bloom-digmori/build.json)는 Git SHA·HTML SHA-256·버전·GameKit SHA·UTC 빌드 시각을 기록합니다.
+
+## 기술 구성
+
+| 구성 | 고정 기준 |
+| --- | --- |
+| Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
+| Bloom GameKit | dist `87cac89042256297c025e880aa70ad9cd25ef8ab` |
+| GameKit 단독 플레이 모듈 | debug-tools, input, simloop, presentation-events, audio |
+| 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
+| 그래픽·저장 | WebGL, 청크 Worker, IndexedDB 및 월드 파일 |
+
+SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.js)입니다. `main`/`latest` 같은 가변 SDK 참조는 사용하지 않습니다.
 
 ## 버전·저장 호환
 
-기준 게임 버전과 snapshotVersion은 모두 **0.25.0**입니다. 이전 0.21 저장 및 0.24.x 포맷과 호환되지 않으므로 **새 월드가 필요합니다**. 이전 저장을 자동 변환하는 어댑터나 임의 삭제 기능을 추가하지 않습니다. 브랜딩 변경만으로 저장 키/직렬화 포맷을 바꾸지 않습니다. 배포 URL이 달라지면 브라우저 저장 출처도 달라질 수 있습니다.
+게임과 snapshotVersion은 **0.25.0**입니다. 이전 0.21 및 0.24.x 저장과 비호환이므로 **새 월드가 필요합니다**. 자동 변환 어댑터나 이전 저장 삭제 기능은 추가하지 않았습니다. 기존 IndexedDB·설정 키 및 `.bloom` 파일 포맷을 유지하며 내보내기 파일 표시 이름만 Digmori로 바꿨습니다.
 
-## 검증 범위
+브라우저 저장은 출처에 종속됩니다. 기존 로컬/다른 사이트 저장이 새 Pages 주소로 자동 이동하지 않습니다. 0.25.0 월드는 게임의 내보내기·가져오기를 사용할 수 있습니다.
 
-이 저장소의 실제 게임 검증은 아직 수행되지 않았습니다. 원본 보고의 시험 환경 결과와 이관 후 실측은 별도로 기록합니다.
+## 검증
 
-승격 전 필수: 실제 Chromium/Edge에서 정적 배포 경로의 부팅 → 새 게임 → 이동 → 채굴/설치 → 저장/새로고침/복원, 실제 고정 SDK 요청·JS 오류 확인. main 및 공개 build.json의 Git SHA와 실제 index.html SHA-256 일치를 확인합니다.
+[실제 실행 기록](docs/verification-initial.json): Windows Edge 155, 고정 실제 SDK, 정적 `/bloom-digmori/` 경로에서 새 게임 → WASD 이동 → 풀흙 채굴 → 흙 회수·설치 → 저장 → 새로고침 → 복원을 검증합니다. 게임 상태를 주입하거나 SDK를 mock하지 않고 UI 입력과 읽기 전용 상태 관측을 사용합니다. 5개 GameKit 모듈의 HTTP 응답과 SHA-256도 대조합니다. 모바일 844×390 터치 에뮬레이션의 모험창을 확인합니다.
 
-외부 NAT를 통과하는 멀티플레이, 실기기 모바일, 장기 밸런스/성능은 별도 미검증 범위입니다.
+원본 보고의 GameKit 시험용 API 주입 결과와 이번 실제 SDK 검증은 별개입니다. **외부 NAT 멀티플레이·모바일 실기기·전체 던전/무기 조합·장기 밸런스·성능 부하는 미검증**입니다.
 
-## 개발 규칙·권리
+## 원본·개발 규칙·권리
 
-[공통 개발 규칙](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/development.html)과 [프로젝트 관리·검증 정책](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/project-management.html)을 따릅니다.
+사용자가 내려받은 Bloom Sandbox 0.25.0 HTML을 이관했습니다. 원본 크기·SHA 및 무손실 재조합 확인은 [origin.json](docs/origin.json), 변경 범위는 [이관 기록](docs/import-status.md)에 있습니다. 기존 게임 기능과 저장 계약을 유지하고 표시 이름·진단 버전·개발/배포 구성만 정리했습니다.
 
-참고 프로젝트 bloom-bounko는 공개 저장소이지만 LICENSE를 지정하지 않았습니다. 공개 여부를 재배포 허가로 해석하지 않으며 이 저장소에 임의의 오픈소스 라이선스를 부여하지 않습니다. 원본 및 SDK의 라이선스 고지는 원본 확보 후 확인·보존합니다.
+[공통 개발 규칙](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/development.html) · [프로젝트 관리·검증 정책](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/project-management.html)
+
+게임 원본과 참고 조직 저장소에서 별도 게임 라이선스 부여를 확인하지 못해 임의의 MIT 등 라이선스를 추가하지 않았습니다. 공개 저장소라는 이유만으로 타사 재사용 권한을 부여하지 않습니다. 외부 Rapier 0.21.0 패키지는 [Apache-2.0](https://www.npmjs.com/package/@dimforge/rapier3d-deterministic-compat/v/0.21.0)이며 각 외부 의존성의 권리·고지는 해당 프로젝트를 따릅니다.

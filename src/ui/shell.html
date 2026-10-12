@@ -1,0 +1,79 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><link rel="icon" href="data:,"><title>디그모리 · Digmori __GAME_VERSION__</title><style><!-- DIGMORI_STYLE:ui/style-1.css --></style><style id="landscape-ux"><!-- DIGMORI_STYLE:ui/style-2.css --></style><style id="bloom-input-fix-style"><!-- DIGMORI_STYLE:ui/style-3.css --></style>
+
+
+<style id="block-interaction-vfx"><!-- DIGMORI_STYLE:ui/style-4.css --></style>
+<style id="minecraft-ux-v2"><!-- DIGMORI_STYLE:ui/style-5.css --></style><style id="mobile-inventory-fit"><!-- DIGMORI_STYLE:ui/style-6.css --></style><style id="cdn-retry-contrast"><!-- DIGMORI_STYLE:ui/style-7.css --></style><style id="combat-pixel-style"><!-- DIGMORI_STYLE:ui/style-8.css --></style><style id="enemy-health-hud"><!-- DIGMORI_STYLE:ui/style-9.css --></style>
+<style id="diagnostics-ui"><!-- DIGMORI_STYLE:ui/style-10.css --></style>
+<style id="bloom-rpg-ui"><!-- DIGMORI_STYLE:ui/style-11.css --></style></head><body>
+<canvas id="world" tabindex="0"></canvas>
+<div id="topbar"><div><div class="brand">Digmori<small>디그모리</small></div><div id="location" class="caption"></div></div><div class="toolbar"><button id="journal-btn">모험 J</button><button id="menu-btn">세계</button><button id="inventory-btn">가방 E</button><button id="view-btn">3인칭 V</button><button id="network-btn">협동</button><button id="error-launch" type="button" hidden>오류 로그</button></div></div>
+<div id="rpg-inline" aria-label="레벨 경험치"></div><div id="guide"></div><div id="resource-guide"></div><div id="bossbar" hidden><span id="boss-name"></span><div class="meter"><div id="boss-fill"></div></div></div><div id="enemy-labels"></div>
+<div id="crosshair"></div><div id="hit-confirm" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div id="hurt-vignette" aria-hidden="true"></div><div id="combat-floats" aria-hidden="true"></div><div id="block-action-fx" aria-hidden="true"><i></i><i></i><i></i></div><div id="target"></div><div id="attack-feedback" role="status" aria-live="polite"></div><div id="vitals"><div class="meter-label"><span id="hp-label"></span><span id="load-label"></span></div><div class="meter"><div id="hp-fill"></div></div><div class="meter"><div id="stamina-fill"></div></div><div class="meter"><div id="poise-fill"></div></div></div><div id="equipped"></div><div id="hotbar"></div>
+<div class="help">WASD 이동 · 마우스 시야 · V 시점<br>좌클릭 공격·채굴 · 꾹 눌렀다 놓기 차지<br>우클릭 기술·설치 · F 사용 · E 가방 · J 모험<br>Space 점프·수영 상승 · Shift 지상/공중 회피·수중 잠수 · Ctrl + 앞 달리기</div><div id="mode-label"></div><div id="toast"></div>
+<div id="rotate-notice"><div class="rotate-card"><div class="rotate-icon">↻</div><strong>가로 화면으로 플레이하세요</strong><p>블룸 샌드박스는 모바일 가로 화면에 최적화되어 있어요.</p><button id="rotate-request" type="button">가로 화면 전환 시도</button><p style="font-size:11px;color:#bccbb6">전환이 지원되지 않으면 자동 회전을 켜고 기기를 가로로 돌려주세요.</p></div></div><div id="mobile-controls"><div id="joystick"><div id="stick"></div></div><div class="touch-actions"><button class="mobile-button" data-touch="jump">↥<small>점프</small></button><button class="mobile-button" id="mobile-roll" data-touch="roll">↪<small>회피</small></button><button class="mobile-button" id="mobile-skill" data-touch="right" hidden>✦<small>기술</small></button></div></div>
+<div id="journal" class="shade" hidden><div class="panel rpg-panel" role="dialog" aria-label="모험 기록"><div class="panel-head"><div><h2>모험 기록 · 성장</h2><small>월드는 멈추지 않습니다 · J 단축키</small></div><button id="journal-close">닫기</button></div><div class="rpg-content"><section><h3 id="journal-level"></h3><progress id="journal-exp" value="0" max="1"></progress><h3>성장 능력</h3><div id="journal-skills"></div><small class="hint-text">모든 능력은 게임 명령으로 투자되며 협동 시에도 동일하게 적용됩니다.</small></section><section><h3>탐험 목표</h3><ol id="journal-quests"></ol><h3>주변 유적 · 좌표</h3><ul id="journal-explore"></ul></section></div></div></div>
+<div id="inventory" class="shade" hidden><div class="panel"><div class="panel-head"><div><h2>배낭 · 제작</h2><small id="station-name">개인 제작 2 × 2</small></div><button id="inventory-close">닫기 Esc</button></div><div id="inventory-panel"><aside id="recipe-book"><h3>제작 안내서</h3><input id="recipe-search" placeholder="제작법 검색"><label id="book-filter"><input type="checkbox" id="craftable-only"> 가능한 조합</label><div id="recipe-list"></div><div id="recipe-detail" class="hint-text">조합을 선택하면 재료가 제작 격자에 배치돼요.<br>결과 슬롯을 클릭해야 아이템이 만들어집니다.</div></aside><div class="inv-main"><div class="top-inventory"><div class="armor-list" id="armor-slots"></div><div class="craft-area" id="craft-view"><h3>재료 배치</h3><div class="craft-row"><div class="craft-grid personal" id="craft-grid"></div><span class="craft-arrow">➜</span><button class="slot" id="craft-result"></button></div></div><div id="furnace-view" hidden><h3>화로</h3><div class="furnace-row"><div><button class="slot" data-area="furnace" data-index="0" id="furnace-input"></button><progress id="burn-progress" value="0" max="1"></progress><button class="slot" data-area="furnace" data-index="1" id="furnace-fuel"></button></div><progress id="furnace-progress" value="0" max="1"></progress><button class="slot" data-area="furnace" data-index="2" id="furnace-output"></button></div><small class="hint-text">위: 원료 · 아래: 연료 · 오른쪽: 결과</small></div></div><div class="inv-label">보관함 · 27칸</div><div id="inventory-grid"></div><div class="inv-label hot-label">단축바 · 9칸</div><div id="inventory-hotbar"></div><div class="inv-footer"><span>좌클릭 집기·놓기 · 우클릭 절반/1개 · Shift 빠른 이동 · 드래그 분배 · 모바일 길게 누르기 절반</span><button id="drop-held">들고 있는 것 버리기</button></div></div></div></div></div>
+<div id="cursor-display" hidden></div><div id="tooltip" hidden></div>
+<div id="menu" class="shade" hidden><div class="panel"><small style="color:var(--gold)">DIGMORI · __GAME_VERSION__</small><h1>작은 생명, 넓은 세계.</h1><p>빈 가방으로 출발해 도구를 만들고, 지하 광맥을 찾아보세요. 화원의 제단에서 수호자를 깨울 수 있어요.</p><label>새 월드 시드 <input id="seed-input" type="number" value="190725"></label><button id="new-world" class="big-button">새 서바이벌 시작</button><div class="row"><button id="save-world">월드 저장</button><button id="load-world">저장 불러오기</button></div><div class="row"><button id="export-world">파일 내보내기</button><button id="import-world">파일 가져오기</button><input id="file-input" type="file" accept=".bloom,application/octet-stream" hidden></div><div class="row"><button id="resume" class="big-button">게임으로 돌아가기</button></div><p id="save-status" class="hint-text">__GAME_VERSION__ 동굴·던전·성장 데이터를 Rapier 물리 상태와 함께 저장합니다. 구세대 월드와 혼합하지 않습니다.</p><details class="feedback-settings"><summary>타격 연출 · 화면 설정</summary><div class="feedback-options"><label><input type="checkbox" id="option-textures" checked>블록 도트 텍스처</label><label><input type="checkbox" id="option-sound" checked>효과음</label><label><input type="checkbox" id="option-shake" checked>가벼운 화면 흔들림</label><label><input type="checkbox" id="option-numbers" checked>피해 수치 표시</label></div><p class="hint-text">연출만 조절합니다. 타격 판정·물리 속도에는 영향을 주지 않아요.</p></details><details open><summary>자원 · 지하 탐험 안내</summary><p id="resource-bands"></p></details><details><summary>조작 · 범위</summary><p>왼쪽 버튼을 길게 누르고 놓으면 단계형 차지 공격, 오른쪽 버튼을 유지하면 무기별 보조 행동입니다. 패링 키는 없으며 강인도 붕괴로 공격을 끊습니다.<br>철 → 다이아몬드가 초기 장비 진행의 상한입니다. 보스 처치 후에도 같은 세계에서 건축·재도전을 계속할 수 있습니다.</p></details></div></div>
+<div id="network" class="shade" hidden><div class="panel"><div class="panel-head"><h2>4인 협동 월드</h2><button id="network-close">닫기</button></div><p>Bloom Gamekit의 Nostr / WebRTC 방을 사용합니다. 협동 시드는 방 코드에서 결정되며 개인 월드는 별도로 보존됩니다.</p><input id="room-code" inputmode="numeric" maxlength="4" placeholder="4자리 방 코드"><div class="row"><button id="host-room">방 만들기</button><button id="join-room">참가</button><button id="leave-room" class="danger">나가기</button></div><div id="network-status">혼자 플레이 중 · Rapier 외부 로딩</div><p class="hint-text">초기 물리 엔진 다운로드와 온라인 시그널링 접속에는 인터넷이 필요합니다. 일시중단된 참가자는 Gamekit 가용성 정책에 따라 동기화에서 분리·복귀합니다. 네트워크 분할 후 재결합 시 선택되지 않은 분기의 진행은 사라질 수 있습니다.</p></div></div>
+<div id="death" class="shade" hidden><div class="panel"><h1>잠시 시들었어요.</h1><p>가방의 아이템은 쓰러진 자리에 남습니다.<br>시작 지점에서 다시 자라납니다.</p></div></div><div id="ending" class="shade" hidden><div class="panel"><small>첫 번째 여정의 끝</small><h1>화원이 다시 숨을 쉬어요.</h1><p>수호자가 화원의 심장을 남겼습니다.<br>안내서에서 수호의 증표를 만들거나,<br>소환 문양을 준비해 강화된 수호자에게 재도전할 수 있어요.</p><button id="continue-end" class="big-button">세계에 계속 머물기</button></div></div>
+<div id="debugbar" hidden>디버그 전용 · 일반 플레이에는 지급 없음<div class="row"><button id="debug-kit">검증 장비</button><button id="debug-enemy">적 소환</button><button id="debug-boss">보스 검증</button></div></div>
+<div id="error-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="error-title"><div class="error-card">
+ <h2 id="error-title">Digmori 실행 진단</h2>
+ <p>오류 내용은 기기 안에서만 보관하며 자동으로 전송되지 않습니다. 복사 전에 개인정보가 없는지 확인해 주세요.</p>
+ <div id="error-summary" role="status"></div>
+ <textarea id="error-text" readonly spellcheck="false" aria-label="복사할 오류 보고서"></textarea>
+ <div class="error-actions"><button id="error-copy" type="button">오류 전체 복사</button><button id="error-close" type="button">게임 화면으로</button><span id="error-copy-status"></span></div>
+ </div></div>
+<script id="diagnostics-bootstrap">
+// Fail-safe UI is intentionally available before the independently shipped Gamekit module loads.
+// Once debug-tools is ready, it alone owns global error/unhandledrejection capture.
+(()=>{
+ const panel=document.getElementById('error-dialog'), text=document.getElementById('error-text');
+ const summary=document.getElementById('error-summary'), status=document.getElementById('error-copy-status');
+ const launch=document.getElementById('error-launch');
+ let ring=null,api=null,phase='bootstrap',early=[],lastError='',lastKind='',total=0;
+ const str=x=>typeof x==='string'?x:(x&&typeof x.message==='string'?x.message:String(x));
+ const info=()=>({product:'Digmori',version:'__GAME_VERSION__',snapshotVersion:'__SNAPSHOT_VERSION__',phase,
+   environment:{protocol:location.protocol,secureContext:isSecureContext,userAgent:navigator.userAgent,
+     viewport:innerWidth+'x'+innerHeight},gamekitDist:'87cac89042256297c025e880aa70ad9cd25ef8ab',rapier:'0.21.0'});
+ function format(){const payload={...info(),diagnostics:ring?ring.snapshot():{
+   format:'초기화 단계 임시 진단',total,errors:early.map(e=>({kind:e.kind,visibility:e.visibility,message:e.message,stack:e.stack}))}};
+   return JSON.stringify(payload,null,2);}
+ function redraw(open){if(launch){launch.hidden=false;launch.textContent='오류 로그 '+(ring?.snapshot().counts.retained??total);}text.value=format();
+   summary.textContent=(lastKind?lastKind+' · ':'')+lastError;
+   if(open){panel.hidden=false;status.textContent='';}}
+ function report(error,{kind='runtime',visibility='blocking',fatal=false,origin='main',source='',line=0,column=0}={}){
+   const message=str(error);lastError=message.slice(0,360);lastKind=kind;
+   if(ring){ring.report(error,{kind,visibility,fatal,origin,source,line,column});}
+   else{early.push({kind,visibility: fatal?'fatal':visibility,message:message.slice(0,1500),stack:typeof error?.stack==='string'?error.stack.slice(0,3000):''});
+     if(early.length>16)early.shift();total++;}
+   redraw(fatal||visibility==='blocking'||visibility==='fatal');
+ }
+ const onEarlyError=event=>report(event.error||event.message,{kind:'global-error',origin:'bootstrap',source:event.filename||'',line:event.lineno||0,column:event.colno||0});
+ const onEarlyRejection=event=>report(event.reason,{kind:'unhandled-rejection',origin:'bootstrap'});
+ addEventListener('error',onEarlyError);addEventListener('unhandledrejection',onEarlyRejection);
+ function install(module){if(api)return;api=module;
+   ring=new module.DiagnosticRing({capacity:24,release:'digmori-__GAME_VERSION__'});
+   for(const item of early)ring.report({message:item.message,stack:item.stack},{kind:item.kind,visibility:item.visibility,origin:'bootstrap'});
+   early=[];removeEventListener('error',onEarlyError);removeEventListener('unhandledrejection',onEarlyRejection);
+   ring.installGlobal(window,{onReport:record=>{if(!record)return;lastError=record.message;lastKind=record.kind;redraw(true);}});
+   if(total)redraw(false);
+ }
+ async function copy(){const value=format();text.value=value;
+   try{if(api){const result=await api.copyDiagnostic(value,{clipboard:navigator.clipboard,textarea:text});status.textContent=result.copied?'복사 완료':'복사 권한 없음 · 텍스트 선택됨. Ctrl+C를 누르세요.';}
+     else if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(value);status.textContent='복사 완료';}
+     else{throw Error('클립보드 권한 없음');}}
+   catch{try{text.focus();text.select();status.textContent='텍스트 선택됨 · Ctrl+C를 누르세요.';}catch{status.textContent='오류 보고서에서 내용을 직접 선택해 복사하세요.';}}
+ }
+ document.getElementById('error-copy').onclick=copy;
+ document.getElementById('error-close').onclick=()=>panel.hidden=true;
+ if(launch)launch.onclick=()=>{redraw(true);};
+ window.BloomDiagnostics={install,report,copy,format,show:()=>redraw(true),setPhase:value=>{phase=String(value);},
+   get ring(){return ring;},get snapshot(){return ring?.snapshot()||null;}};
+})();
+</script>
+<div id="loading" class="shade"><div class="panel"><div class="brand">Digmori</div><div class="spinner"></div><h2 id="load-title">화원을 준비하고 있어요</h2><p id="load-status">필수 물리 엔진을 CDN에서 불러옵니다.</p><button id="load-retry" type="button" class="big-button" hidden>다시 시도</button><p class="hint-text">인터넷 연결이 필요합니다. 별도 엔진 파일은 필요하지 않습니다.</p></div></div>
+<script type="module">
+<!-- DIGMORI_GAME -->
+</script></body></html>

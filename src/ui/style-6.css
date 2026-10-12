@@ -1,0 +1,20 @@
+
+@media(pointer:coarse) and (orientation:landscape){
+ #inventory .panel{padding:7px 11px;max-height:98dvh}
+ #inventory .panel-head{margin-bottom:1px;min-height:40px;padding-bottom:4px}
+ #inventory .panel-head h2{font-size:17px;margin:0}
+ #inventory-panel{padding-top:4px;gap:10px}
+ #inventory .top-inventory{min-height:92px;max-height:102px;height:96px;display:flex;gap:11px;align-items:center;padding:0}
+ #inventory .armor-list{display:grid;grid-template-columns:repeat(2,34px);grid-template-rows:repeat(2,34px);gap:3px;width:71px;align-items:center;flex-shrink:0}
+ #inventory .armor-list .slot{width:34px!important;height:34px!important}
+ #inventory .craft-area h3,#inventory #furnace-view h3{font-size:11px;margin:0 0 3px}
+ #inventory .craft-row{gap:8px}
+ #inventory #craft-result{width:38px;height:38px}
+ #inventory .craft-grid .slot{width:33px!important;height:33px!important}
+ #inventory .inv-label{margin-top:5px;font-size:10px}
+ #inventory #inventory-grid{margin-top:2px}
+ #inventory .hot-label{margin-top:5px}
+ #inventory #inventory-hotbar{margin-top:2px}
+ #inventory .inv-footer{margin-top:4px;padding-top:3px;line-height:1.1}
+ #inventory #recipe-book{max-height:79dvh}
+}

@@ -1,0 +1,12 @@
+
+#enemy-labels{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:4}
+.enemy-label{position:absolute;width:116px;height:38px;transform:translate(-50%,-100%);font-size:11px;line-height:13px;white-space:nowrap;color:#fff5e3;text-align:center;pointer-events:none;filter:drop-shadow(0 1px 2px #102018);--leader:0px}
+.enemy-label:after{content:'';position:absolute;top:100%;left:50%;width:1px;height:var(--leader);background:#e4dfbb80}
+.enemy-caption{display:flex;align-items:center;justify-content:center;gap:4px;font-weight:750;text-shadow:-1px -1px #16251b,1px -1px #16251b,-1px 1px #16251b,1px 1px #16251b;line-height:14px}
+.enemy-name{overflow:hidden;text-overflow:ellipsis;max-width:112px}.enemy-warning{color:#ffe080;font-weight:900}
+.enemy-health{height:8px;position:relative;border:1px solid #0c1713;outline:1px solid #dad7b473;background:#16251eed;overflow:hidden;border-radius:2px;margin:2px 2px 0;box-shadow:0 1px 2px #0008}
+.enemy-health i{position:absolute;inset:0;display:block;transform-origin:left center}.enemy-health-trail{background:#f3cd80}.enemy-health-fill{background:#da7770;box-shadow:inset 0 1px #ffb59f}
+.enemy-hp-value{display:inline-block;font-size:10px;font-weight:700;line-height:12px;min-width:56px;padding:0 5px;background:#12221bc9;border-radius:0 0 3px 3px;text-shadow:0 1px #000;font-variant-numeric:tabular-nums}
+.enemy-label.targeted .enemy-health{outline-color:#f6dc99}.enemy-label.targeted .enemy-caption{color:#ffe7a5}.enemy-label.critical .enemy-health-fill{background:#ee5e52}.enemy-label.damaged .enemy-health{outline-color:#fff2d0}.enemy-label.boss .enemy-health-fill{background:#b56cce}.enemy-label.player .enemy-health-fill{background:#7db5ed}.enemy-label.player .enemy-caption{color:#c9e5ff}
+#bossbar{z-index:5}#boss-name{font-size:12px;font-weight:750}
+@media(pointer:coarse){.enemy-label{width:108px;font-size:10px}.enemy-name{max-width:104px}.enemy-health{height:8px}.enemy-hp-value{font-size:10px}}
