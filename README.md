@@ -55,4 +55,3 @@ python -m http.server 8000 --directory dist
 [공통 개발 규칙](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/development.html)과 [프로젝트 관리·검증 정책](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/project-management.html)을 따릅니다.
 
 참고 프로젝트 bloom-bounko는 공개 저장소이지만 LICENSE를 지정하지 않았습니다. 공개 여부를 재배포 허가로 해석하지 않으며 이 저장소에 임의의 오픈소스 라이선스를 부여하지 않습니다. 원본 및 SDK의 라이선스 고지는 원본 확보 후 확인·보존합니다.
-
