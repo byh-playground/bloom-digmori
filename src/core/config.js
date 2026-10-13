@@ -1,9 +1,9 @@
 
 const DEPENDENCIES=Object.freeze({
  rapier:{package:'@dimforge/rapier3d-deterministic-compat',version:'0.21.0',url:'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs',mirrors:['https://unpkg.com/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs'],timeoutMs:15000},
- gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'fbecfb6c06a5be98af9f6f556b322e7247df57ca',distCommit:'7cf67c33451848d1af4a7b003cbe1b81ffef8b53',manifestSha256:'66b94ae83f5b657a7113a15086ccb49a6ec2dc06b6b6259b2144f5aba071264b',timeoutMs:15000,
+ gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'0635c0d3776a9aa645978feafbb8223590717526',distCommit:'e5385ff3f43e598565ac3daed8096e97a7fe30dd',manifestSha256:'842c6faa2723538ce6ee2817c9c0188c3596c2d03140c8dd90e156ac58141576',timeoutMs:15000,
   networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'3bded746222c0aa1769697442b579922d406e67d79e3dbf65df5580dd387c007'}),rollback:Object.freeze({file:'rollback.js',sha256:'ec914ba35407859cefee4be25ab517373d9a02be8c998e5bd2da6400ee779ce4'})}),
-  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71'}),input:Object.freeze({file:'input.js',sha256:'ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168'}),simloop:Object.freeze({file:'simloop.js',sha256:'a6491227f2bd3126ee18531321bf4e59c11dd687bc5d4d02ea12ae9d994dad70'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84'}),audio:Object.freeze({file:'audio.js',sha256:'7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a'})})}
+  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'4c6dc38205285fbb2cc9b9c2a0c30dc38c7dfc446a8e1347a033681b7d5e2ced'}),input:Object.freeze({file:'input.js',sha256:'ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168'}),simloop:Object.freeze({file:'simloop.js',sha256:'6d8c3462ac01b0af967b3c259eede2b85e2f2f3f6813217391e6c322a7d10007'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84'}),audio:Object.freeze({file:'audio.js',sha256:'7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a'})})}
 });
 /* Digmori — 게임별 스탯 프로필의 SSOT. 시간=ms, 거리=m, HP=생명력. */
 // 표시값을 임의로 떼우지 않는다. 설정 피해/강인도/스태미나는 5단위,
@@ -11,7 +11,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5,poise:5,stamina:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.28.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.28.1',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -45,7 +45,6 @@ class MetricWindow {
  report(){return Object.fromEntries(Object.entries(this.values).map(([key,a])=>{const v=Array.from(a.data.subarray(0,a.count)).sort((a,b)=>a-b);return[key,{samples:v.length,mean:v.reduce((s,n)=>s+n,0)/v.length,p95:v[Math.floor((v.length-1)*.95)],p99:v[Math.floor((v.length-1)*.99)],max:v[v.length-1]}];}));}
 }
 const METRICS=new MetricWindow();
-const renderPosition=(entity,alpha=1)=>{const p=entity.previous||entity.pos;return{x:lerp(p.x,entity.pos.x,alpha),y:lerp(p.y,entity.pos.y,alpha),z:lerp(p.z,entity.pos.z,alpha)};};
 function hash3(x,y,z,seed=0){let h=Math.imul(x|0,0x45d9f3b)^Math.imul(y|0,0x119de1f3)^Math.imul(z|0,0x27d4eb2d)^Math.imul(seed|0,0x9e3779b1);h=Math.imul(h^(h>>>16),0x7feb352d);h=Math.imul(h^(h>>>15),0x846ca68b);return(h^(h>>>16))>>>0;}
 const hashStr=s=>{let h=2166136261;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return h>>>0};
 function noise(x,y,z,seed){const ix=Math.floor(x),iy=Math.floor(y),iz=Math.floor(z);let fx=x-ix,fy=y-iy,fz=z-iz;fx*=fx*(3-2*fx);fy*=fy*(3-2*fy);fz*=fz*(3-2*fz);const n=(a,b,c)=>hash3(a,b,c,seed)/2147483648-1;return lerp(lerp(lerp(n(ix,iy,iz),n(ix+1,iy,iz),fx),lerp(n(ix,iy+1,iz),n(ix+1,iy+1,iz),fx),fy),lerp(lerp(n(ix,iy,iz+1),n(ix+1,iy,iz+1),fx),lerp(n(ix,iy+1,iz+1),n(ix+1,iy+1,iz+1),fx),fy),fz);}

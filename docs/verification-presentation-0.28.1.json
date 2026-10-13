@@ -1,0 +1,134 @@
+{
+  "version": "0.28.1",
+  "snapshotVersion": "0.26.0",
+  "tickRate": 30,
+  "checkedAt": "2026-10-13T22:30:34.380Z",
+  "sdk": {
+    "dist": "e5385ff3f43e598565ac3daed8096e97a7fe30dd",
+    "source": "0635c0d3776a9aa645978feafbb8223590717526",
+    "manifestSha256": "842c6faa2723538ce6ee2817c9c0188c3596c2d03140c8dd90e156ac58141576",
+    "modules": [
+      {
+        "file": "interpolation.js",
+        "sha256": "4c6dc38205285fbb2cc9b9c2a0c30dc38c7dfc446a8e1347a033681b7d5e2ced"
+      },
+      {
+        "file": "input.js",
+        "sha256": "ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168"
+      },
+      {
+        "file": "simloop.js",
+        "sha256": "6d8c3462ac01b0af967b3c259eede2b85e2f2f3f6813217391e6c322a7d10007"
+      },
+      {
+        "file": "transport.js",
+        "sha256": "3bded746222c0aa1769697442b579922d406e67d79e3dbf65df5580dd387c007"
+      },
+      {
+        "file": "rollback.js",
+        "sha256": "ec914ba35407859cefee4be25ab517373d9a02be8c998e5bd2da6400ee779ce4"
+      },
+      {
+        "file": "presentation-events.js",
+        "sha256": "469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84"
+      },
+      {
+        "file": "debug-tools.js",
+        "sha256": "72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71"
+      },
+      {
+        "file": "audio.js",
+        "sha256": "7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a"
+      }
+    ]
+  },
+  "core": {
+    "result": "PASS",
+    "elapsedMs": 22645,
+    "browser": "155.0.4283.45",
+    "sdkFiles": 6,
+    "errors": [],
+    "presentation": {
+      "detached": true,
+      "interpolated": true,
+      "frames": 619
+    },
+    "flow": "UI new world, movement, mine/collect/place, save/reload/restore, cave walk and mobile journal"
+  },
+  "rtc": {
+    "result": "PASS",
+    "elapsedMs": 20131,
+    "browser": "155.0.4283.45",
+    "sharedCheckpoints": 10,
+    "display": [
+      {
+        "stats": {
+          "frames": 1842,
+          "position": true,
+          "rotation": true,
+          "attack": true,
+          "attackTime": true,
+          "detached": true,
+          "hudError": 0,
+          "teleportError": 0
+        },
+        "capture": {
+          "samples": 487,
+          "mean": 0.08706365424749543,
+          "p95": 0.20000004768371582,
+          "p99": 0.2999999523162842,
+          "max": 1.5
+        },
+        "frameWork": {
+          "samples": 600,
+          "mean": 1.5793333307902018,
+          "p95": 2.1999999284744263,
+          "p99": 2.600000023841858,
+          "max": 3.600000023841858
+        },
+        "workerFailures": 0,
+        "meshReady": 147,
+        "contextLost": false
+      },
+      {
+        "stats": {
+          "frames": 1713,
+          "position": true,
+          "rotation": true,
+          "attack": true,
+          "attackTime": true,
+          "detached": true,
+          "hudError": 0,
+          "teleportError": 0
+        },
+        "capture": {
+          "samples": 348,
+          "mean": 0.09683907922657056,
+          "p95": 0.20000004768371582,
+          "p99": 0.2999999523162842,
+          "max": 2.799999952316284
+        },
+        "frameWork": {
+          "samples": 600,
+          "mean": 1.5499999988079072,
+          "p95": 2.1999999284744263,
+          "p99": 2.4000000953674316,
+          "max": 2.799999952316284
+        },
+        "workerFailures": 0,
+        "meshReady": 147,
+        "contextLost": false
+      }
+    ],
+    "teleport": "Both real simulations receive the same scheduled 1.5m Physics.teleport fixture; visual snap and later canonical hashes checked",
+    "leave": "guest restored personal world; host roster 1",
+    "errors": []
+  },
+  "limits": [
+    "Same-PC RTC only; no external NAT",
+    "No physical mobile device",
+    "No exhaustive enemy/weapon matrix or forced rollback",
+    "No long-term load/performance baseline",
+    "No same-tick short-lived projectile reconstruction"
+  ]
+}

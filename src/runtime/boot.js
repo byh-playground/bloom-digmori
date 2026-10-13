@@ -20,6 +20,7 @@ async function loadGamekit(dependency=DEPENDENCIES.gamekit,onProgress=()=>{}){
    onProgress({name,index:i+1,total:entries.length,url:base+def.file});
    return [name,await importGamekitModule(base+def.file,name,dependency.timeoutMs)];}));
  for(const [name,module]of results)modules[name]=module;
+ if(typeof modules.interpolation.RenderObject!=='function'||typeof modules.interpolation.PresentationRuntime!=='function')throw Error('GameKit display API mismatch');
  if(typeof modules.input.ActionState!=='function'||typeof modules.input.createDOMInput!=='function'||typeof modules.simloop.createLoop!=='function'||typeof modules.simloop.createDeadlineScheduler!=='function'||typeof modules.presentation.PresentationEventQueue!=='function'||typeof modules.audio.AudioPlayer!=='function')throw Error('Gamekit 공개 API 불일치');
  return Object.freeze(modules);
 }
@@ -56,7 +57,7 @@ async function boot(){
   },attempt);
   window.BloomDiagnostics.setPhase('simulation');
   app=new App(R,gamekit);
-  window.Bloom={app,diagnostics:window.BloomDiagnostics,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,renderPosition,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
+  window.Bloom={app,diagnostics:window.BloomDiagnostics,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
   app.start();window.BloomDiagnostics.setPhase('playing');console.info('Bloom boot: ready');return app;
  }catch(e){console.error(e);window.BloomDiagnostics.report(e,{kind:'boot-error',visibility:'fatal',origin:e.stage||'boot'});$('load-title').textContent='화원을 불러오지 못했어요';$('load-status').textContent=e.message;$('loading').querySelector('.spinner').style.display='none';$('load-retry').hidden=false;$('load-retry').disabled=false;return null;
  }finally{bootPromise=null;}})();return bootPromise;

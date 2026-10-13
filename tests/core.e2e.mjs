@@ -35,6 +35,7 @@ try {
  const boot=()=>page.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});
  const state=()=>page.evaluate(()=>{const app=window.Bloom.app,a=app.actor();return{pos:{...a.pos},slots:a.inventory.slots,edits:[...app.sim.terrain.edits],seed:app.sim.terrain.seed,tick:app.sim.tick};});
  await page.goto(url);await boot();
+ await page.evaluate(()=>{const r=window.Bloom.app.renderer,render=r.render.bind(r);window.sceneCheck={detached:true,interpolated:false,frames:0};r.render=(sim,actor,dt,frame)=>{render(sim,actor,dt,frame);window.sceneCheck.frames++;frame.forEach(m=>{if(m.displayKind!=='actor')return;const raw=sim.actors[m.id];window.sceneCheck.detached&&=m!==raw&&!('body'in m)&&!('previous'in m);if(raw&&Math.hypot(m.pos.x-raw.pos.x,m.pos.z-raw.pos.z)>.001)window.sceneCheck.interpolated=true;});};});
  report.timing=await page.evaluate(()=>({tickRate:window.Bloom.CFG.tickRate,sessionRate:window.Bloom.app.localSession.profile.tickRate,physicsStep:window.Bloom.app.sim.physics.world.timestep}));
  assert.equal(report.timing.tickRate,30);assert.equal(report.timing.sessionRate,30);assert(Math.abs(report.timing.physicsStep-1/30)<1e-6);
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
@@ -59,7 +60,7 @@ try {
  // E opens the actual inventory and exits pointer lock; synthetic Escape is browser-reserved.
  await page.keyboard.press('KeyE');await page.click('#inventory-close');await page.click('#menu-btn');
  await page.click('#save-world');await page.waitForFunction(()=>document.querySelector('#save-status').textContent.includes('저장됨'));
- const saved=await state();await page.reload();await boot();
+ const saved=await state();report.presentation=await page.evaluate(()=>window.sceneCheck);assert(report.presentation.detached&&report.presentation.interpolated&&report.presentation.frames>0);await page.reload();await boot();
  assert.equal((await state()).edits.length,0);
  await page.click('#menu-btn');await page.click('#load-world');
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('복원했어요'));
@@ -82,9 +83,9 @@ try {
  await mobile.tap('#journal-btn');
  const mobileUI=await mobile.evaluate(()=>{const el=document.querySelector('#journal .panel'),r=el.getBoundingClientRect();return{visible:!document.querySelector('#journal').hidden,left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};});
  assert(mobileUI.visible&&mobileUI.left>=0&&mobileUI.top>=0&&mobileUI.right<=mobileUI.width+1&&mobileUI.bottom<=mobileUI.height+1);
- await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,5);assert.deepEqual(errors,[]);
+ await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,6);assert.deepEqual(errors,[]);
  Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/mouse/touch; read-only state observations; no mocked SDK or game-state fixture'});
- console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:5,errors:0}));
+ console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:6,errors:0}));
 } catch(error){Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
 
