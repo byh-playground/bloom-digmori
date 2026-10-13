@@ -20,8 +20,13 @@ try {
  page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText));
  const config=fs.readFileSync(new URL('../src/core/config.js',import.meta.url),'utf8');
  const expectedVersion=config.match(/const VERSION='([^']+)'/)[1];
+ const expectedSnapshotVersion=config.match(/SNAPSHOT_VERSION='([^']+)'/)[1];
  const sdkSHA=config.match(/distCommit:'([a-f0-9]{40})'/)[1];
+ const manifestResponse=await fetch('https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@'+sdkSHA+'/manifest.json');assert.equal(manifestResponse.status,200);
+ const manifestBytes=Buffer.from(await manifestResponse.arrayBuffer()),manifest=JSON.parse(manifestBytes);
+ const manifestHash=createHash('sha256').update(manifestBytes).digest('hex');assert.equal(manifestHash,config.match(/manifestSha256:'([^']+)'/)[1]);report.manifestSha256=manifestHash;
  const hashes=new Map([...config.matchAll(/file:'([^']+)',sha256:'([^']+)'/g)].map(m=>[m[1],m[2]]));
+ for(const [file,hash]of hashes)assert.equal(manifest.modules.find(m=>m.file===file)?.sha256,hash);
  page.on('response',response=>{if(response.url().includes('@'+sdkSHA+'/'))pending.push((async()=>{
   const sha=createHash('sha256').update(await response.body()).digest('hex'),file=response.url().split('/').pop();
   responses.push({file,status:response.status(),sha256:sha});
@@ -44,9 +49,11 @@ try {
  await page.waitForFunction(()=>window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
  const collected=await state();
  await page.keyboard.down('KeyS');await page.waitForTimeout(200);await page.keyboard.up('KeyS');await page.waitForTimeout(300);
+ const placeAim=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(placeAim);
+ const placedKey=[placeAim.x+placeAim.normal.x,placeAim.y+placeAim.normal.y,placeAim.z+placeAim.normal.z].join(',');
  await page.mouse.click(683,620,{button:'right'});
  await page.waitForFunction(()=>!window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
- const placed=await state();assert(placed.edits.some(([key,value])=>key===target.x+','+target.y+','+target.z&&value!==0));
+ const placed=await state();report.placement={aim:placeAim,expected:placedKey,edits:placed.edits};assert(placed.edits.some(([key,value])=>key===placedKey&&value!==0));
  // E opens the actual inventory and exits pointer lock; synthetic Escape is browser-reserved.
  await page.keyboard.press('KeyE');await page.click('#inventory-close');await page.click('#menu-btn');
  await page.click('#save-world');await page.waitForFunction(()=>document.querySelector('#save-status').textContent.includes('저장됨'));
@@ -56,7 +63,7 @@ try {
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('복원했어요'));
  const restored=await state();assert.deepEqual(restored.edits,saved.edits);assert.deepEqual(restored.slots,saved.slots);assert(Math.hypot(restored.pos.x-saved.pos.x,restored.pos.z-saved.pos.z)<0.05);
  const diagnostic=await page.evaluate(()=>JSON.parse(window.BloomDiagnostics.format()));
- assert.equal(diagnostic.version,expectedVersion);assert.equal(diagnostic.snapshotVersion,expectedVersion);assert.equal(diagnostic.diagnostics.total,0);
+ assert.equal(diagnostic.gamekitDist,sdkSHA);assert.equal(diagnostic.version,expectedVersion);assert.equal(diagnostic.snapshotVersion,expectedSnapshotVersion);assert.equal(diagnostic.diagnostics.total,0);
  if(process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT});
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
  await page.keyboard.down('KeyW');await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-14,null,{timeout:12000});await page.keyboard.up('KeyW');await page.waitForTimeout(300);

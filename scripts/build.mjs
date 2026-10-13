@@ -13,7 +13,7 @@ if(/<!-- DIGMORI_/.test(html))throw Error('Unresolved build marker');
 const version=game.match(/\bVERSION\s*=\s*['"]([^'"]+)['"]/)?.[1];
 const gamekit=game.match(/distCommit:'([a-f0-9]{40})'/)?.[1];
 if(!version||!gamekit)throw Error('Missing version or pinned SDK SHA');
-html=html.replaceAll('__GAME_VERSION__',version).replaceAll('__SNAPSHOT_VERSION__',game.match(/SNAPSHOT_VERSION='([^']+)'/)[1]);
+html=html.replaceAll('__GAMEKIT_DIST__',gamekit).replaceAll('__GAME_VERSION__',version).replaceAll('__SNAPSHOT_VERSION__',game.match(/SNAPSHOT_VERSION='([^']+)'/)[1]);
 const commit=process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 mkdirSync('dist',{recursive:true});
 writeFileSync('dist/index.html',html);
