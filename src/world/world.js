@@ -85,7 +85,7 @@ class FluidWorld {
     if(!this.queued.has(key)){next.push(p);this.queued.add(key);}}
    this.pending=next;this.head=0;}
  }
- activate(players,tick){if(this.lastSeedTick>=0&&tick-this.lastSeedTick<40)return;this.lastSeedTick=tick;
+ activate(players,tick){if(this.lastSeedTick>=0&&tick-this.lastSeedTick<CFG.water.activateEveryTicks)return;this.lastSeedTick=tick;
   const radius=CFG.water.activationRadius,C=CFG.chunk;
   const activePlayers=players.filter(p=>p&&!p.dead&&!p.suspended).sort((a,b)=>cmp(a.id,b.id));
   for(const p of activePlayers){const x0=Math.floor(p.pos.x),z0=Math.floor(p.pos.z);
