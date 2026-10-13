@@ -2,7 +2,7 @@
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.0**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.1**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
@@ -73,8 +73,8 @@ dist/             자동 생성; Git에 넣지 않음
 | 구성 | 고정 기준 |
 | --- | --- |
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
-| Bloom GameKit | dist `7cf67c33451848d1af4a7b003cbe1b81ffef8b53` |
-| GameKit 단독 플레이 모듈 | debug-tools, input, simloop, presentation-events, audio |
+| Bloom GameKit | dist `e108fe481aa7314974c39974a169b549500bf12c` |
+| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
 | 그래픽·저장 | WebGL, 청크 Worker, IndexedDB 및 월드 파일 |
 
@@ -82,11 +82,13 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 ## 버전·저장 호환
 
-게임은 **0.28.0**, snapshotVersion은 **0.26.0**입니다. 30 TPS에서도 0.26.0 저장과 월드 생성 규칙을 유지합니다. 저장의 물리 timestep을 기준으로 틱 기반 시각을 환산하며 위치·인벤토리·초 단위 타이머는 유지합니다. 바이옴·동굴 지형 생성과 블록 정의가 바뀌어 0.25.0을 포함한 이전 저장과 비호환이므로 **새 월드가 필요합니다**. 자동 변환 어댑터나 이전 저장 삭제 기능은 추가하지 않았습니다. 기존 IndexedDB·설정 키 및 `.bloom` 파일 포맷을 유지하며 내보내기 파일 표시 이름만 Digmori로 바꿨습니다.
+게임은 **0.28.1**, snapshotVersion은 **0.26.0**입니다. 30 TPS에서도 0.26.0 저장과 월드 생성 규칙을 유지합니다. 저장의 물리 timestep을 기준으로 틱 기반 시각을 환산하며 위치·인벤토리·초 단위 타이머는 유지합니다. 바이옴·동굴 지형 생성과 블록 정의가 바뀌어 0.25.0을 포함한 이전 저장과 비호환이므로 **새 월드가 필요합니다**. 자동 변환 어댑터나 이전 저장 삭제 기능은 추가하지 않았습니다. 기존 IndexedDB·설정 키 및 `.bloom` 파일 포맷을 유지하며 내보내기 파일 표시 이름만 Digmori로 바꿨습니다.
 
 브라우저 저장은 출처에 종속됩니다. 기존 로컬/다른 사이트 저장이 새 Pages 주소로 자동 이동하지 않습니다. 0.26.0 월드는 게임의 내보내기·가져오기를 사용할 수 있습니다.
 
 ## 검증
+
+[0.28.1 표시 프레임 통합](docs/presentation-integration.md): GameKit PR #46의 `PresentationRuntime.frame()`으로 캐릭터·장비·움직이는 효과·월드 HUD·드롭·투사체 표시를 통합합니다. 30 TPS와 snapshotVersion 0.26.0은 유지합니다. 새 입력 예측 엔진은 추가하지 않았으며 화면 표시는 1틱 지연 보간합니다. 단독 시작 시 실제 SDK 6개를 검증합니다.
 
 [0.28.0 — 기본 30 TPS](docs/tps-0.28.0.md): 시뮬레이션은 초당 30틱, 렌더는 별도 rAF입니다. 이동·중력·행동 시간은 초/ms 기준을 유지하며 물·조우·체크섬 등 주기를 기존 실시간 간격에 맞췄습니다. SDK pin은 0.27.0과 같습니다. 협동 참가자는 같은 게임 버전이 필요합니다.
 

@@ -13,6 +13,7 @@
   "presentation/renderer.js",
   "ui/hud.js",
   "input/controls.js",
+  "presentation/scene.js",
   "runtime/session.js",
   "runtime/app.js",
   "runtime/boot.js"

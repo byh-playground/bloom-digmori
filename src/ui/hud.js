@@ -22,16 +22,16 @@ class EnemyHealthHUD {
   const meter=healthMeter(a.hp,a.maxHp),entry={node,bar,fill,trail,number,warning,hp:meter.value,max:meter.maximum,trailRatio:meter.ratio,changedAt:-Infinity,flashUntil:0};this.nodes.set(a.id,entry);return entry;
  }
  visible(terrain,eye,point){const delta=V.sub(point,eye),length=V.len(delta);if(length<.03)return true;const hit=terrain.ray(eye,V.scale(delta,1/length),length);return !hit||hit.distance>=length-.05;}
- update(sim,local,dt=0){if(!this.root)return;if(this.world!==sim.terrain){this.reset();this.world=sim.terrain;}
+ update(sim,local,dt=0,actors,authority){if(!this.root)return;if(this.world!==sim.terrain){this.reset();this.world=sim.terrain;}
   this.clock+=Math.max(0,Math.min(dt,100));this.samples=[];
-  const alive=new Set(Object.values(sim.actors).filter(a=>a.id!==local.id&&!a.dead&&!a.suspended).map(a=>a.id));
+  const alive=new Set(Object.values(actors).filter(a=>a.id!==local.id&&!a.dead&&!a.suspended).map(a=>a.id));
   for(const [id,e]of this.nodes){if(!alive.has(id)){e.node.remove();this.nodes.delete(id);}else e.node.hidden=true;}
   const blocked=['inventory','journal','menu','network','ending','loading'].some(id=>{const e=document.getElementById(id);return e&&!e.hidden;});this.root.hidden=blocked||local.dead;
   if(this.root.hidden||!this.r.eye)return;
   const width=this.r.canvas.clientWidth,height=this.r.canvas.clientHeight,barWidth=this.mobile?HEALTH_HUD.mobileWidth:HEALTH_HUD.width,half=barWidth/2;
-  const aim=sim.physics.aimEnemy(local,HEALTH_HUD.range),alpha=this.r.renderAlpha,player=renderPosition(local,alpha),candidates=[];
-  for(const a of Object.values(sim.actors)){
-   if(!alive.has(a.id)||!this.r.entityVisualReady(a,alpha))continue;const pos=renderPosition(a,alpha),distance=V.len(V.sub(player,pos));if(distance>HEALTH_HUD.range)continue;
+  const aim=sim.physics.aimEnemy(authority,HEALTH_HUD.range),player=local.pos,candidates=[];
+  for(const a of Object.values(actors)){
+   if(!alive.has(a.id)||!this.r.entityVisualReady(a))continue;const pos=a.pos,distance=V.len(V.sub(player,pos));if(distance>HEALTH_HUD.range)continue;
    const scale=a.scale||1,head=V.add(pos,{x:0,y:HEALTH_HUD.headHeight*scale,z:0}),center=V.add(pos,{x:0,y:a.offset,z:0}),p=this.r.projected(head),body=this.r.projected(center);
    if(!p||!body||body.x< -half||body.x>width+half||body.y< -HEALTH_HUD.height||body.y>height+HEALTH_HUD.height)continue;
    const forehead=V.add(pos,{x:0,y:HEALTH_HUD.headHeight*scale*.83,z:0});

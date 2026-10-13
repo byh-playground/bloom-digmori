@@ -89,7 +89,7 @@ class Renderer {
   if(water.level(wx,wy,wz)>0){const ck=chunkKey(Math.floor(wx/C),Math.floor(wy/C),Math.floor(wz/C)),m=this.waterMeshes.get(ck);
    if(!m||m.revision!==(water.chunkRevisions.get(ck)||0)||m.boundaryMask!==this.waterBoundaryMask(ck))return false;}
   return true;}
- entityVisualReady(entity,alpha=this.renderAlpha??1){if(!entity)return false;return this.worldVisualReady(renderPosition(entity,alpha),CFG.player.radius*(entity.scale||1));}
+ entityVisualReady(entity){if(!entity)return false;return this.worldVisualReady(entity.pos,CFG.player.radius*(entity.scale||1));}
  lights(sim,actor){const out=new Float32Array(32),entries=sim.terrain.lightEntries(actor.pos);let n=0;for(const light of entries){if(n===8)break;out.set([light.x,light.y,light.z,1],n++*4);}if(V.len(V.sub(actor.pos,sim.terrain.altar))<20&&n<8)out.set([24.5,6,-13.5,1],n++*4);return out;}
  terrainState(lights){const gl=this.gl,p=this.terrainProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform3fv(gl.getUniformLocation(p,'eye'),arr(this.eye));gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.uniform3fv(gl.getUniformLocation(p,'fog'),this.fog);gl.uniform4fv(gl.getUniformLocation(p,'lights[0]'),lights);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.blockAtlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tiles'),1);gl.uniform1f(gl.getUniformLocation(p,'textured'),this.combatFx.options.textures?1:0);}
  meshState(lights){const gl=this.gl,p=this.meshProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform3fv(gl.getUniformLocation(p,'eye'),arr(this.eye));gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.uniform3fv(gl.getUniformLocation(p,'fog'),this.fog);gl.uniform4fv(gl.getUniformLocation(p,'lights[0]'),lights);}
@@ -110,9 +110,11 @@ class Renderer {
   this.combatFx.event(event,sim,localActorId);
  }
  spritePlane(out,center,u,v,frame,tint,flip=false){const p=(x,y)=>arr(V.add(center,V.add(V.scale(u,x),V.scale(v,y)))),pts=[p(-.5,-.5),p(.5,-.5),p(.5,.5),p(-.5,.5)],u0=flip?frame.u1:frame.u0,u1=flip?frame.u0:frame.u1,uv=[[u0,frame.v1],[u1,frame.v1],[u1,frame.v0],[u0,frame.v0]];for(const i of [0,1,2,0,2,3])out.push(...pts[i],...uv[i],...tint);}
- render(sim,actor,dt,alpha=1){
+ render(sim,authority,dt,displayFrame){
+  const view={actors:{},drops:{},projectiles:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':'projectiles'][model.id]=value;});
+  const actor=view.actors[authority.id];if(!actor)return;this.displayTimeMs=displayFrame.timeMs;
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
-  this.combatFx.advance(dt);this.frame++;this.resize();this.renderAlpha=alpha;if(this.worldRef!==sim.terrain)this.interpolateAfterTick=sim.tick;if(sim.tick<=this.interpolateAfterTick)alpha=1;this.renderAlpha=alpha;const viewPos=renderPosition(actor,alpha);this.updateCamera(actor,sim,viewPos);this.stream(sim,actor);const gl=this.gl;const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
+  this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.updateCamera(actor,sim,viewPos);this.stream(sim,authority);const gl=this.gl;const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
   this.ambient=.20+.80*daylight;
   this.fog=[lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight];this.stats={drawCalls:0,vertices:0};gl.clearColor(...this.fog,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);
   gl.useProgram(this.skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,this.skyBuffer);this.attrib(this.skyProgram,'p',2,8,0);gl.uniform1f(gl.getUniformLocation(this.skyProgram,'ambient'),this.ambient);gl.uniform1f(gl.getUniformLocation(this.skyProgram,'yaw'),this.camera.yaw);
@@ -129,18 +131,18 @@ class Renderer {
   const dyn=[],sprites=[];
   // Fluid volumes are submitted separately after solid terrain; no global sea plane.
   this.animationSamples={};
-  for(const a of Object.values(sim.actors)){
-   if(a.dead||this.camera.first&&a.id===actor.id||a.id!==actor.id&&!this.entityVisualReady(a,alpha))continue;
+  for(const a of Object.values(view.actors)){
+   if(a.dead||this.camera.first&&a.id===actor.id||a.id!==actor.id&&!this.entityVisualReady(a))continue;
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
    const frame=this.atlas.frames[sample.kind+'/'+sample.dir+'/'+sample.clip+'/'+sample.frame]||this.atlas.frames[sample.kind+'/'+sample.dir+'/idle/0'];
    let tint=a.enemy?[...ENEMIES[a.kind].tint]:[[1,1,1,1],[.78,.89,1,1],[1,.8,.9,1],[1,.92,.7,1]][hashStr(a.id)%4];if(a.id===actor.id)tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
    if(reaction&&!reaction.guard&&reaction.age<CFG.combat.feedback.flash)tint=reaction.age<45?[2.8,2.7,2.3,1]:[1.75,.65,.5,1];
-   const rp=renderPosition(a,alpha);this.sprite(sprites,rp,1.65*64/48*scale,2*64/56*scale,frame,tint,sample.flip,0);
-   const hit=sim.physics.ground(a,rp,2.5);if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}
+   const rp=a.pos;this.sprite(sprites,rp,1.65*64/48*scale,2*64/56*scale,frame,tint,sample.flip,0);
+   const raw=sim.actors[a.id],hit=raw?sim.physics.ground(raw,rp,2.5):null;if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}
   }
-  for(const raw of Object.values(sim.actors)){
-   if(raw.dead||raw.enemy||raw.combat.state==='roll'||this.camera.first&&raw.id===actor.id||raw.id!==actor.id&&!this.entityVisualReady(raw,alpha))continue;const a=this.combatFx.pose(raw),st=Inventory.stats(a),item=st.item,c=a.combat,act=c.action,rp=renderPosition(a,alpha);
+  for(const raw of Object.values(view.actors)){
+   if(raw.dead||raw.enemy||raw.combat.state==='roll'||this.camera.first&&raw.id===actor.id||raw.id!==actor.id&&!this.entityVisualReady(raw))continue;const a=this.combatFx.pose(raw),st=Inventory.stats(a),item=st.item,c=a.combat,act=c.action,rp=a.pos;
    if(c.state==='attack'&&act&&!['arrow','quickshot','precision'].includes(act.kind)){
     const phase=clamp((c.elapsed-act.wind)/act.active,0,1),pose=weaponVisualPose({...a,pos:rp},act,c.elapsed),col=c3(st.material?.color||'#edcea0');
     if(act.weapon==='fist'){if(c.elapsed>=act.wind&&c.elapsed<act.wind+act.active){this.box(dyn,{...pose.tip,y:pose.tip.y-.13},{x:.23,y:.26,z:.23},col);}}
@@ -154,17 +156,17 @@ class Renderer {
     else{this.box(dyn,p,{x:.10,y:.13,z:.65},c3('#8e6246'),f);this.box(dyn,V.add(p,V.scale(f,.70)),{x:item.weapon==='greatsword'?.23:.13,y:.11,z:item.weapon==='spear'?1.6:item.weapon==='dagger'?.5:1.1},col,f);if(item.weapon==='axe'||item.tool==='pick')this.box(dyn,V.add(p,V.scale(f,1)),{x:.60,y:.27,z:.13},col,f);}
    }
   }
-  const dropSprites=[];for(const d of Object.values(sim.drops)){const dp=renderPosition(d,alpha),frame=this.dropAtlas.frames[d.item];if(!frame||!this.worldVisualReady(dp,.16))continue;
+  const dropSprites=[];for(const d of Object.values(view.drops)){const dp=d.pos,frame=this.dropAtlas.frames[d.item];if(!frame||!this.worldVisualReady(dp,.16))continue;
     const bob=Math.sin(d.age*.007+(hashStr(d.id)%37)*.12)*.045;
     this.sprite(dropSprites,{x:dp.x,y:dp.y-.075+bob,z:dp.z},.72,.72,frame,[1,1,1,1]);}
 
-  for(const s of Object.values(sim.projectiles)){const sp=renderPosition(s,alpha);if(!this.worldVisualReady(sp,.08))continue;this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
-  const hit=sim.terrain.ray(V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),actor.facing);this.target=hit;
+  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(!this.worldVisualReady(sp,.08))continue;this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
+  const hit=sim.aim(authority);this.target=hit;
   if(hit){
-   const key=blockKey(hit.x,hit.y,hit.z),mining=actor.mine.target===key&&actor.mine.elapsed>0;
-   const progress=mining?clamp(actor.mine.elapsed/Math.max(1,BLOCKS[hit.id].hardness),0,1):0;
+   const key=blockKey(hit.x,hit.y,hit.z),mining=authority.mine.target===key&&authority.mine.elapsed>0;
+   const progress=mining?clamp(authority.mine.elapsed/Math.max(1,BLOCKS[hit.id].hardness),0,1):0;
    this.blockFace(dyn,hit,progress);
-   const index=mining?Math.floor(actor.mine.elapsed/140):-1;
+   const index=mining?Math.floor(authority.mine.elapsed/140):-1;
    if(index!==this.mineFxStep&&index>=0&&index<=8){
     const n=hit.normal,p={x:hit.x+.5+n.x*.50,y:hit.y+.5+n.y*.50,z:hit.z+.5+n.z*.50};
     this.addBlockChips(p,BLOCKS[hit.id].color,3,n);
@@ -198,8 +200,8 @@ class Renderer {
   this.meshState(lights);if(dyn.length){gl.bindBuffer(gl.ARRAY_BUFFER,this.dynamic);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(dyn),gl.DYNAMIC_DRAW);this.attrib(this.meshProgram,'p',3,24,0);this.attrib(this.meshProgram,'c',3,24,12);gl.drawArrays(gl.TRIANGLES,0,dyn.length/6);}
   if(sprites.length){const p=this.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,this.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(sprites),gl.DYNAMIC_DRAW);this.attrib(p,'p',3,36,0);this.attrib(p,'uv',2,36,12);this.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,sprites.length/9);}
   this.drawDropSprites(dropSprites);this.drawWater(sim,actor);
-  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,sim);this.drawCombatEffects(effects,effectSprites);this.combatFx.ui(sim);
-  if(this.camera.first&&!actor.dead&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt);
+  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawCombatEffects(effects,effectSprites);this.combatFx.ui(sim);
+  if(this.camera.first&&!actor.dead&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);
  }
  drawDropSprites(vertices){if(!vertices.length)return;const gl=this.gl,p=this.spriteProgram;gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
   gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),Math.max(.75,this.ambient));gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.dropAtlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);
