@@ -1,6 +1,6 @@
 # 0.28.1 표시 프레임 통합
 
-GameKit [PR #46](https://github.com/byh-playground/bloom-gamekit/pull/46)의 공식 RenderObject / PresentationRuntime.frame() 계약을 실제 Digmori 렌더 경로에 적용한다. dist는 e5385ff3f43e598565ac3daed8096e97a7fe30dd, source는 0635c0d3776a9aa645978feafbb8223590717526이다. manifest와 사용하는 8개 모듈의 SHA-256을 확인했다. 단독 시작은 6개, 온라인 transport/rollback은 입장 시 로드한다. pin/hash는 감사 및 E2E 검증 정보이며 런타임은 고정 CDN ESM을 직접 import한다.
+GameKit [PR #46](https://github.com/byh-playground/bloom-gamekit/pull/46)의 공식 RenderObject / PresentationRuntime.frame() 계약을 실제 Digmori 렌더 경로에 적용한다. dist는 e108fe481aa7314974c39974a169b549500bf12c, source는 2712703c83923f16bb70454ea60e2ac533489ef8이다. manifest와 사용하는 8개 모듈의 SHA-256을 확인했다. 단독 시작은 6개, 온라인 transport/rollback은 입장 시 로드한다. pin/hash는 감사 및 E2E 검증 정보이며 런타임은 고정 CDN ESM을 직접 import한다.
 
 ## 표시 계약
 
@@ -25,3 +25,5 @@ Rapier body/world/handle, voxel edit, terrain/water mesh revision, 조준·채�
 같은 PC의 두 독립 브라우저 문맥이 공개 relay와 실제 RTC로 접속하여 이동·회전·공격·정상 퇴장을 수행했다. 1.5m 순간이동은 UI 기능 검증이 아니라 두 권위 시뮬레이션의 동일 미래 틱에 주입한 테스트 fixture다. 표시 snap, HUD 앵커, 이후 동일 틱 상태 해시, 지형 Worker 및 WebGL 상태를 확인했다. capture 계측은 스키마 전달 준비와 SDK capture를 포함하며 600개 한정 창이다. 짧은 실행의 수치이며 기기 성능 기준이나 전후 개선율이 아니다.
 
 외부 NAT, 모바일 실기기, 모든 적/무기 조합, 강제 rollback 복구, 장기 부하 및 같은 틱 내 초단명 투사체는 미검증이다. Pages의 최종 main/HTML SHA와 공개 E2E는 PR 배포 결과에 기록한다.
+
+최종 고정 SDK에는 [PR #47](https://github.com/byh-playground/bloom-gamekit/pull/47)의 선택적 중첩 상태 전환 원자성과 [PR #48](https://github.com/byh-playground/bloom-gamekit/pull/48)의 preview 종료 후 authority 구간 보존 수정이 포함된다. 공식 source의 표시 프레임 브라우저 회귀를 실제 CDN dist로 실행했고, 게임 핵심 E2E와 두 피어 RTC도 최종 pin으로 통과했다.

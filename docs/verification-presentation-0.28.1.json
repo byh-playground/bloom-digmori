@@ -2,15 +2,15 @@
   "version": "0.28.1",
   "snapshotVersion": "0.26.0",
   "tickRate": 30,
-  "checkedAt": "2026-10-13T22:30:34.380Z",
+  "checkedAt": "2026-10-13T22:45:57.955Z",
   "sdk": {
-    "dist": "e5385ff3f43e598565ac3daed8096e97a7fe30dd",
-    "source": "0635c0d3776a9aa645978feafbb8223590717526",
-    "manifestSha256": "842c6faa2723538ce6ee2817c9c0188c3596c2d03140c8dd90e156ac58141576",
+    "dist": "e108fe481aa7314974c39974a169b549500bf12c",
+    "source": "2712703c83923f16bb70454ea60e2ac533489ef8",
+    "manifestSha256": "800e4ddd95a33c332dff5a0c60b06438ffea6fd3bb3bca331b52d56b73f0775e",
     "modules": [
       {
         "file": "interpolation.js",
-        "sha256": "4c6dc38205285fbb2cc9b9c2a0c30dc38c7dfc446a8e1347a033681b7d5e2ced"
+        "sha256": "bf6c8737ef48ca327814cf7326406025c2ece6c49a690ca7652cac2cc6af2562"
       },
       {
         "file": "input.js",
@@ -44,26 +44,26 @@
   },
   "core": {
     "result": "PASS",
-    "elapsedMs": 22645,
+    "elapsedMs": 23082,
     "browser": "155.0.4283.45",
     "sdkFiles": 6,
     "errors": [],
     "presentation": {
       "detached": true,
       "interpolated": true,
-      "frames": 619
+      "frames": 636
     },
     "flow": "UI new world, movement, mine/collect/place, save/reload/restore, cave walk and mobile journal"
   },
   "rtc": {
     "result": "PASS",
-    "elapsedMs": 20131,
+    "elapsedMs": 20597,
     "browser": "155.0.4283.45",
-    "sharedCheckpoints": 10,
+    "sharedCheckpoints": 11,
     "display": [
       {
         "stats": {
-          "frames": 1842,
+          "frames": 1915,
           "position": true,
           "rotation": true,
           "attack": true,
@@ -73,18 +73,18 @@
           "teleportError": 0
         },
         "capture": {
-          "samples": 487,
-          "mean": 0.08706365424749543,
+          "samples": 499,
+          "mean": 0.1002003991293286,
           "p95": 0.20000004768371582,
-          "p99": 0.2999999523162842,
-          "max": 1.5
+          "p99": 0.5,
+          "max": 2
         },
         "frameWork": {
           "samples": 600,
-          "mean": 1.5793333307902018,
-          "p95": 2.1999999284744263,
-          "p99": 2.600000023841858,
-          "max": 3.600000023841858
+          "mean": 2.375500000913938,
+          "p95": 4.600000023841858,
+          "p99": 8.400000095367432,
+          "max": 16.399999976158142
         },
         "workerFailures": 0,
         "meshReady": 147,
@@ -92,7 +92,7 @@
       },
       {
         "stats": {
-          "frames": 1713,
+          "frames": 1781,
           "position": true,
           "rotation": true,
           "attack": true,
@@ -102,18 +102,18 @@
           "teleportError": 0
         },
         "capture": {
-          "samples": 348,
-          "mean": 0.09683907922657056,
+          "samples": 345,
+          "mean": 0.12057970779529516,
           "p95": 0.20000004768371582,
-          "p99": 0.2999999523162842,
-          "max": 2.799999952316284
+          "p99": 0.40000009536743164,
+          "max": 1.7000000476837158
         },
         "frameWork": {
           "samples": 600,
-          "mean": 1.5499999988079072,
-          "p95": 2.1999999284744263,
-          "p99": 2.4000000953674316,
-          "max": 2.799999952316284
+          "mean": 2.3878333324193957,
+          "p95": 4.600000023841858,
+          "p99": 10.199999928474426,
+          "max": 21.600000023841858
         },
         "workerFailures": 0,
         "meshReady": 147,
@@ -130,5 +130,15 @@
     "No exhaustive enemy/weapon matrix or forced rollback",
     "No long-term load/performance baseline",
     "No same-tick short-lived projectile reconstruction"
-  ]
+  ],
+  "officialBrowserRegression": {
+    "birth": "PASS",
+    "pathCorner": "PASS",
+    "lifetime": "PASS",
+    "rollback": "PASS",
+    "teleport": "PASS",
+    "preview": "PASS",
+    "frameGuard": "PASS",
+    "atomicAttackState": "PASS"
+  }
 }

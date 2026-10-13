@@ -73,7 +73,7 @@ dist/             자동 생성; Git에 넣지 않음
 | 구성 | 고정 기준 |
 | --- | --- |
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
-| Bloom GameKit | dist `e5385ff3f43e598565ac3daed8096e97a7fe30dd` |
+| Bloom GameKit | dist `e108fe481aa7314974c39974a169b549500bf12c` |
 | GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
 | 그래픽·저장 | WebGL, 청크 Worker, IndexedDB 및 월드 파일 |
