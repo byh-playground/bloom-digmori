@@ -35,6 +35,8 @@ try {
  const boot=()=>page.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});
  const state=()=>page.evaluate(()=>{const app=window.Bloom.app,a=app.actor();return{pos:{...a.pos},slots:a.inventory.slots,edits:[...app.sim.terrain.edits],seed:app.sim.terrain.seed,tick:app.sim.tick};});
  await page.goto(url);await boot();
+ report.timing=await page.evaluate(()=>({tickRate:window.Bloom.CFG.tickRate,sessionRate:window.Bloom.app.localSession.profile.tickRate,physicsStep:window.Bloom.app.sim.physics.world.timestep}));
+ assert.equal(report.timing.tickRate,30);assert.equal(report.timing.sessionRate,30);assert(Math.abs(report.timing.physicsStep-1/30)<1e-6);
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
  await page.keyboard.down('KeyW');await page.waitForTimeout(500);await page.keyboard.up('KeyW');

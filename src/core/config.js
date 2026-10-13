@@ -11,14 +11,16 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5,poise:5,stamina:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.27.0',SNAPSHOT_VERSION='0.26.0';
-const CFG=Object.freeze({stepMs:25,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
+const VERSION='0.28.0',SNAPSHOT_VERSION='0.26.0';
+const SIMULATION_TPS=30;
+const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
+const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
   player:{hp:100,stamina:100,poise:100,load:50,walk:4.6,run:6.0,acceleration:36,jump:7.8,gravity:20,radius:.35,halfHeight:.60,eyeHeight:1.65},
   stamina:{delay:700,regen:25,sprintPerMeter:.55,hitRefund:.45,finisherRefund:.65,chargedRefund:.55,minHitRefund:5},poise:{delay:2000,regen:25,stagger:600},input:{hold:250,buffer:180,sprintOuter:1.35,sprintForward:.78},
   roll:[{distance:4.6,duration:550,cost:20,hop:3.4},{distance:3.5,duration:650,cost:25,hop:3.0},{distance:2.2,duration:900,cost:30,hop:2.3}],
   iframes:{start:50,end:300},armorK:100,chargeMove:.40,respawn:2500,dropLife:300000,maxDrops:256,maxEnemies:16,
-  terrain:{predictSeconds:.85,retireTicks:80,prefetchPerTick:1,margin:1.25},
-  water:{horizontalRange:7,updateEveryTicks:4,maxUpdatesPerStep:160,activationRadius:16,simulationRadius:64,retireEveryTicks:80,maxFlowCells:24000,swimSpeed:2.8,sprintSpeed:4.8,riseSpeed:3.0,diveSpeed:-2.4},
+  terrain:{predictSeconds:.85,retireTicks:ticksForMs(2000),prefetchPerTick:1,margin:1.25},
+  water:{horizontalRange:7,updateEveryTicks:ticksForMs(100),activateEveryTicks:ticksForMs(1000),maxUpdatesPerStep:160,activationRadius:16,simulationRadius:64,retireEveryTicks:ticksForMs(2000),maxFlowCells:24000,swimSpeed:2.8,sprintSpeed:4.8,riseSpeed:3.0,diveSpeed:-2.4},
   // Foot contact must be at the actor's actual sole; a higher ledge under a
   // forward corner must not turn a submerged/airborne actor into "grounded".
   movement:{groundGap:.10,footInset:.025,footPenetration:.045,autoJumpLook:.80,ceilingGap:.04,autoStepRise:1.12,bankRiseSpeed:4.5},
@@ -29,10 +31,10 @@ const CFG=Object.freeze({stepMs:25,chunk:16,bottom:-32,top:48,sea:1,view:3,reach
     enemies:{beetle:1,spore:1.1,guardian:.62,boss:.26}},
    feedback:{particles:220,bursts:32,numbers:24,flash:130,poseHold:45,heavyHold:70,shake:.045,volume:.20,afterimages:3}},
   textures:{enabled:true,minifyStart:.8,minifyEnd:2.5},
-  mobs:{nightSpawn:false,dungeonEncounters:true},
+  mobs:{nightSpawn:false,dungeonEncounters:true,initialSpawnTicks:ticksForMs(6000),spawnEveryTicks:ticksForMs(2000)},
   worldgen:{caveSpacing:48,caveLength:34,mineSpacing:64,dungeonSpacing:112,resourceGuideRadius:128,rooms:6},rpg:{maxLevel:25,xp:{beetle:20,spore:25,guardian:45,crystalWisp:30,cryptKnight:55,boss:250},mining:{coalOre:3,ironOre:5,goldOre:8,diamondOre:15,crystalBloom:12},dungeonClear:120,chest:18},
   camera:{initialDistance:{desktop:7.5,mobile:11},minDistance:2.5,maxDistance:11},
-  timing:{maxCatchUp:4,maxBacklogTicks:32},worldSeed:190725,presentation:{maxBuffered:2048,retentionTicks:160},net:{maxPlayers:4,inputSize:20}});
+  timing:{maxCatchUp:ticksForMs(100),maxBacklogTicks:ticksForMs(800)},worldSeed:190725,presentation:{maxBuffered:2048,retentionTicks:ticksForMs(4000)},net:{maxPlayers:4,inputSize:20,inputDelayTicks:Math.ceil(50*SIMULATION_TPS/1000),checksumTicks:ticksForMs(1000),historyTicks:ticksForMs(2000)}});
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),lerp=(a,b,t)=>a+(b-a)*t,TAU=Math.PI*2;
 const initialCameraDistance=()=>CFG.camera.initialDistance[matchMedia('(pointer:coarse)').matches?'mobile':'desktop'];
 const cmp=(a,b)=>a<b?-1:a>b?1:0;

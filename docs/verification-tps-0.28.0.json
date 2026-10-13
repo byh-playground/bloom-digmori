@@ -1,0 +1,68 @@
+{
+  "version": "0.28.0",
+  "tps": 30,
+  "snapshotVersion": "0.26.0",
+  "gamekitDist": "7cf67c33451848d1af4a7b003cbe1b81ffef8b53",
+  "core": {
+    "result": "PASS",
+    "elapsedMs": 24985,
+    "browser": "155.0.4283.45",
+    "errors": []
+  },
+  "timing": {
+    "result": "PASS",
+    "method": "Actual Rapier isolated Simulation, 3 simulated seconds of same encoded movement; 40 TPS snapshot load and canonical roundtrip at 30 TPS",
+    "old": {
+      "version": "0.27.0",
+      "stepMs": 25,
+      "tick": 120,
+      "pos": {
+        "x": 0.5,
+        "y": 4.999995994567871,
+        "z": -13.062560081481934
+      },
+      "day": 0.00625,
+      "nextSpawnMs": 3000,
+      "physicsStep": 0.02500000037252903,
+      "hp": 100
+    },
+    "now": {
+      "version": "0.28.0",
+      "stepMs": 33.333333333333336,
+      "tick": 90,
+      "pos": {
+        "x": 0.5,
+        "y": 4.99999885559082,
+        "z": -13.079959869384766
+      },
+      "day": 0.00625,
+      "nextSpawnMs": 3000,
+      "physicsStep": 0.03333333507180214,
+      "hp": 100
+    },
+    "restored": {
+      "tick": 90,
+      "pos": {
+        "x": 0.5,
+        "y": 4.999995994567871,
+        "z": -13.062560081481934
+      },
+      "day": 0.00625,
+      "nextSpawnMs": 3000,
+      "physicsStep": 0.03333333507180214,
+      "secondLoadTick": 90,
+      "sameRateRoundTrip": true
+    },
+    "displacementDifference": 0.01739978790283203
+  },
+  "rtc": {
+    "result": "PASS",
+    "elapsedMs": 21867,
+    "sharedCheckpoints": 7,
+    "tps": 30,
+    "mode": "lockstep",
+    "resume": "Guest simulation scheduler paused 5 seconds via fixture; real RTC availability recovered active roster and progressing epoch",
+    "leave": "guest restored personal world; host roster 1",
+    "errors": []
+  }
+}

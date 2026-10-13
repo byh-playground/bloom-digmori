@@ -111,7 +111,7 @@ class Physics {
    // A bank is a real solid lip, not a water-surface floor. Accelerate upward
    // enough to clear it before the feet leave the last water voxel; normal
    // swimming still uses smooth buoyancy without an extra jump.
-   const lift=bank?Math.max(CFG.player.gravity*dt*fluid.immersion,(targetY-vel.y)*.95):CFG.player.gravity*dt*fluid.immersion+(targetY-vel.y)*Math.min(.34,dt*9);
+   const lift=bank?Math.max(CFG.player.gravity*dt*fluid.immersion,(targetY-vel.y)*(1-Math.pow(.05,dt/.025))):CFG.player.gravity*dt*fluid.immersion+(targetY-vel.y)*Math.min(.34,dt*9);
    b.applyImpulse({x:dx*m,y:lift*m,z:dz*m},true);actor.grounded=false;return;
   }
   const max=(actor.knock>0?CFG.combat.knockback.drag:actor.combat.state==='roll'?70:CFG.player.acceleration)*dt,d={x:clamp(move.x*speed-vel.x,-max,max),y:0,z:clamp(move.z*speed-vel.z,-max,max)};
@@ -127,7 +127,7 @@ class Physics {
   actor.knock=Math.max(actor.knock||0,profile?.duration??CFG.combat.knockback.duration);
  }
  teleport(actor,pos){const b=this.world.getRigidBody(actor.body);if(!b)return;b.setTranslation({x:pos.x,y:pos.y+actor.offset,z:pos.z},true);b.setLinvel({x:0,y:0,z:0},true);actor.pos={...pos};actor.previous={...pos};actor.velocity={x:0,y:0,z:0};actor.grounded=false;actor.motion=motionState();this.world.propagateModifiedBodyPositionsToColliders();}
- step(sim){this.flushTerrainChanges();const started=performance.now();for(const shot of Object.values(sim.projectiles)){const body=this.world.getRigidBody(shot.body);if(body)shot.flightVelocity={...body.linvel()};}for(const drop of Object.values(sim.drops)){const body=this.world.getRigidBody(drop.body);if(!body)continue;const water=this.terrain.water.bodyState({x:drop.pos.x,y:drop.pos.y-.1,z:drop.pos.z},.3);if(water.inWater){const vel=body.linvel(),mass=body.mass();body.applyImpulse({x:water.flow.x*.03*mass,y:(CFG.player.gravity*CFG.stepMs/1000*.95+(.75-vel.y)*.18)*mass,z:water.flow.z*.03*mass},true);}}this.world.step(this.events);METRICS.add('physics.step',performance.now()-started);
+ step(sim){this.flushTerrainChanges();const started=performance.now();for(const shot of Object.values(sim.projectiles)){const body=this.world.getRigidBody(shot.body);if(body)shot.flightVelocity={...body.linvel()};}for(const drop of Object.values(sim.drops)){const body=this.world.getRigidBody(drop.body);if(!body)continue;const water=this.terrain.water.bodyState({x:drop.pos.x,y:drop.pos.y-.1,z:drop.pos.z},.3);if(water.inWater){const vel=body.linvel(),mass=body.mass();body.applyImpulse({x:water.flow.x*1.2*CFG.stepMs/1000*mass,y:(CFG.player.gravity*CFG.stepMs/1000*.95+(.75-vel.y)*(1-Math.pow(.82,CFG.stepMs/25)))*mass,z:water.flow.z*1.2*CFG.stepMs/1000*mass},true);}}this.world.step(this.events);METRICS.add('physics.step',performance.now()-started);
   for(const a of Object.values(sim.actors)){const b=this.world.getRigidBody(a.body);if(!b)continue;const before=a.pos,prevY=a.velocity.y,p=b.translation();a.pos={x:p.x,y:p.y-a.offset,z:p.z};a.velocity={...b.linvel()};
    if(a.dead||a.suspended)continue;const m=a.motion||(a.motion=motionState()),dt=CFG.stepMs,ground=this.ground(a,a.pos,CFG.movement.groundGap,true),grounded=!!ground&&Math.abs(a.velocity.y)<.8,speed=Math.hypot(a.velocity.x,a.velocity.z);
    m.land=Math.max(0,m.land-dt);m.brake=Math.max(0,m.brake-dt);

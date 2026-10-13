@@ -1,5 +1,5 @@
 class LocalSimulationSession {
- constructor(app){this.app=app;this.profile={tickRate:1000/CFG.stepMs,maxCatchupSteps:CFG.timing.maxCatchUp};this.pending=[];this.commandSequence=0;this.closed=false;this.resimulating=false;this.pace=1;}
+ constructor(app){this.app=app;this.profile={tickRate:CFG.tickRate,maxCatchupSteps:CFG.timing.maxCatchUp};this.pending=[];this.commandSequence=0;this.closed=false;this.resimulating=false;this.pace=1;}
  get tick(){return this.app.sim?.tick||0;}get epoch(){return this.app.sim?.epoch||0;}get inputSize(){return CFG.net.inputSize;}
  poll(){}
  queueCommand(payload){const sequence=++this.commandSequence;this.pending.push({sequence,payload:payload.slice?.()??structuredClone(payload)});return sequence;}
