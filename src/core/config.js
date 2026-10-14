@@ -1,9 +1,9 @@
 
 const DEPENDENCIES=Object.freeze({
  rapier:{package:'@dimforge/rapier3d-deterministic-compat',version:'0.21.0',url:'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs',mirrors:['https://unpkg.com/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs'],timeoutMs:15000},
- gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'2712703c83923f16bb70454ea60e2ac533489ef8',distCommit:'e108fe481aa7314974c39974a169b549500bf12c',manifestSha256:'800e4ddd95a33c332dff5a0c60b06438ffea6fd3bb3bca331b52d56b73f0775e',timeoutMs:15000,
-  networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'3bded746222c0aa1769697442b579922d406e67d79e3dbf65df5580dd387c007'}),rollback:Object.freeze({file:'rollback.js',sha256:'ec914ba35407859cefee4be25ab517373d9a02be8c998e5bd2da6400ee779ce4'})}),
-  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'bf6c8737ef48ca327814cf7326406025c2ece6c49a690ca7652cac2cc6af2562'}),input:Object.freeze({file:'input.js',sha256:'ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168'}),simloop:Object.freeze({file:'simloop.js',sha256:'6d8c3462ac01b0af967b3c259eede2b85e2f2f3f6813217391e6c322a7d10007'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84'}),audio:Object.freeze({file:'audio.js',sha256:'7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a'})})}
+ gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'baa96876876a08013ad28b5a71c83bfadd285fab',distCommit:'72b09b260edf9650353017acb49c06873fe9f5a1',manifestSha256:'c713809653043e8eb1d9b629c0c2734e9526217f69e04b49283d068c1b5d7da7',timeoutMs:15000,
+  networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'3bded746222c0aa1769697442b579922d406e67d79e3dbf65df5580dd387c007'}),rollback:Object.freeze({file:'rollback.js',sha256:'2c64772369f1bb110a7d5d7f090f687115ca42f9219edf957e1af87e56348696'})}),
+  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'64d1297162f07e78904954628a5c9595e1eddf576b8612a58f41ed594638c37c'}),input:Object.freeze({file:'input.js',sha256:'ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168'}),simloop:Object.freeze({file:'simloop.js',sha256:'1be543dc7e15ef7c87043af98a1fb49a0a45a779098bfa085dc7509709f1ea9c'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84'}),audio:Object.freeze({file:'audio.js',sha256:'7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a'})})}
 });
 /* Digmori — 게임별 스탯 프로필의 SSOT. 시간=ms, 거리=m, HP=생명력. */
 // 표시값을 임의로 떼우지 않는다. 설정 피해/강인도/스태미나는 5단위,
@@ -11,7 +11,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5,poise:5,stamina:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.28.1',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.28.2',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
