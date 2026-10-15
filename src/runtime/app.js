@@ -156,6 +156,6 @@ if(e.type==='pickup')this.toast(ITEMS[e.item].name+' +'+e.count);if(e.type==='ex
    this.sim.load(this.net.backup.bytes);this.localId=this.net.backup.id;this.renderer.worldRef=null;this.presentation.reset();this.scene.reset();this.networkStatus('개인 세계로 돌아왔습니다.');
   }catch(e){this.networkStatus('퇴장 실패: '+e.message+' · 방을 강제로 분리하지 않았습니다.');}finally{this.net.busy=false;}}
  debugKit(){if(!this.debug||this.net.session)return;const i=this.actor().inventory;for(const [id,n]of [['iron_sword',1],['iron_pick',1],['wood_bow',1],['iron_shield',1],['arrow',64],['food',16],['sigil',2],['workbench',1],['furnace',1],['log',16],['coal',16],['rawIron',16],['diamond',16],['iron',64],['seed',16]])Inventory.addTo(i.slots,id,n);this.refreshUI(true);}
- debugEnemy(){if(!this.debug||this.net.session)return;const a=this.actor();this.sim.addCreature('shell',V.add(a.pos,V.scale(a.facing,3)));}
+ debugEnemy(){if(!this.debug||this.net.session)return;const a=this.actor(),wild=Object.values(this.sim.actors).filter(x=>x.speciesId&&!x.boss&&!x.dead&&!x.structureKey);while(wild.length>=CFG.creatures.maxWild){wild.sort((x,y)=>V.len(V.sub(y.pos,a.pos))-V.len(V.sub(x.pos,a.pos)));const removed=wild.shift();this.sim.physics.removeBody(removed);delete this.sim.actors[removed.id];}this.sim.addCreature('shell',V.add(a.pos,V.scale(a.facing,3)));}
  debugBoss(){if(!this.debug||this.net.session)return;this.sim.addBoss({x:this.actor().pos.x+4,y:this.actor().pos.y+1,z:this.actor().pos.z-5});}
 }

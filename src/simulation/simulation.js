@@ -1,10 +1,9 @@
 class Simulation {
- constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.mobs.initialSpawnTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
- createActor(id,pos,speciesId=null,boss=false){const d=boss?BOSS:speciesId?SPECIES[speciesId]?.wild:null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),maxPoise:d?.poise||CFG.player.poise,scale:d?.size||1,enemy:!!boss,kind:boss?'boss':speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
+ constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
+ createActor(id,pos,speciesId=null,boss=false){const d=boss?BOSS:speciesId?SPECIES[speciesId]?.wild:null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),maxPoise:d?.poise||CFG.player.poise,scale:d?.size||1,enemy:false,kind:speciesId|| (boss?'boss':null),speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
  addPlayer(id){if(this.actors[id])return;const count=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length,p={x:.5+count*1.7,y:5.1,z:.5};const a=this.createActor(id,p);this.actors[id]=a;this.physics.syncTerrain(Object.values(this.actors),[...Object.values(this.drops),...this.companions.bodies()],Object.values(this.projectiles),this.tick);this.physics.addActor(a);return a;}
- addCreature(speciesId,pos){if(!SPECIES[speciesId]||Object.values(this.actors).filter(a=>a.speciesId&&!a.dead).length>=CFG.creatures.maxWild)return null;const id='creature:'+ ++this.sequence,a=this.createActor(id,pos,speciesId);a.homePos={...pos};a.ai.cooldown=0;this.actors[id]=a;this.physics.addActor(a);return a;}
- addEnemy(kind,pos){const def=ENEMIES[kind];if(!def||Object.values(this.actors).filter(a=>a.enemy).length>=CFG.maxEnemies)return null;const id='enemy:'+ ++this.sequence,a=this.createActor(id,pos);Object.assign(a,{hp:def.hp,maxHp:def.hp,rpg:null,maxPoise:def.poise,scale:def.size||1,enemy:true,kind,speciesId:null,wildState:null,targetId:null,boss:false});this.actors[id]=a;this.physics.addActor(a);return a;}
- addBoss(pos){if(Object.values(this.actors).some(a=>a.boss&&!a.dead))return null;const id='boss:'+ ++this.sequence,a=this.createActor(id,pos,null,true);this.actors[id]=a;this.physics.addActor(a);return a;}
+ addCreature(speciesId,pos,structureKey=null){if(!SPECIES[speciesId]||!structureKey&&Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey).length>=CFG.creatures.maxWild)return null;const id='creature:'+ ++this.sequence,a=this.createActor(id,pos,speciesId);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=0;this.actors[id]=a;this.physics.addActor(a);return a;}
+ addBoss(pos){if(Object.values(this.actors).some(a=>a.boss&&!a.dead))return null;const id='boss:'+ ++this.sequence,a=this.createActor(id,pos,'warden',true);a.homePos={...pos};this.actors[id]=a;this.physics.addActor(a);return a;}
  emit(type,actor,data={}){if(this.silent)return;if(this.effects.length>=CFG.presentation.maxBuffered)throw Error('표현 이벤트 버퍼 초과');const sequence=this.presentationSequence++;this.effects.push({id:this.epoch+':'+this.tick+':'+sequence,tick:this.tick,sequence,type,pos:{...actor.pos},actorId:actor.id,enemy:actor.enemy,...data});}
  drainEffects(){const events=this.effects;this.effects=[];return events;}
  markItem(id){this.progress[id]=true;}
@@ -90,13 +89,21 @@ class Simulation {
  }
  summon(actor){if(V.len(V.sub(actor.pos,this.terrain.altar))>7||Object.values(this.actors).some(a=>a.boss&&!a.dead)||!Inventory.takeFrom(actor.inventory.slots,'sigil',1))return false;
   const pos={x:24.5,y:6.1,z:-17.5},boss=this.addBoss(pos);if(!boss)return false;if(this.progress.boss){boss.maxHp=boss.hp*1.5;boss.hp=boss.maxHp;}this.emit('boss-spawn',boss);return true;}
- kill(actor,source){if(actor.dead)return;if(!actor.enemy&&!actor.speciesId&&!actor.boss)this.companions.unavailable(actor);actor.dead=true;Combat.resetCombo(actor.combat);actor.combat.state='dead';actor.combat.action=null;actor.respawn=CFG.respawn;this.emit('death',actor);
-  if(actor.speciesId){this.physics.removeBody(actor);actor.body=null;}
-  else if(actor.enemy){const killer=this.actors[source];if(killer&&!killer.enemy)RPG.gain(killer,actor.boss?CFG.rpg.xp.boss:CFG.rpg.xp[actor.kind]||15,this,'combat');if(actor.boss){for(const [id,count]of BOSS.loot)this.spawnDrop(id,count,actor.pos);this.progress.boss=true;this.progress.victories=(this.progress.victories||0)+1;this.emit('victory',actor,{source});}
-   else for(const [id,count]of ENEMIES[actor.kind].loot)this.spawnDrop(id,count,actor.pos);
-   if(actor.structureKey&&!Object.values(this.actors).some(a=>a.id!==actor.id&&a.enemy&&!a.dead&&a.structureKey===actor.structureKey)){this.progress['cleared:'+actor.structureKey]=true;this.progress.clearedDungeons=(this.progress.clearedDungeons||0)+1;for(const p of Object.values(this.actors).filter(p=>!p.enemy&&!p.dead&&V.len(V.sub(p.pos,actor.pos))<48).sort((a,b)=>cmp(a.id,b.id)))RPG.gain(p,CFG.rpg.dungeonClear,this,'dungeon');this.emit('dungeon-clear',actor,{structureKey:actor.structureKey});}this.physics.removeBody(actor);actor.body=null;}
+ kill(actor,source){
+  if(actor.dead)return;if(!actor.enemy&&!actor.speciesId&&!actor.boss)this.companions.unavailable(actor);actor.dead=true;Combat.resetCombo(actor.combat);actor.combat.state='dead';actor.combat.action=null;actor.respawn=CFG.respawn;this.emit('death',actor);
+  if(actor.speciesId){this.physics.removeBody(actor);actor.body=null;if(actor.boss)this.completeBoss(actor,source);this.clearDungeonIfEmpty(actor.structureKey,actor);}
+  else if(actor.boss){this.completeBoss(actor,source);this.physics.removeBody(actor);actor.body=null;}
   else{const i=actor.inventory;for(const s of [...i.slots,...i.grid,i.cursor,...Object.values(i.armor)])if(s)this.spawnDrop(s.id,s.count,actor.pos);actor.inventory=Inventory.empty();const b=this.physics.world.getRigidBody(actor.body);b.setBodyType(this.R.RigidBodyType.Fixed,true);}
  }
+ completeBoss(actor,source){const killer=this.actors[source];if(killer&&!killer.enemy&&!killer.speciesId&&!killer.boss)RPG.gain(killer,CFG.rpg.xp.boss,this,'combat');for(const [id,count]of BOSS.loot)this.spawnDrop(id,count,actor.pos);this.progress.boss=true;this.progress.victories=(this.progress.victories||0)+1;this.emit('victory',actor,{source});}
+ clearDungeonIfEmpty(structureKey,sourceActor){
+  if(!structureKey)return false;const key='dungeon:'+structureKey;if(this.progress[key]!=='active')return false;
+  if(Object.values(this.actors).some(a=>a.speciesId&&!a.dead&&a.structureKey===structureKey))return false;
+  this.progress[key]='cleared';this.progress['cleared:'+structureKey]=true;this.progress.clearedDungeons=(this.progress.clearedDungeons||0)+1;
+  const pos=sourceActor?.pos||{x:0,y:0,z:0};for(const p of Object.values(this.actors).filter(p=>!p.enemy&&!p.speciesId&&!p.boss&&!p.dead&&!p.suspended&&V.len(V.sub(p.pos,pos))<48).sort((a,b)=>cmp(a.id,b.id)))RPG.gain(p,CFG.rpg.dungeonClear,this,'dungeon');
+  this.emit('dungeon-clear',sourceActor||{id:'structure:'+structureKey,pos,enemy:false},{structureKey});return true;
+ }
+
  tickFurnaces(){for(const key of Object.keys(this.furnaces).sort(cmp)){
   const f=this.furnaces[key],[input,fuel,output]=f.slots,r=input?SMELT[input.id]:null,can=!!r&&(!output||output.id===r.out&&output.count<Inventory.limit(output.id));
   if(f.burn>0)f.burn=Math.max(0,f.burn-CFG.stepMs);
@@ -105,7 +112,7 @@ class Simulation {
   if(can&&f.burn>0){f.progress+=CFG.stepMs;if(f.progress>=r.ms){f.progress-=r.ms;if(--input.count===0)f.slots[0]=null;if(output)output.count++;else f.slots[2]={id:r.out,count:1};this.markItem(r.out);}}
   else f.progress=Math.max(0,f.progress-CFG.stepMs*2);
  }}
- ai(actor){const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss&&!a.dead&&!a.suspended).sort((a,b)=>V.len(V.sub(a.pos,actor.pos))-V.len(V.sub(b.pos,actor.pos))||cmp(a.id,b.id)),def=actor.boss?BOSS:actor.speciesId?SPECIES[actor.speciesId]?.wild:ENEMIES[actor.kind];let target=actor.boss||!actor.speciesId?players[0]:actor.wildState==='retaliating'?this.actors[actor.targetId]:null;
+ ai(actor){const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss&&!a.dead&&!a.suspended).sort((a,b)=>V.len(V.sub(a.pos,actor.pos))-V.len(V.sub(b.pos,actor.pos))||cmp(a.id,b.id)),def=actor.boss?BOSS:SPECIES[actor.speciesId]?.wild;let target=actor.speciesId?(actor.wildState==='retaliating'?this.actors[actor.targetId]:null):actor.boss?players[0]:null;
   if(actor.speciesId&&actor.wildState==='retaliating'&&(!target||target.dead||target.suspended||V.len(V.sub(target.pos,actor.pos))>CFG.creatures.leash)){actor.targetId=null;actor.wildState='neutral';actor.enemy=false;target=null;const c=actor.combat;if(c.state==='attack'){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}}
   if(!target){if(actor.speciesId){const delta=V.sub(actor.homePos||actor.pos,actor.pos),dist=V.len(delta),flat=V.norm({x:delta.x,y:0,z:delta.z}),speed=dist>1.4?Math.min(def.speed*.45,dist):0;return{move:flat,speed,jump:false};}return{move:{x:0,y:0,z:0},speed:0,jump:false};}
   const delta=V.sub(target.pos,actor.pos),dist=V.len(delta),flat=V.norm({x:delta.x,y:0,z:delta.z}),c=actor.combat;actor.facing=V.norm({x:delta.x,y:delta.y,z:delta.z});actor.yaw=Math.atan2(-flat.x,-flat.z);
@@ -118,7 +125,7 @@ class Simulation {
   }
   const blocked=speed>0&&!this.physics.sight(V.add(actor.pos,{x:0,y:.7,z:0}),V.add(actor.pos,{x:flat.x*1.2,y:.7,z:flat.z*1.2}),actor);return{move,speed,jump:blocked};
  }
- spawnCreature(players){if(!players.length)return;const candidates=Object.values(this.actors).filter(a=>a.speciesId&&!a.dead);for(const c of candidates)if(players.every(p=>V.len(V.sub(c.pos,p.pos))>CFG.creatures.despawnRadius)){this.physics.removeBody(c);delete this.actors[c.id];}const active=candidates.filter(c=>this.actors[c.id]);if(active.length>=CFG.creatures.maxWild)return;
+ spawnCreature(players){if(!players.length)return;const candidates=Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey);for(const c of candidates)if(!c.structureKey&&players.every(p=>V.len(V.sub(c.pos,p.pos))>CFG.creatures.despawnRadius)){this.physics.removeBody(c);delete this.actors[c.id];}const active=candidates.filter(c=>this.actors[c.id]);if(active.length>=CFG.creatures.maxWild)return;
   const counts=new Map(players.map(p=>[p.id,active.filter(c=>V.len(V.sub(c.pos,p.pos))<CFG.creatures.encounterRadius).length]));const player=players.filter(p=>(counts.get(p.id)||0)<CFG.creatures.perPlayer).sort((a,b)=>(counts.get(a.id)||0)-(counts.get(b.id)||0)||cmp(a.id,b.id))[0];if(!player)return;
   const seed=hash3(this.tick,0,hashStr(player.id),this.terrain.seed+1181),start=seed%4096;
   for(let attempt=0;attempt<16;attempt++){const angle=((start+attempt*1597)%4096)/4096*TAU,radius=8+((seed>>>(attempt%4*6))%6000)/1000,x=Math.floor(player.pos.x+Math.cos(angle)*radius),z=Math.floor(player.pos.z+Math.sin(angle)*radius),h=this.terrain.height(x,z),biome=BIOMES[this.terrain.climate(x,z).id];
@@ -128,16 +135,25 @@ class Simulation {
    const speciesId=biome.wildlife[(Math.floor(this.tick/CFG.creatures.spawnTicks)+seed+attempt)%biome.wildlife.length];this.addCreature(speciesId,{x:px,y,z:pz});return;
   }
  }
- tickDungeonEncounters(players){for(const p of players)for(const s of this.terrain.structuresNear(p.pos,44)){
-  if(s.type!=='dungeon'||Math.abs(p.pos.y-(s.y+1))>7)continue;const rooms=this.terrain.dungeonRooms(s);if(!rooms.some(r=>Math.abs(p.pos.x-r.x)<r.r+9&&Math.abs(p.pos.z-r.z)<r.r+9))continue;
-  const visited='dungeon:'+s.key;if(this.progress[visited])continue;this.progress[visited]='active';const theme=this.terrain.dungeonTheme(s),slots=[rooms[0],rooms[1],rooms[3],rooms[5]];
-  for(let i=0;i<slots.length;i++){const r=slots[i],kind=theme.enemies[i%theme.enemies.length],pos={x:r.x+.5,y:s.y+1.2,z:r.z+.5};if(this.terrain.isSolid(this.terrain.get(pos.x,pos.y,pos.z)))continue;const enemy=this.addEnemy(kind,pos);if(enemy)enemy.structureKey=s.key;}
-  this.emit('dungeon-enter',{id:'structure:'+s.key,pos:{x:s.x,y:s.y+1,z:s.z},enemy:true},{name:theme.name});
- }}
- tickHostileSpawns(players){if(this.tick<this.nextSpawn)return;this.nextSpawn=this.tick+CFG.mobs.spawnEveryTicks;if(CFG.mobs.nightSpawn){const night=this.night(),enemyCount=Object.values(this.actors).filter(a=>a.enemy&&!a.dead&&!a.speciesId).length;
-   if(!night)for(const e of Object.values(this.actors)){if(!e.enemy||e.speciesId||e.boss||e.dead||e.structureKey)continue;if(players.every(p=>V.len(V.sub(p.pos,e.pos))>32)){this.physics.removeBody(e);delete this.actors[e.id];}}
-   let spawned=0;for(const p of night?players:[]){if(enemyCount+spawned>=10)break;const h=hash3(this.tick,0,hashStr(p.id),this.terrain.seed),x=Math.floor(p.pos.x)+((h%2)?1:-1)*(10+h%8),z=Math.floor(p.pos.z)+(((h>>>4)%2)?1:-1)*(8+(h>>>8)%8),y=this.terrain.height(x,z)+1.2;if(y<CFG.sea+1||Math.hypot(x,z)<8||this.terrain.get(x,Math.floor(y),z))continue;if(this.addEnemy(['beetle','spore','guardian'][h%3],{x:x+.5,y,z:z+.5}))spawned++;}}
-  if(CFG.mobs.dungeonEncounters)this.tickDungeonEncounters(players);
+ tickDungeonEncounters(players){
+  for(const p of players)for(const structure of this.terrain.structuresNear(p.pos,44)){
+   if(structure.type!=='dungeon'||Math.abs(p.pos.y-(structure.y+1))>7)continue;
+   const rooms=this.terrain.dungeonRooms(structure);if(!rooms.some(r=>Math.abs(p.pos.x-r.x)<r.r+9&&Math.abs(p.pos.z-r.z)<r.r+9))continue;
+   const visited='dungeon:'+structure.key;if(this.progress[visited])continue;
+   const theme=this.terrain.dungeonTheme(structure),slots=[rooms[0],rooms[1],rooms[3],rooms[5]].slice(0,CFG.creatures.dungeonPackSize);let spawned=0;
+   for(let i=0;i<slots.length;i++){
+    const room=slots[i];if(!room)continue;const pos={x:room.x+.5,y:structure.y+1.1,z:room.z+.5},x=Math.floor(pos.x),y=Math.floor(pos.y),z=Math.floor(pos.z);
+    if(!this.terrain.isSolid(this.terrain.get(x,y-1,z))||this.terrain.isSolid(this.terrain.get(x,y,z))||this.terrain.isSolid(this.terrain.get(x,y+1,z))||this.terrain.isSolid(this.terrain.get(x,y+2,z)))continue;
+    const choices=(theme.species||[]).filter(kind=>SPECIES[kind]);if(!choices.length)continue;const speciesId=choices[(i+Math.abs(structure.hash||0))%choices.length];if(this.addCreature(speciesId,pos,structure.key))spawned++;
+   }
+   if(!spawned)continue;this.progress[visited]='active';this.emit('dungeon-enter',{id:'structure:'+structure.key,pos:{x:structure.x,y:structure.y+1,z:structure.z},enemy:false},{name:theme.name,captureAvailable:true,creatures:spawned});
+  }
+ }
+
+ tickCreatureEncounters(players){
+  if(this.tick<this.nextSpawn)return;this.nextSpawn=this.tick+CFG.creatures.encounterCheckTicks;
+  if(!this.night()&&this.tick>0&&this.tick%CFG.creatures.spawnTicks===0)this.spawnCreature(players);
+  this.tickDungeonEncounters(players);
  }
 
  step(context){const started=performance.now();this.presentationSequence=0;this.silent=!!(context.recovering||context.replaying);const inputs=new Map(context.inputs.map(i=>[i.playerId,i]));
@@ -170,7 +186,7 @@ class Simulation {
   for(const id of Object.keys(this.drops).sort(cmp)){const d=this.drops[id];d.age+=CFG.stepMs;for(const p of players){if(d.age<350||V.len(V.sub(V.add(p.pos,{x:0,y:.6,z:0}),d.pos))>1.8)continue;const old=d.count;d.count=Inventory.addTo(p.inventory.slots,d.item,d.count);if(d.count<old){this.markItem(d.item);this.emit('pickup',p,{item:d.item,count:old-d.count});}if(!d.count)break;}
    if(!d.count||d.age>CFG.dropLife||d.pos.y<CFG.bottom-10){this.physics.removeBody(d);delete this.drops[id];}}
   for(const [id,s]of Object.entries(this.projectiles)){s.age+=CFG.stepMs;if(s.companionId){this.companions.updateThrow(s);continue;}if(s.age>(s.lifetime??5000)||s.pos.y<CFG.bottom){this.companions.returned(s);this.physics.removeBody(s);delete this.projectiles[id];}}
-  if(!this.night()&&this.tick>0&&this.tick%CFG.creatures.spawnTicks===0)this.spawnCreature(players);this.tickHostileSpawns(players);
+  this.tickCreatureEncounters(players);
   this.tick=context.tick+1;this.revision++;this.silent=false;METRICS.add('simulation.tick',performance.now()-started);
  }
  dayPhase(){return ((this.tick*CFG.stepMs)%CFG.dayMs)/CFG.dayMs;}
@@ -184,9 +200,18 @@ class Simulation {
  }
  meta(){return{companions:this.companions.snapshot(),version:SNAPSHOT_VERSION,seed:this.terrain.seed,tick:this.tick,epoch:this.epoch,sequence:this.sequence,actionSequence:this.actionSequence,actors:Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),drops:Object.values(this.drops).sort((a,b)=>cmp(a.id,b.id)),projectiles:Object.values(this.projectiles).sort((a,b)=>cmp(a.id,b.id)),furnaces:Object.entries(this.furnaces).sort(([a],[b])=>cmp(a,b)),progress:this.progress,edits:this.terrain.snapshot(),fluid:this.terrain.water.snapshot(),terrainState:{editSerial:this.terrain.editSerial,physicsRevisions:[...this.terrain.physicsRevisions.entries()].sort(([a],[b])=>cmp(a,b))},nextSpawn:this.nextSpawn,physics:this.physics.metadata()};}
  save(){this.physics.flushTerrainChanges();const json=new TextEncoder().encode(JSON.stringify(this.meta())),phys=this.physics.snapshot(),out=new Uint8Array(12+json.length+phys.length),v=new DataView(out.buffer);v.setUint32(0,0x424C4D41,true);v.setUint32(4,json.length,true);v.setUint32(8,phys.length,true);out.set(json,12);out.set(phys,12+json.length);return out;}
- parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));
+ migrateLegacyActors(meta){
+   const retained=[];for(const actor of meta.actors){
+    if(actor.dead&&(actor.boss||actor.enemy&&!actor.speciesId))continue;
+    const speciesId=SPECIES[actor.candidateCompanion]?actor.candidateCompanion:actor.boss&&!actor.speciesId?'warden':actor.enemy&&!actor.speciesId?(LEGACY_SPECIES[actor.kind]||'shell'):null;
+    if(speciesId){const def=SPECIES[speciesId].wild,ratio=actor.maxHp>0?clamp(actor.hp/actor.maxHp,0,1):1;actor.speciesId=speciesId;actor.kind=speciesId;actor.wildState='neutral';actor.enemy=false;actor.boss=actor.boss&&speciesId==='warden';actor.targetId=null;actor.homePos=actor.homePos||{...actor.pos};actor.rpg=null;actor.combat=Combat.state();actor.hp=def.hp*ratio;actor.maxHp=def.hp;actor.maxPoise=def.poise;delete actor.candidateCompanion;}
+    retained.push(actor);
+   }
+   meta.actors=retained;meta.progress||={};for(const [key,value]of Object.entries(meta.progress))if(key.startsWith('dungeon:')&&value==='active'&&!retained.some(a=>a.speciesId&&!a.dead&&a.structureKey===key.slice(8)))delete meta.progress[key];
+  }
+  parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));this.migrateLegacyActors(m);
   if(m.version!==SNAPSHOT_VERSION)throw Error('현재 '+SNAPSHOT_VERSION+' 저장만 지원합니다. 이전 버전은 새 월드가 필요합니다.');
-  if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');for(const a of m.actors)if(a.candidateCompanion&&SPECIES[a.candidateCompanion]){const kind=a.candidateCompanion,def=SPECIES[kind].wild,ratio=a.maxHp>0?a.hp/a.maxHp:1;a.speciesId=kind;a.kind=kind;a.wildState='neutral';a.enemy=false;a.targetId=null;a.homePos=a.homePos||{...a.pos};a.rpg=null;a.hp=def.hp*ratio;a.maxHp=def.hp;a.maxPoise=def.poise;a.scale=def.size||1;delete a.candidateCompanion;}const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss&&!ENEMIES[a.kind]||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
+  if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');for(const a of m.actors)if(a.candidateCompanion&&SPECIES[a.candidateCompanion]){const kind=a.candidateCompanion,def=SPECIES[kind].wild,ratio=a.maxHp>0?a.hp/a.maxHp:1;a.speciesId=kind;a.kind=kind;a.wildState='neutral';a.enemy=false;a.targetId=null;a.homePos=a.homePos||{...a.pos};a.rpg=null;a.hp=def.hp*ratio;a.maxHp=def.hp;a.maxPoise=def.poise;delete a.candidateCompanion;}const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
  }
  load(bytes){const {meta:m,physics:payload}=this.parse(bytes),terrain=VoxelWorld.restore(m.seed,m.edits);
   terrain.editSerial=m.terrainState?.editSerial??m.edits.length;terrain.physicsRevisions=new Map(m.terrainState?.physicsRevisions||[]);
@@ -201,7 +226,7 @@ class Simulation {
    physics.lastPrefetchTick=toTick(physics.lastPrefetchTick);for(const entry of physics.loaded.values())entry.until=toTick(entry.until);
    physics.world.timestep=CFG.stepMs/1000;
   }
-  this.physics.free();this.terrain=terrain;this.physics=physics;this.tick=m.tick;this.epoch=m.epoch;this.sequence=m.sequence;this.actionSequence=m.actionSequence;this.actors=Object.fromEntries(m.actors.map(a=>[a.id,a]));this.drops=Object.fromEntries(m.drops.map(a=>[a.id,a]));this.projectiles=Object.fromEntries(m.projectiles.map(a=>[a.id,a]));this.furnaces=Object.fromEntries(m.furnaces);this.progress=m.progress;this.nextSpawn=m.nextSpawn??(this.tick+CFG.mobs.spawnEveryTicks);this.companions=new Companions(this,m.companions);for(const a of Object.values(this.actors))a.companionSlot??=-1;this.effects=[];this.revision++;
+  this.physics.free();this.terrain=terrain;this.physics=physics;this.tick=m.tick;this.epoch=m.epoch;this.sequence=m.sequence;this.actionSequence=m.actionSequence;this.actors=Object.fromEntries(m.actors.map(a=>[a.id,a]));this.drops=Object.fromEntries(m.drops.map(a=>[a.id,a]));this.projectiles=Object.fromEntries(m.projectiles.map(a=>[a.id,a]));this.furnaces=Object.fromEntries(m.furnaces);this.progress=m.progress;this.nextSpawn=m.nextSpawn??(this.tick+CFG.creatures.encounterCheckTicks);this.companions=new Companions(this,m.companions);for(const a of Object.values(this.actors))a.companionSlot??=-1;this.effects=[];this.revision++;
  }
  adapter(){return{save:()=>this.save(),load:b=>this.load(b),validateSnapshot:(b,c)=>{try{const m=this.parse(b).meta;return(c.tick===undefined||m.tick===c.tick)&&(!c.players||JSON.stringify(m.actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss).map(a=>a.id).sort())===JSON.stringify([...c.players].sort()));}catch{return false;}},step:c=>this.step(c),applyMembership:c=>this.applyMembership(c)};}
  free(){this.physics.free();}

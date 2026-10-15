@@ -1,7 +1,7 @@
 const DUNGEON_THEMES=Object.freeze([
- Object.freeze({name:'잊힌 석실',wall:'cobble',trim:'obsidian',enemies:['guardian','beetle','cryptKnight']}),
- Object.freeze({name:'균사 성소',wall:'cobble',trim:'stem',enemies:['spore','beetle','crystalWisp']}),
- Object.freeze({name:'수정 묘역',wall:'stone',trim:'obsidian',enemies:['crystalWisp','cryptKnight','guardian']})
+ Object.freeze({name:'잊힌 석실',wall:'cobble',trim:'obsidian',species:['shell','leaf']}),
+ Object.freeze({name:'균사 성소',wall:'cobble',trim:'stem',species:['shell','leaf']}),
+ Object.freeze({name:'수정 묘역',wall:'stone',trim:'obsidian',species:['shell','leaf']})
 ]);
 const DUNGEON_ROOMS=Object.freeze([
  Object.freeze({name:'입구',dx:0,dz:0,r:5,role:'entrance'}),

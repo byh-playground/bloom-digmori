@@ -44,7 +44,7 @@ function contactCast(collider,ball,from,to){
  return {point:{...point},normal:V.norm(normal),fraction:t};
 }
 function knockbackResponse(target,power,blocked=false,heavy=false){
- const k=CFG.combat.knockback,creature=target.boss?'boss':target.speciesId||target.kind,resistance=creature?(k.creatures[creature]??k.enemies[creature]??1):k.playerResistance,
+ const k=CFG.combat.knockback,creature=target.boss?'boss':target.speciesId||target.kind,resistance=creature?(k.creatures[creature]??1):k.playerResistance,
   horizontal=clamp(power*resistance*(blocked?k.guardScale:1),0,k.maxSpeed),lift=blocked?.12:clamp(.55+horizontal*.115+(heavy?.25:0),.5,2.3),
   duration=blocked?120:Math.round((k.duration+(heavy?100:0))*clamp(resistance,.5,1.1));
  return {horizontal,lift,duration};
