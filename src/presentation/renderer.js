@@ -136,7 +136,7 @@ class Renderer {
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
    const frame=this.atlas.frames[sample.kind+'/'+sample.dir+'/'+sample.clip+'/'+sample.frame]||this.atlas.frames[sample.kind+'/'+sample.dir+'/idle/0'];
-   let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:a.enemy&&ENEMIES[a.kind]?[...ENEMIES[a.kind].tint]:[[1,1,1,1],[.78,.89,1,1],[1,.8,.9,1],[1,.92,.7,1]][hashStr(a.id)%4];if(a.id===actor.id)tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
+   let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:[[1,1,1,1],[.78,.89,1,1],[1,.8,.9,1],[1,.92,.7,1]][hashStr(a.id)%4];if(a.id===actor.id)tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
    if(reaction&&!reaction.guard&&reaction.age<CFG.combat.feedback.flash)tint=reaction.age<45?[2.8,2.7,2.3,1]:[1.75,.65,.5,1];
    const rp=a.pos;this.sprite(sprites,rp,1.65*64/48*scale,2*64/56*scale,frame,tint,sample.flip,0);
    const raw=sim.actors[a.id],hit=raw?sim.physics.ground(raw,rp,2.5):null;if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}

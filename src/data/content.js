@@ -95,15 +95,6 @@ recipe('sigil','sigil',1,['SIS','IDI','SIS'],{S:'seed',I:'iron',D:'diamond'},3);
 recipe('trophy','trophy',1,[' D ','IHI','PPP'],{D:'diamond',I:'iron',H:'heart',P:'planks'},3,'boss');
 const FUELS={coal:48000,charcoal:48000,log:9000,planks:9000,stick:3000};
 const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:'charcoal',ms:6000},cobble:{out:'stone',ms:6000}};
-const ENEMIES={beetle:{name:'가시갑충',kind:'bug',hp:100,poise:50,speed:2.6,damage:15,poiseDamage:10,reach:1.9,wind:700,active:125,recovery:900,loot:[['fiber',2],['seed',2]],tint:[.94,.7,.57,1],size:1.0},
- crystalWisp:{name:'수정 정령',kind:'fungus',hp:75,poise:25,speed:3,damage:20,poiseDamage:15,reach:15,wind:650,active:100,recovery:1100,loot:[['crystalShard',2]],tint:[.55,.89,1,1],size:.95,ranged:true},
- cryptKnight:{name:'유적의 철갑 기사',kind:'bug',hp:175,poise:100,speed:2.3,damage:30,poiseDamage:30,reach:2.7,wind:850,active:175,recovery:1000,loot:[['iron',2],['crystalShard',1]],tint:[.78,.73,.96,1],size:1.35},
- spore:{name:'떠도는 포자사수',kind:'fungus',hp:75,poise:25,speed:2,damage:15,poiseDamage:10,reach:16,wind:900,active:100,recovery:1500,loot:[['food',2],['fiber',1]],tint:[.82,.72,.98,1],size:1.0,ranged:true},
- guardian:{name:'철갑 경비병',kind:'bug',hp:200,poise:100,speed:2.1,damage:25,poiseDamage:25,reach:2.6,wind:900,active:175,recovery:1000,loot:[['iron',1],['seed',3]],tint:[.7,.86,.77,1],size:1.3}};
-// The altar guardian is a special encounter, not part of the wild species roster.
-const BOSS=Object.freeze({name:'잠든 화원의 수호자',kind:'fungus',hp:1000,poise:250,speed:2.5,damage:35,poiseDamage:40,reach:4.3,wind:1000,active:200,recovery:1400,loot:[['heart',1],['diamond',3]],tint:[1,.69,.68,1],size:2.8});
-
-
 const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'}),endurance:Object.freeze({name:'지구력',description:'최대 기력 +10'})});
 const QUESTS=Object.freeze([
  Object.freeze({id:'log',title:'첫 원목',hint:'나무 줄기를 채집해 시작하세요.'}),

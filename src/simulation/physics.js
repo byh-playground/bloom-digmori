@@ -94,6 +94,15 @@ class Physics {
   const h=actor.offset*2;
   return !t.boxSolid({...min,y:floor+1.03},{...max,y:floor+1+h+.06});
  }
+ wallSlide(actor,move,speed){const length=Math.hypot(move.x,move.z);if(length<.001||speed<=0||Math.abs(move.x)<.05||Math.abs(move.z)<.05)return move;const scale=actor.scale||1,r=CFG.player.radius*scale,half=(CFG.player.halfHeight+CFG.player.radius)*scale,step=speed*CFG.stepMs/1000+.025,skin=.04,dx=move.x/length*step,dz=move.z/length*step;
+  const clear=(x,z)=>!this.terrain.boxSolid({x:actor.pos.x+x-r+skin,y:actor.pos.y+skin,z:actor.pos.z+z-r+skin},{x:actor.pos.x+x+r-skin,y:actor.pos.y+2*half-skin,z:actor.pos.z+z+r-skin});
+  if(!clear(0,0)||clear(dx,dz))return move;const xClear=Math.abs(dx)>.001&&clear(dx,0),zClear=Math.abs(dz)>.001&&clear(0,dz);
+  // Resolve the blocked component against the actual voxel AABB before applying this tick's impulse.
+  // Rapier still owns contact response; this only preserves a safe tangential part of the input.
+  if(xClear&&!zClear)return{x:Math.sign(move.x),y:0,z:0};if(zClear&&!xClear)return{x:0,y:0,z:Math.sign(move.z)};
+  if(xClear&&zClear)return Math.abs(move.x)>=Math.abs(move.z)?{x:Math.sign(move.x),y:0,z:0}:{x:0,y:0,z:Math.sign(move.z)};
+  return move;
+ }
  control(actor,move,speed,jump=false,allowAutoJump=true,swimRise=false,swimDive=false){const b=this.world.getRigidBody(actor.body);if(!b)return;
   if(actor.suspended||actor.dead){b.setLinvel({x:0,y:0,z:0},true);return;}
   const vel=b.linvel(),dt=CFG.stepMs/1000,m=b.mass(),fluid=this.terrain.water.bodyState(actor.pos,CFG.player.eyeHeight,CFG.player.radius*(actor.scale||1));
@@ -114,9 +123,10 @@ class Physics {
    const lift=bank?Math.max(CFG.player.gravity*dt*fluid.immersion,(targetY-vel.y)*(1-Math.pow(.05,dt/.025))):CFG.player.gravity*dt*fluid.immersion+(targetY-vel.y)*Math.min(.34,dt*9);
    b.applyImpulse({x:dx*m,y:lift*m,z:dz*m},true);actor.grounded=false;return;
   }
+  const requestedMove=move;move=this.wallSlide(actor,move,speed);
   const max=(actor.knock>0?CFG.combat.knockback.drag:actor.combat.state==='roll'?70:CFG.player.acceleration)*dt,d={x:clamp(move.x*speed-vel.x,-max,max),y:0,z:clamp(move.z*speed-vel.z,-max,max)};
   b.applyImpulse({x:d.x*m,y:0,z:d.z*m},true);const ground=this.ground(actor,actor.pos,CFG.movement.groundGap,true);actor.grounded=!!ground&&vel.y<2;
-  const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(move.x,move.z)>.35&&this.autoJump(actor,move);
+  const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(requestedMove.x,requestedMove.z)>.35&&this.autoJump(actor,requestedMove);
   if((jump||autoStep)&&actor.grounded){const vertical=autoStep?Math.sqrt(2*CFG.player.gravity*CFG.movement.autoStepRise):CFG.player.jump;
    b.applyImpulse({x:0,y:(vertical-vel.y)*m,z:0},true);actor.grounded=false;}
  }

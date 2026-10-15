@@ -44,7 +44,7 @@ function actorSpritePose(a,cameraYaw,reaction=null){const c=a.combat,act=c.actio
  else if(a.mine?.target&&a.mine.elapsed>0){clip='gather';frame=Math.floor(a.mine.elapsed/100)%4;}
  else if(speed>.16&&a.knock<=0){clip=!a.enemy&&a.sprinting?'run':a.enemy&&speed>5?'run':'walk';frame=Math.floor(m.distance/(clip==='run'?ANIMATION.runStride:ANIMATION.stride)*8)%8;}
  else{frame=Math.floor(a.anim/240)%4;}
- return{clip,frame,view,dir:view>=5?8-view:view,flip:view>=5,kind:a.speciesId?SPECIES[a.speciesId].wild.kind:a.boss?BOSS.kind:a.enemy?ENEMIES[a.kind]?.kind||'sprout':'sprout'};
+ return{clip,frame,view,dir:view>=5?8-view:view,flip:view>=5,kind:a.speciesId?SPECIES[a.speciesId].wild.kind:a.boss?BOSS.kind:'sprout'};
 }
 // Art-only joint controls in source sprite pixels. Keep the approved sprout's head and palette.
 function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(reverse)clip=clip.slice(0,-7);const n=ANIMATION.clips[clip]||4,p=frame/Math.max(1,n-1),cycle=frame/n*TAU;let lean=0,squash=1,bob=0,stride=0,armL=[13,40],armR=[34,40],knee=0,head=0;
