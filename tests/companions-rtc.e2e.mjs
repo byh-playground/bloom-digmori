@@ -1,5 +1,9 @@
 import{chromium}from'playwright';import fs from'node:fs';import http from'node:http';import assert from'node:assert/strict';
 const begin=Date.now(),report={checks:[]},errors=[];let browser,server;const out=new URL('../artifacts/companions/',import.meta.url);fs.mkdirSync(out,{recursive:true});const timer=setTimeout(()=>{console.error('RTC E2E exceeded 180 seconds');process.exit(1)},180000);const pass=(name,evidence)=>{console.log('PASS '+name);report.checks.push({name,evidence})};
+const card=async(p,kind,action)=>{await p.locator('[data-card-kind="'+kind+'"] [data-companion-action="'+action+'"]').click();await p.waitForFunction(()=>!Bloom.app.companionPanel.request);};
+// Sequential peer reads may be on different ticks. Compare placement contracts;
+// physical projectile positions below are compared only at matching tick numbers.
+const placements=units=>Object.values(units).map(({id,owner,kind,location,slot,pending,cargo})=>({id,owner,kind,location,slot,pending,cargo}));
 try{
 server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)))});await new Promise(r=>server.listen(0,'127.0.0.1',r));browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();const contexts=[await browser.newContext({viewport:{width:1100,height:800}}),await browser.newContext({viewport:{width:1100,height:800}})],pages=[];
 for(const context of contexts){const p=await context.newPage();p.setDefaultTimeout(8000);p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:'+server.address().port+'/');await p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});pages.push(p)}
@@ -8,17 +12,17 @@ await host.click('#network-btn');await host.click('#host-room');await host.waitF
 for(const p of pages)await p.waitForFunction(()=>Bloom.app.net.session?.players.length===2&&Object.values(Bloom.app.sim.actors).filter(a=>!a.enemy).length===2,null,{timeout:45000});
 const ids=await Promise.all(pages.map(p=>p.evaluate(()=>Bloom.app.localId)));assert.notEqual(ids[0],ids[1]);pass('two real Nostr/WebRTC room members admitted',{room,players:ids});
 const observe=p=>p.evaluate(()=>({id:Bloom.app.localId,tick:Bloom.app.sim.tick,units:Bloom.app.sim.companions.snapshot().units,bases:Bloom.app.sim.companions.snapshot().bases,status:Bloom.app.net.status,phase:Bloom.app.net.phase}));
-for(const p of pages){await p.click('#companions-btn');await p.click('[data-kind="shell"][data-companion-action="recruit"]');await p.click('[data-kind="leaf"][data-companion-action="recruit"]');await p.waitForFunction(()=>Bloom.app.sim.companions.owned(Bloom.app.localId).length===2)}
+for(const p of pages){await p.click('#companions-btn');await card(p,'shell','recruit');await card(p,'leaf','recruit');await p.waitForFunction(()=>Bloom.app.sim.companions.owned(Bloom.app.localId).length===2)}
 for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().length===4);pass('four unique owned companions synchronized');
-for(const p of pages){const own=await p.evaluate(()=>Bloom.app.sim.companions.owned(Bloom.app.localId).find(u=>u.kind==='shell').id);await p.click('[data-id="'+own+'"][data-location="work"]')}
+for(const p of pages)await card(p,'shell','work');
 for(const p of pages)await p.waitForFunction(()=>Object.values(Bloom.app.sim.companions.data.bases).every(b=>b.slots.some(Boolean)),null,{timeout:25000});
-for(const p of pages){const own=await p.evaluate(()=>Bloom.app.sim.companions.owned(Bloom.app.localId).find(u=>u.kind==='shell').id);await p.click('[data-id="'+own+'"][data-location="reserve"]')}
+for(const p of pages)await card(p,'shell','recall');
 for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().every(u=>u.location==='reserve'),null,{timeout:15000});
-let a=await observe(host),b=await observe(join);assert.deepEqual(a.units,b.units);assert.deepEqual(a.bases,b.bases);pass('authoritative labor resources and reserved placements agree on both peers',{bases:a.bases});
+let a=await observe(host),b=await observe(join);assert.deepEqual(placements(a.units),placements(b.units));assert.deepEqual(a.bases,b.bases);pass('authoritative labor resources and reserved placements agree on both peers',{bases:a.bases});
 const hostShell=Object.values(a.units).find(u=>u.owner===a.id&&u.kind==='shell').id;
 await join.evaluate(id=>Bloom.app.command({op:'companion',action:'assign',id,location:'combat',slot:0}),hostShell);await join.waitForTimeout(350);assert.equal((await observe(host)).units[hostShell].location,'reserve');pass('remote owner cannot reassign another player companion');
-for(const p of pages){const own=await p.evaluate(()=>Bloom.app.sim.companions.owned(Bloom.app.localId));for(const u of own)await p.click('[data-id="'+u.id+'"][data-location="combat"][data-slot="'+(u.kind==='shell'?0:1)+'"]');await p.click('#companions-close')}
-for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().every(u=>u.location==='combat'));a=await observe(host);b=await observe(join);assert.deepEqual(a.units,b.units);pass('two equipped slots per owner synchronize without duplicate location');
+for(const p of pages){await card(p,'shell','equip');await card(p,'leaf','equip');await p.click('#companions-close')}
+for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().every(u=>u.location==='combat'));a=await observe(host);b=await observe(join);assert.deepEqual(placements(a.units),placements(b.units));pass('two equipped slots per owner synchronize without duplicate location',{hostTick:a.tick,joinTick:b.tick,placements:placements(a.units)});
 for(const p of pages)await p.evaluate(()=>{window.__ballTrace=[];let last=-1;const until=performance.now()+5000;function sample(){const s=Bloom.app.sim;if(s.tick!==last){last=s.tick;for(const p of Object.values(s.projectiles))if(p.companionId){const body=s.physics.world.getRigidBody(p.body);window.__ballTrace.push({tick:s.tick,id:p.id,source:p.source,pos:{...p.pos},gravity:body.gravityScale(),radius:p.radius});}}if(performance.now()<until)requestAnimationFrame(sample)}sample()});
 await host.keyboard.press('KeyZ');await host.mouse.click(550,350);
 for(const p of pages)await p.waitForFunction(()=>window.__ballTrace.length>2,null,{timeout:6000});
