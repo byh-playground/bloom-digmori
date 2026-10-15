@@ -1,5 +1,5 @@
 class Renderer {
- constructor(canvas){this.canvas=canvas;this.gl=canvas.getContext('webgl',{alpha:false,antialias:true,depth:true});if(!this.gl)throw Error('WebGL이 필요한 게임입니다.');const gl=this.gl;this.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.viewRadius=matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;this.atlas=createSpriteAtlas(gl);this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.stats={drawCalls:0,vertices:0};
+ constructor(canvas){this.canvas=canvas;this.gl=canvas.getContext('webgl',{alpha:false,antialias:true,depth:true});if(!this.gl)throw Error('WebGL이 필요한 게임입니다.');const gl=this.gl;this.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.viewRadius=matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;this.atlas=createSpriteAtlas(gl);this.companionRenderer=new CompanionRenderer(this);this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.stats={drawCalls:0,vertices:0};
   this.blockAtlas=createBlockAtlas(gl);this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(gl,this.iconCanvases);this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
   const derivatives=!!gl.getExtension('OES_standard_derivatives');
   this.terrainProgram=this.program('attribute vec3 p;attribute vec3 n;attribute float material;uniform mat4 vp;varying vec3 wp;varying vec3 normal;varying float mat;void main(){wp=p;normal=n;mat=material;gl_Position=vp*vec4(p,1.);}',
@@ -111,7 +111,7 @@ class Renderer {
  }
  spritePlane(out,center,u,v,frame,tint,flip=false){const p=(x,y)=>arr(V.add(center,V.add(V.scale(u,x),V.scale(v,y)))),pts=[p(-.5,-.5),p(.5,-.5),p(.5,.5),p(-.5,.5)],u0=flip?frame.u1:frame.u0,u1=flip?frame.u0:frame.u1,uv=[[u0,frame.v1],[u1,frame.v1],[u1,frame.v0],[u0,frame.v0]];for(const i of [0,1,2,0,2,3])out.push(...pts[i],...uv[i],...tint);}
  render(sim,authority,dt,displayFrame){
-  const view={actors:{},drops:{},projectiles:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':'projectiles'][model.id]=value;});
+  const view={actors:{},drops:{},projectiles:{},companions:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':model.displayKind==='companion'?'companions':'projectiles'][model.id]=value;});
   const actor=view.actors[authority.id];if(!actor)return;this.displayTimeMs=displayFrame.timeMs;
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
   this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.updateCamera(actor,sim,viewPos);this.stream(sim,authority);const gl=this.gl;const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
@@ -143,14 +143,14 @@ class Renderer {
   }
   for(const raw of Object.values(view.actors)){
    if(raw.dead||raw.enemy||raw.combat.state==='roll'||this.camera.first&&raw.id===actor.id||raw.id!==actor.id&&!this.entityVisualReady(raw))continue;const a=this.combatFx.pose(raw),st=Inventory.stats(a),item=st.item,c=a.combat,act=c.action,rp=a.pos;
-   if(c.state==='attack'&&act&&!['arrow','quickshot','precision'].includes(act.kind)){
+   if(c.state==='attack'&&act&&!act.companionId&&!['arrow','quickshot','precision'].includes(act.kind)){
     const phase=clamp((c.elapsed-act.wind)/act.active,0,1),pose=weaponVisualPose({...a,pos:rp},act,c.elapsed),col=c3(st.material?.color||'#edcea0');
     if(act.weapon==='fist'){if(c.elapsed>=act.wind&&c.elapsed<act.wind+act.active){this.box(dyn,{...pose.tip,y:pose.tip.y-.13},{x:.23,y:.26,z:.23},col);}}
     else{const root=V.add(pose.origin,V.scale(pose.dir,.45)),tip=pose.tip;this.weaponBeam(dyn,root,tip,act.weapon==='greatsword'?.19:act.weapon==='spear'?.075:.10,col);
      if(act.weapon==='axe')this.box(dyn,{...tip,y:tip.y-.16},{x:.58,y:.32,z:.15},col,pose.dir);
      if(act.weapon==='shield')this.box(dyn,{...tip,y:tip.y-.45},{x:.78,y:.9,z:.13},col,pose.dir);
     }
-   }else if(item?.weapon||item?.tool){
+   }else if(a.companionSlot<0&&(item?.weapon||item?.tool)){
     const f=a.facing,side={x:f.z,y:0,z:-f.x},p=V.add(rp,{x:f.x*.35+side.x*.35,y:1.05,z:f.z*.35+side.z*.35}),col=c3(st.material?.color||'#dac6a6');
     if(item.weapon==='shield')this.box(dyn,p,{x:.75,y:.85,z:.12},col,f);
     else{this.box(dyn,p,{x:.10,y:.13,z:.65},c3('#8e6246'),f);this.box(dyn,V.add(p,V.scale(f,.70)),{x:item.weapon==='greatsword'?.23:.13,y:.11,z:item.weapon==='spear'?1.6:item.weapon==='dagger'?.5:1.1},col,f);if(item.weapon==='axe'||item.tool==='pick')this.box(dyn,V.add(p,V.scale(f,1)),{x:.60,y:.27,z:.13},col,f);}
@@ -160,7 +160,7 @@ class Renderer {
     const bob=Math.sin(d.age*.007+(hashStr(d.id)%37)*.12)*.045;
     this.sprite(dropSprites,{x:dp.x,y:dp.y-.075+bob,z:dp.z},.72,.72,frame,[1,1,1,1]);}
 
-  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(!this.worldVisualReady(sp,.08))continue;this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
+  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(s.companionId||!this.worldVisualReady(sp,.08))continue;this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
   const hit=sim.aim(authority);this.target=hit;
   if(hit){
    const key=blockKey(hit.x,hit.y,hit.z),mining=authority.mine.target===key&&authority.mine.elapsed>0;
@@ -197,11 +197,13 @@ class Renderer {
    fx.time+=dt;if(fx.time>=fx.duration)this.blockFx=null;
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
+  this.companionRenderer.prepare(view,sim,actor,dyn);
   this.meshState(lights);if(dyn.length){gl.bindBuffer(gl.ARRAY_BUFFER,this.dynamic);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(dyn),gl.DYNAMIC_DRAW);this.attrib(this.meshProgram,'p',3,24,0);this.attrib(this.meshProgram,'c',3,24,12);gl.drawArrays(gl.TRIANGLES,0,dyn.length/6);}
+  this.companionRenderer.draw(false);
   if(sprites.length){const p=this.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,this.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(sprites),gl.DYNAMIC_DRAW);this.attrib(p,'p',3,36,0);this.attrib(p,'uv',2,36,12);this.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,sprites.length/9);}
-  this.drawDropSprites(dropSprites);this.drawWater(sim,actor);
+  this.companionRenderer.draw(true);this.drawDropSprites(dropSprites);this.drawWater(sim,actor);
   const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawCombatEffects(effects,effectSprites);this.combatFx.ui(sim);
-  if(this.camera.first&&!actor.dead&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);
+  if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);
  }
  drawDropSprites(vertices){if(!vertices.length)return;const gl=this.gl,p=this.spriteProgram;gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
   gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),Math.max(.75,this.ambient));gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.dropAtlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);
