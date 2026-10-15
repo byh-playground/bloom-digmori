@@ -1,0 +1,52 @@
+import {chromium} from 'playwright';
+import fs from 'node:fs';
+import http from 'node:http';
+import assert from 'node:assert/strict';
+
+const began=Date.now(),report={checks:[]},errors=[];
+let browser,context,server;
+const timeout=setTimeout(()=>{console.error('Physics E2E exceeded 180 seconds');process.exit(1)},180000);
+const pass=(name,evidence)=>{report.checks.push({name,evidence});console.log('PASS '+name)};
+const read=page=>page.evaluate(()=>{const a=Bloom.app.actor(),b=Bloom.app.sim.physics.world.getRigidBody(a.body);return{tick:Bloom.app.sim.tick,pos:{...a.pos},velocity:{...b.linvel()},rotation:{...b.rotation()}}});
+const pause=(page,ms)=>page.waitForTimeout(ms);
+const move=async(page,keys,ms)=>{for(const key of keys)await page.keyboard.down(key);await pause(page,ms);for(const key of keys)await page.keyboard.up(key);await pause(page,180);return read(page);};
+const teleport=(page,pos)=>page.evaluate(pos=>Bloom.app.sim.physics.teleport(Bloom.app.actor(),pos),pos);
+const box=(page,center,half,rotation={x:0,y:0,z:0,w:1})=>page.evaluate(({center,half,rotation})=>{const R=Bloom.app.sim.R;return Bloom.app.sim.physics.world.createCollider(R.ColliderDesc.cuboid(half.x,half.y,half.z).setTranslation(center.x,center.y,center.z).setRotation(rotation)).handle;},{center,half,rotation});
+const remove=(page,handles)=>page.evaluate(handles=>{for(const h of handles){const c=Bloom.app.sim.physics.world.getCollider(h);if(c)Bloom.app.sim.physics.world.removeCollider(c,true);}},handles);
+
+try{
+ server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html;charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)))});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true,args:['--disable-gpu','--disable-crashpad','--disable-breakpad','--disable-edge-dual-engine']});
+ context=await browser.newContext({viewport:{width:1366,height:900}});const page=await context.newPage();page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:'+server.address().port+'/?debug=1');await page.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});await page.locator('#world').focus();
+ const start=await read(page),contract=await page.evaluate(()=>{const a=Bloom.app.actor(),c=Bloom.app.sim.physics.world.getCollider(a.collider);return{shape:c.shapeType(),friction:c.friction(),offset:a.offset,half:c.halfExtents()};});
+ assert.equal(contract.friction,0);assert(Math.abs(contract.half.x-contract.half.z)<1e-6);pass('actor collision contract uses a cuboid with zero contact friction',contract);
+
+ const front=await box(page,{x:start.pos.x,y:start.pos.y+1.5,z:start.pos.z-3},{x:3,y:3,z:.5});
+ const blocked=await move(page,['KeyW'],1800);assert(blocked.pos.z<start.pos.z-2.0&&blocked.pos.z>start.pos.z-2.3,JSON.stringify(blocked));
+ const stopped=await move(page,[],350);assert(Math.abs(stopped.velocity.z)<.02,JSON.stringify(stopped));
+ const side=await move(page,['KeyD'],900);assert(side.pos.x>blocked.pos.x+.5,JSON.stringify({blocked,side}));assert(Math.abs(side.pos.z-blocked.pos.z)<.08,JSON.stringify({blocked,side}));assert(Math.abs(side.rotation.x-start.rotation.x)<1e-6&&Math.abs(side.rotation.y-start.rotation.y)<1e-6&&Math.abs(side.rotation.z-start.rotation.z)<1e-6&&Math.abs(side.rotation.w-start.rotation.w)<1e-6);
+ pass('continuous forward contact stops at the wall and a separate lateral input slides along it',{blocked:blocked.pos,stopped:stopped.velocity,side:side.pos});
+
+ await teleport(page,start.pos);const diagonal=await move(page,['KeyW','KeyD'],2400);assert(diagonal.pos.x>start.pos.x+.35,JSON.stringify(diagonal));assert(diagonal.pos.z<start.pos.z-1.2&&diagonal.pos.z>start.pos.z-2.4,JSON.stringify(diagonal));pass('diagonal input keeps tangential motion while respecting the wall face',diagonal.pos);
+ await remove(page,[front]);
+
+ await teleport(page,start.pos);const innerA=await box(page,{x:start.pos.x,y:start.pos.y+1.5,z:start.pos.z-3},{x:3,y:3,z:.5}),innerB=await box(page,{x:start.pos.x+3,y:start.pos.y+1.5,z:start.pos.z},{x:.5,y:3,z:3});
+ const corner=await move(page,['KeyW','KeyD'],1800);assert(corner.pos.x<start.pos.x+2.7&&corner.pos.z>start.pos.z-2.1,JSON.stringify(corner));
+ const overlaps=await page.evaluate(({handles,pos})=>{const sim=Bloom.app.sim,R=sim.R,shape=new R.Cuboid(.34,1.12,.34),center={x:pos.x,y:pos.y+Bloom.app.actor().offset,z:pos.z},q={x:0,y:0,z:0,w:1};return handles.map(h=>sim.physics.world.getCollider(h)?.intersectsShape(shape,center,q)||false);},{handles:[innerA,innerB],pos:corner.pos});assert.deepEqual(overlaps,[false,false]);pass('concave L corner constrains the actor without collider overlap',{pos:corner.pos,overlaps});await remove(page,[innerA,innerB]);
+
+ await teleport(page,start.pos);const pillar=await box(page,{x:start.pos.x+1.2,y:start.pos.y+1.5,z:start.pos.z-2.2},{x:.8,y:3,z:.8});const around=await move(page,['KeyW','KeyD'],1100);
+ const convexOverlap=await page.evaluate(({handle,pos})=>{const sim=Bloom.app.sim,R=sim.R,a=Bloom.app.actor(),shape=new R.Cuboid(.34,1.12,.34),center={x:pos.x,y:pos.y+a.offset,z:pos.z};return sim.physics.world.getCollider(handle).intersectsShape(shape,center,{x:0,y:0,z:0,w:1});},{handle:pillar,pos:around.pos});assert.equal(convexOverlap,false);assert(Math.hypot(around.pos.x-start.pos.x,around.pos.z-start.pos.z)>.4);pass('convex pillar corner permits movement around the exposed face without penetration',{pos:around.pos,overlap:convexOverlap});await remove(page,[pillar]);
+
+ await teleport(page,start.pos);const step=await box(page,{x:start.pos.x,y:start.pos.y+.3,z:start.pos.z-2.2},{x:.8,y:.3,z:.45});const stepContact=await move(page,['KeyW'],1200);
+ const stepOverlap=await page.evaluate(({handle,pos})=>{const sim=Bloom.app.sim,R=sim.R,a=Bloom.app.actor(),shape=new R.Cuboid(.34,1.12,.34),center={x:pos.x,y:pos.y+a.offset,z:pos.z};return sim.physics.world.getCollider(handle).intersectsShape(shape,center,{x:0,y:0,z:0,w:1});},{handle:step,pos:stepContact.pos});assert.equal(stepOverlap,false);assert(stepContact.pos.y>start.pos.y-.25);pass('low step edge keeps the actor supported and outside the obstacle',{pos:stepContact.pos,overlap:stepOverlap});await remove(page,[step]);
+
+ const ramp=await box(page,{x:start.pos.x+5,y:start.pos.y+.25,z:start.pos.z},{x:2,y:.18,z:2},{x:0,y:0,z:.12,w:Math.sqrt(1-.12*.12)});await teleport(page,{x:start.pos.x+5,y:start.pos.y+.25,z:start.pos.z});const rampMove=await move(page,['KeyD'],800);assert(rampMove.pos.x>start.pos.x+5.3);assert([rampMove.pos.x,rampMove.pos.y,rampMove.pos.z].every(Number.isFinite));assert(Math.abs(rampMove.rotation.x-start.rotation.x)<1e-6&&Math.abs(rampMove.rotation.y-start.rotation.y)<1e-6&&Math.abs(rampMove.rotation.z-start.rotation.z)<1e-6);pass('sloped cuboid contact preserves grounded motion and keeps visual/body rotation separate',{pos:rampMove.pos,rotation:rampMove.rotation});await remove(page,[ramp]);
+
+ await teleport(page,start.pos);const ceiling=await box(page,{x:start.pos.x,y:start.pos.y+3.1,z:start.pos.z},{x:2,y:.25,z:2});const jumped=await move(page,['Space'],650);assert(jumped.pos.y<start.pos.y+1.25,JSON.stringify(jumped));assert(jumped.pos.y>start.pos.y-.25,JSON.stringify(jumped));pass('jump is stopped by a low ceiling while keeping floor contact',{pos:jumped.pos,velocity:jumped.velocity});await remove(page,[ceiling]);
+
+ await teleport(page,{x:start.pos.x,y:start.pos.y+8,z:start.pos.z});await page.waitForFunction(y=>{const a=Bloom.app.actor();return a.grounded&&a.pos.y<y+.6},start.pos.y,{timeout:12000});const landed=await read(page);assert(Math.abs(landed.pos.y-start.pos.y)<.35,JSON.stringify(landed));assert(Math.abs(landed.velocity.y)<.8,JSON.stringify(landed));pass('falling actor lands on terrain without tunnelling',{pos:landed.pos,velocity:landed.velocity});
+ assert.deepEqual(errors,[]);report.browser=browser.version();report.status='PASS';
+}catch(error){report.status='FAIL';report.error=error.stack;console.error(error);process.exitCode=1;}
+finally{report.elapsedMs=Date.now()-began;report.errors=errors;fs.mkdirSync(new URL('../artifacts/physics/',import.meta.url),{recursive:true});fs.writeFileSync(new URL('../artifacts/physics/result.json',import.meta.url),JSON.stringify(report,null,2));clearTimeout(timeout);await context?.close();await browser?.close();server?.close();}
