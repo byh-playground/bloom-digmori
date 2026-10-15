@@ -114,7 +114,7 @@ class Combat {
   // against authoritative water state on this simulation tick.
   const submerged=sim.terrain.water.bodyState(a.pos,CFG.player.eyeHeight,CFG.player.radius*(a.scale||1)).inWater;
   if(input.roll&&!submerged)this.roll(a,move,sim);
-  if(c.state==='attack'&&ld)c.queued=true; // One buffered successor; repeated taps never create a hidden multi-hit queue.
+  if(c.state==='attack'&&ld&&!c.action?.companionId)c.queued=true; // One buffered successor; repeated taps never create a hidden multi-hit queue.
   if(ld&&c.state!=='attack'&&this.canAct(c)&&(a.companionSlot<0||sim.companions.ready(a))){c.state='charge';c.charge=0;c.elapsed=0;c.action=null;}
   if(c.state==='charge'&&input.left)c.charge+=dt;
   if(lu&&c.state==='charge'){

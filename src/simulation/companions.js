@@ -7,7 +7,7 @@ class Companions {
  nearBase(a){const b=this.base(a.id);return b&&V.len(V.sub(a.pos,b.pos))<=7;}
  equipped(a,slot=a.companionSlot){return this.owned(a.id).find(u=>u.location==='combat'&&u.slot===slot)||null;}
  ready(a){const u=this.equipped(a);return u&&u.phase==='idle'&&u.cooldown<=0&&!u.pending?u:null;}
- socket(a,slot=0){const f=V.norm({x:a.facing.x,y:0,z:a.facing.z}),side={x:f.z,y:0,z:-f.x};return V.add(a.pos,V.add({x:0,y:slot===2?1.3:.85,z:0},V.add(V.scale(side,slot===1?-.4:.4),V.scale(f,.3))));}
+ socket(a,slot=0){slot=slot===a.companionSlot?0:slot===0&&a.companionSlot>=0?a.companionSlot:slot;const f=V.norm({x:a.facing.x,y:0,z:a.facing.z}),side={x:f.z,y:0,z:-f.x};return V.add(a.pos,V.add({x:0,y:slot===2?1.3:.85,z:0},V.add(V.scale(side,slot===1?-.4:.4),V.scale(f,.3))));}
  recruit(a,kind){if(!COMPANION_TYPES[kind]||this.all().length>=128||this.owned(a.id).some(u=>u.kind===kind)||V.len(V.sub(a.pos,this.sim.terrain.spawn))>8)return false;
   if(!this.base(a.id)){if(Object.keys(this.data.bases).length>=64)return false;this.data.bases[a.id]={owner:a.id,pos:{...this.sim.terrain.spawn},slots:Array(9).fill(null)};}
   const id='companion:'+ ++this.data.sequence;this.data.units[id]={id,owner:a.id,kind,location:'reserve',slot:null,phase:'idle',cooldown:0,pending:null,cargo:null,target:null,progress:0,retry:0,pos:this.socket(a),previous:this.socket(a),velocity:{x:0,y:0,z:0},type:'companion',body:null,collider:null};
@@ -18,15 +18,15 @@ class Companions {
  assign(a,u,destination){if(!u||u.owner!==a.id||!['reserve','work','combat'].includes(destination.location))return false;
   if(destination.location==='combat'&&(!Number.isInteger(destination.slot)||destination.slot<0||destination.slot>=COMPANION_SLOTS))return false;
   if(destination.location==='work'&&(!this.nearBase(a)||!COMPANION_TYPES[u.kind].capabilities.gather))return false;
-  const other=destination.location==='combat'?this.equipped(a,destination.slot):null;if(other&&other!==u&&(other.phase!=='idle'||other.pending))return false;
+  const other=destination.location==='combat'?this.equipped(a,destination.slot):null;if(other&&other!==u&&(other.phase!=='idle'||other.pending||a.combat.action?.companionId===other.id))return false;
   // Never teleport a live projectile or duplicate carried resources into a second placement.
   if(u.cargo&&u.location!=='work'&&destination.location==='combat')return false;
   if(u.phase==='flight'||u.phase==='return'||u.cargo&&u.location==='work'){u.pending={...destination};if(u.phase==='flight'){this.stopShot(u);u.phase='return';}return true;}
-  if(u.location==='combat'&&a.combat.action?.companionId===u.id){a.combat=Combat.state();}
+  if(u.location==='combat'&&(a.combat.action?.companionId===u.id||a.companionSlot===u.slot&&['charge','secondary','guard'].includes(a.combat.state))){const c=a.combat;Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;c.charge=0;c.secondary=false;}
   const oldSlot=u.slot;this.removeBody(u);if(other&&other!==u){other.location='reserve';other.slot=null;}
   u.location=destination.location;u.slot=destination.location==='combat'?destination.slot:null;u.phase='idle';u.pending=null;u.target=null;u.progress=0;
   if(u.location==='work'){u.pos=V.add(this.base(a.id).pos,{x:1,y:1,z:0});this.sim.physics.addBall(u,.23,{x:0,y:0,z:0},0);}
-  if(oldSlot!==null&&a.companionSlot===oldSlot&&u.location!=='combat')a.companionSlot=-1;
+  if(oldSlot!==null&&a.companionSlot===oldSlot)a.companionSlot=u.location==='combat'?u.slot:-1;
   this.sim.emit('companion-assigned',a,{companionId:u.id,location:u.location});return true;
  }
  command(a,c){if(c.action==='recruit')return this.recruit(a,c.kind);
@@ -41,24 +41,25 @@ class Companions {
  launched(shot){const u=this.data.units[shot.companionId];if(u){u.phase='flight';u.pos={...shot.pos};}}
  returned(shot){const u=this.data.units[shot.companionId];if(u&&u.phase==='flight'){u.pos={...shot.pos};u.phase='return';}}
  unavailable(a){for(const u of this.owned(a.id)){this.stopShot(u);this.removeBody(u);u.location='reserve';u.slot=null;u.phase='idle';u.pending=null;u.target=null;}a.companionSlot=-1;}
+ completePending(a,u){const pending=u.pending;u.pending=null;if(pending&&!this.assign(a,u,pending))this.assign(a,u,{location:'reserve'});}
  target(u){const b=this.base(u.owner),g=COMPANION_TYPES[u.kind].capabilities.gather,world=this.sim.terrain,claimed=new Set(this.all().filter(v=>v!==u&&v.target).map(v=>v.target.key)),out=[];
   for(let x=Math.floor(b.pos.x)-4;x<=b.pos.x+4;x++)for(let z=Math.floor(b.pos.z)-4;z<=b.pos.z+4;z++)for(let y=Math.floor(b.pos.y)-2;y<=b.pos.y+5;y++){
    const id=world.get(x,y,z),block=BLOCKS[id],key=blockKey(x,y,z);if(Math.hypot(x+.5-b.pos.x,z+.5-b.pos.z)<1.7||!g.blocks.includes(block?.id)||!Number.isFinite(block.hardness)||block.tier>0||claimed.has(key))continue;
    // Only exposed, low-tier resources; no underground mining or extra economy.
-   if(world.get(x,y+1,z)&&world.get(x+1,y,z)&&world.get(x-1,y,z)&&world.get(x,y,z+1)&&world.get(x,y,z-1))continue;
+   if(world.get(x,y+1,z))continue;
    out.push({x,y,z,id,key,d:Math.hypot(x+.5-u.pos.x,y+1-u.pos.y,z+.5-u.pos.z)});
   }out.sort((a,b)=>a.d-b.d||cmp(a.key,b.key));return out[0]||null;
  }
  move(u,to){const body=this.sim.physics.world.getRigidBody(u.body);if(!body)return false;let delta=V.sub(to,u.pos),dist=V.len(delta);if(dist<.7){body.setLinvel({x:0,y:0,z:0},true);return true;}
-  if(!this.sim.physics.sight(u.pos,to)){const high=Math.max(to.y,u.pos.y)+1.5;delta=V.sub({x:u.pos.x,y:high,z:u.pos.z},u.pos);}
+  if(!this.sim.physics.sight(u.pos,to)){if(u.pos.y>Math.max(to.y,this.base(u.owner).pos.y)+3){body.setLinvel({x:0,y:0,z:0},true);u.target=null;u.retry=1500;return false;}delta={x:0,y:1,z:0};}
   body.setLinvel(V.scale(V.norm(delta),Math.min(2.5,dist*3)),true);return false;
  }
  tick(){const dt=CFG.stepMs,sim=this.sim;
   for(const u of this.all()){const a=sim.actors[u.owner];u.cooldown=Math.max(0,u.cooldown-dt);u.previous={...u.pos};if(!a||a.dead||a.suspended)continue;
    if(u.phase==='flight'){const p=Object.values(sim.projectiles).find(p=>p.companionId===u.id);if(p)u.pos={...p.pos};else u.phase='return';continue;}
-   if(u.phase==='return'){const to=this.socket(a,u.slot),delta=V.sub(to,u.pos),dist=V.len(delta);u.pos=dist<.4?to:V.add(u.pos,V.scale(V.norm(delta),Math.min(dist,10*dt/1000)));if(dist<.4){u.phase='idle';const pending=u.pending;u.pending=null;if(pending)this.assign(a,u,pending);}continue;}
+   if(u.phase==='return'){const to=this.socket(a,u.slot),delta=V.sub(to,u.pos),dist=V.len(delta);u.pos=dist<.4?to:V.add(u.pos,V.scale(V.norm(delta),Math.min(dist,10*dt/1000)));if(dist<.4){u.phase='idle';this.completePending(a,u);}continue;}
    if(u.location!=='work'){if(u.location==='combat')u.pos=this.socket(a,u.slot);continue;}
-   if(u.cargo){u.phase='carry';if(this.move(u,V.add(this.base(a.id).pos,{x:1,y:1,z:0}))){const left=Inventory.addTo(this.base(a.id).slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count){sim.markItem(u.cargo.id);sim.emit('companion-delivery',a,{item:u.cargo.id,count:u.cargo.count-left});}u.cargo=left?{...u.cargo,count:left}:null;if(!u.cargo){u.phase='idle';const pending=u.pending;u.pending=null;if(pending)this.assign(a,u,pending);}}continue;}
+   if(u.cargo){u.phase='carry';if(this.move(u,V.add(this.base(a.id).pos,{x:1,y:1,z:0}))){const left=Inventory.addTo(this.base(a.id).slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count){sim.markItem(u.cargo.id);sim.emit('companion-delivery',a,{item:u.cargo.id,count:u.cargo.count-left});}u.cargo=left?{...u.cargo,count:left}:null;if(!u.cargo){u.phase='idle';this.completePending(a,u);}}continue;}
    if(!u.target){u.retry-=dt;if(u.retry>0)continue;u.target=this.target(u);u.retry=1000;u.progress=0;if(!u.target){u.phase='idle';continue;}}
    const t=u.target;if(sim.terrain.get(t.x,t.y,t.z)!==t.id){u.target=null;continue;}
    u.phase='travel';if(!this.move(u,{x:t.x+.5,y:t.y+1.35,z:t.z+.5}))continue;u.phase='gather';u.progress+=dt*COMPANION_TYPES[u.kind].capabilities.gather.speed;
@@ -69,9 +70,18 @@ class Companions {
   }
  }
  snapshot(){return structuredClone(this.data);}
- static validate(data,actors,shots){if(data===undefined)return;const fail=()=>{throw Error('동료 저장 상태 손상');};if(!data||!data.units||!data.bases||!Number.isSafeInteger(data.sequence)||data.sequence<0||Object.keys(data.units).length>128||Object.keys(data.bases).length>64)fail();const slots=new Set();
+ static validate(data,actors,shots){const fail=()=>{throw Error('동료 저장 상태 손상');};if(data===undefined){if(shots.some(p=>p.companionId))fail();return;}if(!data||!data.units||!data.bases||!Number.isSafeInteger(data.sequence)||data.sequence<0||Object.keys(data.units).length>128||Object.keys(data.bases).length>64)fail();const slots=new Set(),kinds=new Set(),bodies=new Set();
   for(const [owner,b]of Object.entries(data.bases))if(!b||b.owner!==owner||!b.pos||!Object.values(b.pos).every(Number.isFinite)||!Array.isArray(b.slots)||b.slots.length!==9||!b.slots.every(Inventory.validateStack.bind(Inventory)))fail();
-  for(const [id,u]of Object.entries(data.units)){if(!u||u.id!==id||!COMPANION_TYPES[u.kind]||!data.bases[u.owner]||!['reserve','work','combat'].includes(u.location)||!['idle','travel','gather','carry','flight','return'].includes(u.phase)||!Number.isFinite(u.cooldown)||u.cooldown<0||!u.pos||!Object.values(u.pos).every(Number.isFinite)||u.cargo&&!Inventory.validateStack(u.cargo)||u.location==='work'&&(u.body===null||u.collider===null)||u.location!=='work'&&u.body!==null)fail();if(u.location==='combat'){const key=u.owner+':'+u.slot;if(!Number.isInteger(u.slot)||u.slot<0||u.slot>=COMPANION_SLOTS||slots.has(key))fail();slots.add(key);}if(u.phase==='flight'&&(u.location!=='combat'||shots.filter(p=>p.companionId===id&&p.source===u.owner).length!==1))fail();}
+  for(const [id,u]of Object.entries(data.units)){
+   const n=Number(id.slice(10)),kindKey=u?.owner+':'+u?.kind;
+   if(!/^companion:[1-9]\d*$/.test(id)||n>data.sequence||!u||u.id!==id||!COMPANION_TYPES[u.kind]||!data.bases[u.owner]||kinds.has(kindKey)||!['reserve','work','combat'].includes(u.location)||!['idle','travel','gather','carry','flight','return'].includes(u.phase)||![u.cooldown,u.progress,u.retry].every(Number.isFinite)||u.cooldown<0||!u.pos||!['x','y','z'].every(k=>Number.isFinite(u.pos[k]))||u.cargo&&(!Inventory.validateStack(u.cargo)||u.cargo.count>COMPANION_TYPES[u.kind].capabilities.carry.capacity)||u.location==='work'&&(!Number.isFinite(u.body)||!Number.isFinite(u.collider))||u.location!=='work'&&u.body!==null)fail();
+   kinds.add(kindKey);if(u.body!==null){if(bodies.has(u.body))fail();bodies.add(u.body);}
+   if(u.location==='combat'){const key=u.owner+':'+u.slot;if(!Number.isInteger(u.slot)||u.slot<0||u.slot>=COMPANION_SLOTS||slots.has(key))fail();slots.add(key);}else if(u.slot!==null)fail();
+   if(u.pending&&(!['reserve','work','combat'].includes(u.pending.location)||u.pending.location==='combat'&&(!Number.isInteger(u.pending.slot)||u.pending.slot<0||u.pending.slot>=COMPANION_SLOTS)))fail();
+   if(u.target&&(!['x','y','z','id'].every(k=>Number.isInteger(u.target[k]))||u.target.key!==blockKey(u.target.x,u.target.y,u.target.z)||!COMPANION_TYPES[u.kind].capabilities.gather.blocks.includes(BLOCKS[u.target.id]?.id)))fail();
+   if(u.phase==='flight'&&(u.location!=='combat'||shots.filter(p=>p.companionId===id&&p.source===u.owner).length!==1))fail();
+  }
   for(const p of shots)if(p.companionId&&(!data.units[p.companionId]||data.units[p.companionId].owner!==p.source||data.units[p.companionId].phase!=='flight'))fail();
+  for(const a of actors){if(a.companionSlot!==undefined&&(!Number.isInteger(a.companionSlot)||a.companionSlot< -1||a.companionSlot>=COMPANION_SLOTS))fail();const id=a.combat?.action?.companionId;if(id&&(!data.units[id]||data.units[id].owner!==a.id||data.units[id].location!=='combat'))fail();}
  }
 }

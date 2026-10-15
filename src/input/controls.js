@@ -15,7 +15,7 @@ class Controls {
    const gesture={startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,moved:false,held:false,timer:null};this.gestures.set(e.pointerId,gesture);
    gesture.timer=setTimeout(()=>{if(gesture.moved||this.touches.size!==1||app.modal())return;gesture.held=true;gesture.heldAt=performance.now();
     const a=app.actor(),selected=a?Inventory.stats(a).item:null,enemy=a&&app.sim.physics.aimEnemy(a,Combat.weapon(a).reach),block=a&&app.sim.aim(a);
-    if(block&&!enemy&&!selected?.weapon){gesture.heldAction='mine';this.buttons.mine=true;}else{gesture.heldAction='attack';this.pressAction('left','touch');}
+    if(block&&!enemy&&!selected?.weapon&&a.companionSlot<0){gesture.heldAction='mine';this.buttons.mine=true;}else{gesture.heldAction='attack';this.pressAction('left','touch');}
    },this.gestureHoldMs);
    if(this.touches.size===2){this.pinch=this.touchDistance();for(const v of this.gestures.values()){clearTimeout(v.timer);v.moved=true;if(v.held){this.buttons.mine=false;this.releaseAction('left');}}}
   }});

@@ -134,9 +134,9 @@ class Simulation {
    const selected=Inventory.stats(actor).item,previous=actor.inputPrevious;
    if(input.enabled&&input.left&&!previous.left){const enemy=this.physics.aimEnemy(actor,Combat.weapon(actor).reach),block=this.aim(actor),canMine=actor.companionSlot<0&&(!selected?.weapon||!!selected?.tool),attackBusy=['charge','attack'].includes(actor.combat.state);previous.primary=!input.attackOnly&&canMine&&block&&!enemy&&!attackBusy?'mine':'attack';}
    this.mine(actor,input.enabled&&(input.mine||input.left&&previous.primary==='mine'));
-   if(input.enabled&&input.right&&!previous.right&&!selected?.weapon){if(selected?.id==='bucket'||selected?.id==='waterBucket')this.useBucket(actor);else this.place(actor);}
+   if(input.enabled&&input.right&&!previous.right&&!selected?.weapon&&actor.companionSlot<0){if(selected?.id==='bucket'||selected?.id==='waterBucket')this.useBucket(actor);else this.place(actor);}
    this.physics.flushTerrainChanges();
-   playerInputs.set(actor.id,{...input,left:input.left&&previous.primary==='attack',right:input.right&&!!selected?.weapon});previous.left=input.left;previous.right=input.right;if(!input.left)previous.primary='none';
+   playerInputs.set(actor.id,{...input,left:input.left&&previous.primary==='attack',right:input.right&&(!!selected?.weapon||actor.companionSlot>=0)});previous.left=input.left;previous.right=input.right;if(!input.left)previous.primary='none';
   }
   this.companions.tick();this.physics.flushTerrainChanges();
   this.terrain.water.step(actors.filter(a=>!a.enemy),this.tick);
@@ -175,6 +175,7 @@ class Simulation {
   terrain.editSerial=m.terrainState?.editSerial??m.edits.length;terrain.physicsRevisions=new Map(m.terrainState?.physicsRevisions||[]);
   terrain.water.restore(m.fluid);const physics=Physics.restore(this.R,terrain,payload,m.physics);
   try{for(const a of m.actors){if(a.body===null)continue;if(!physics.world.getRigidBody(a.body))throw Error('물리 배우 매핑 손상');}for(const e of [...m.drops,...m.projectiles,...Object.values(m.companions?.units||{}).filter(u=>u.body!==null)]){const b=physics.world.getRigidBody(e.body);if(!b||!physics.world.getCollider(e.collider))throw Error('물리 객체 매핑 손상');}
+   for(const u of Object.values(m.companions?.units||{}).filter(u=>u.body!==null)){const tag=physics.tags.get(u.collider),col=physics.world.getCollider(u.collider);if(tag?.type!=='companion'||tag.id!==u.id||col?.parent()?.handle!==u.body)throw Error('동료 물리 소유권 손상');}
   }catch(e){physics.free();throw e;}
   // A Rapier snapshot owns its saved timestep. Rebase tick-based clocks only when that rate changes.
   const savedStepMs=Math.round(physics.world.timestep*1e6)/1000;
