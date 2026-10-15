@@ -1,10 +1,12 @@
 # 디그모리 · Digmori
 
-**[전투 동료 디자인 비교 프리뷰](https://byh-playground.github.io/bloom-digmori/previews/companion-combat/)** — 공형 발사·복귀와 생물 검을 비교합니다. 동료 노동은 확정 방향이며 전투 부착은 디자인 검토 중입니다. 제품 기본 전투와 저장은 변경하지 않습니다. [프리뷰 소스·실행 방법](previews/companion-combat/README.md)
+**동료 노동·전투:** 시작 지점에서 **K / 동료**로 두 동료를 만나고, 기초 채집·운반 또는 세 전투 슬롯에 배치합니다. **Z/X/C**로 공형 발사·복귀와 생물 검을 선택해 기존 공격 입력으로 사용합니다. [플레이·저장·협동 재접속 안내](docs/companions.md)
+
+**[전투 동료 디자인 비교 프리뷰](https://byh-playground.github.io/bloom-digmori/previews/companion-combat/)** — 공형 발사·복귀와 생물 검을 비교합니다. 초기 시각 비교를 보존한 별도 프리뷰입니다. 실제 동료 노동·전투는 0.28.3 제품에 통합되었습니다. [프리뷰 소스·실행 방법](previews/companion-combat/README.md)
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.2**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.3**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 

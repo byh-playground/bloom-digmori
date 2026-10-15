@@ -136,7 +136,7 @@ class Physics {
    if(grounded&&a.combat.state!=='roll'&&a.knock<=0)m.distance=qf(m.distance+Math.min(1.5,Math.hypot(a.pos.x-before.x,a.pos.z-before.z)));
    m.air=grounded?0:m.air+dt;m.grounded=grounded;m.speed=speed;a.grounded=grounded;if(grounded)a.combat.airRollUsed=false;a.swim=this.terrain.water.bodyState(a.pos,CFG.player.eyeHeight,CFG.player.radius*(a.scale||1));
   }
-  for(const e of [...Object.values(sim.drops),...Object.values(sim.projectiles)]){const b=this.world.getRigidBody(e.body);if(b){e.pos={...b.translation()};e.velocity={...b.linvel()};}}
+  for(const e of [...Object.values(sim.drops),...Object.values(sim.projectiles),...sim.companions.bodies()]){const b=this.world.getRigidBody(e.body);if(b){e.pos={...b.translation()};e.velocity={...b.linvel()};}}
   const hits=[];this.events.drainCollisionEvents((h1,h2,started)=>{if(started)hits.push([h1,h2]);});
   hits.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);for(const [h1,h2]of hits){const a=this.tags.get(h1),b=this.tags.get(h2);if(a?.type==='shot')sim.projectileContact(a.id,b);if(b?.type==='shot')sim.projectileContact(b.id,a);}
  }

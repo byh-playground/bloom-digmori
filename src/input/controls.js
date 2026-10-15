@@ -4,7 +4,7 @@ class Controls {
   document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select,[contenteditable]'))return;const active=!app.modal();
    if(['KeyE','KeyF','KeyV','KeyJ','KeyQ','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9'].includes(e.code))e.preventDefault();
    if(e.code==='Escape'){app.closeAll();return;}if(e.repeat)return;
-   if(e.code==='KeyE'){app.toggleInventory();return;}if(e.code==='KeyJ'){app.toggleJournal();return;}if(e.code==='KeyV'){app.toggleView();return;}if(!active)return;
+   if(e.code==='KeyK'){app.companionPanel.toggle();return;}if(['KeyZ','KeyX','KeyC'].includes(e.code)&&active){app.command({op:'companion',action:'select',slot:['KeyZ','KeyX','KeyC'].indexOf(e.code)});return;}if(e.code==='KeyE'){app.toggleInventory();return;}if(e.code==='KeyJ'){app.toggleJournal();return;}if(e.code==='KeyV'){app.toggleView();return;}if(!active)return;
    if(e.code==='KeyF')app.command({op:'interact'});if(e.code==='KeyQ')app.command({op:'drop',all:e.ctrlKey});
    if(/^Digit[1-9]$/.test(e.code))app.select(+e.code.slice(-1)-1);
   });
@@ -15,7 +15,7 @@ class Controls {
    const gesture={startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,moved:false,held:false,timer:null};this.gestures.set(e.pointerId,gesture);
    gesture.timer=setTimeout(()=>{if(gesture.moved||this.touches.size!==1||app.modal())return;gesture.held=true;gesture.heldAt=performance.now();
     const a=app.actor(),selected=a?Inventory.stats(a).item:null,enemy=a&&app.sim.physics.aimEnemy(a,Combat.weapon(a).reach),block=a&&app.sim.aim(a);
-    if(block&&!enemy&&!selected?.weapon){gesture.heldAction='mine';this.buttons.mine=true;}else{gesture.heldAction='attack';this.pressAction('left','touch');}
+    if(block&&!enemy&&!selected?.weapon&&a.companionSlot<0){gesture.heldAction='mine';this.buttons.mine=true;}else{gesture.heldAction='attack';this.pressAction('left','touch');}
    },this.gestureHoldMs);
    if(this.touches.size===2){this.pinch=this.touchDistance();for(const v of this.gestures.values()){clearTimeout(v.timer);v.moved=true;if(v.held){this.buttons.mine=false;this.releaseAction('left');}}}
   }});
