@@ -6,7 +6,7 @@ class CompanionRenderer {
  }
  prepare(view,sim,actor,dyn){const r=this.r;this.behind=[];this.front=[];this.samples=[];
   for(const b of Object.values(sim.companions.data.bases))if(r.worldVisualReady(b.pos,.3))r.box(dyn,V.add(b.pos,{x:1,y:.02,z:0}),{x:.9,y:.45,z:.65},[.42,.53,.32]);
-  for(const u of Object.values(view.companions)){const a=view.actors[u.owner];if(!a||a.dead||a.suspended)continue;const mode=COMPANION_TYPES[u.kind].art;
+  for(const u of Object.values(view.companions)){const a=view.actors[u.owner];if(!a||a.dead||a.suspended)continue;const mode=SPECIES[u.kind].art;
    if(u.location==='work'){if(!r.worldVisualReady(u.pos,.3))continue;const progress=u.phase==='gather'?u.progress/Math.max(1,BLOCKS[u.target?.id]?.hardness||650):0;this.world(this.front,V.add(u.pos,{x:0,y:mode==='claw'?-.52:0,z:0}),mode,mode==='claw'&&u.phase==='gather'?'attack':'work',mode==='claw'&&u.phase==='gather'?Math.min(11,Math.floor(progress*12)):Math.min(3,Math.floor(progress*4)),a.facing);continue;}
    if(u.phase==='return'){if(r.worldVisualReady(u.pos,.3)){const frame=Math.floor(sim.tick/3)%4,dir=V.sub(sim.companions.socket(a,u.slot),u.pos);this.world(this.front,V.add(u.pos,{x:0,y:mode==='claw'?-.52:0,z:0}),mode,'return',frame,dir);}continue;}
    if(u.location!=='combat'||u.phase==='flight')continue;
@@ -15,8 +15,8 @@ class CompanionRenderer {
    else if(!act.fired)this.world(this.front,V.add(companionRoot(visual,act.dir),{x:0,y:.9,z:0}),'ball','prepare',Math.min(7,Math.floor(c.elapsed/act.wind*8)),act.dir);
   }
   for(const p of Object.values(view.projectiles))if(p.companionId&&r.worldVisualReady(p.pos,.3)){
-   const clip=p.throwPhase==='ground'?'ground':'flight',frame=clip==='ground'?Math.min(3,Math.floor((p.groundMs||0)/COMPANION_TYPES[p.companionKind].capabilities.attack.groundHoldMs*4)):Math.floor(p.age/100)%4;
-   this.world(this.front,p.pos,'ball',clip,frame,p.dir);const radius=COMPANION_TYPES[p.companionKind].capabilities.attack.projectile.radius,origin=V.add(p.pos,{x:0,y:-radius,z:0}),hit=sim.terrain.ray(origin,{x:0,y:-1,z:0},12);
+   const clip=p.throwPhase==='ground'?'ground':'flight',frame=clip==='ground'?Math.min(3,Math.floor((p.groundMs||0)/SPECIES[p.companionKind].capabilities.attack.groundHoldMs*4)):Math.floor(p.age/100)%4;
+   this.world(this.front,p.pos,'ball',clip,frame,p.dir);const radius=SPECIES[p.companionKind].capabilities.attack.projectile.radius,origin=V.add(p.pos,{x:0,y:-radius,z:0}),hit=sim.terrain.ray(origin,{x:0,y:-1,z:0},12);
    if(hit&&hit.normal.y>.7){const size=.27/(1+hit.distance*.2);r.box(dyn,{x:p.pos.x,y:origin.y-hit.distance+.012,z:p.pos.z},{x:size*2,y:.01,z:size*1.3},[.20,.30,.22]);}
   }
  }

@@ -14,4 +14,4 @@ function clawWorldPose(actor,action,elapsed){const local=clawPose(action,elapsed
  const point=p=>V.add(root,{x:side.x*p.x+f.x*p.z,y:p.y,z:side.z*p.x+f.z*p.z});
  return{root,origin:point({x:0,y:.65,z:.1}),tips:local.arms.flatMap(a=>a.tips.map(point)),local};
 }
-function isClawAction(action){return !!action?.companionId&&COMPANION_TYPES[action.companionKind]?.capabilities.attack.mode==='claw';}
+function isClawAction(action){return !!action?.companionId&&SPECIES[action.companionKind]?.capabilities.attack.mode==='claw';}
