@@ -31,7 +31,7 @@ class Companions {
  }
  command(a,c){if(c.action==='recruit')return this.recruit(a,c.kind);
   if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){a.companionSlot=c.slot;Combat.resetCombo(a.combat);return true;}return false;}
-  if(c.action==='collect'){const b=this.base(a.id);if(!b||!this.nearBase(a))return false;for(let n=0;n<b.slots.length;n++){const s=b.slots[n];if(!s)continue;const left=Inventory.addTo(a.inventory.slots,s.id,s.count);if(left<s.count)this.sim.markItem(s.id);b.slots[n]=left?{id:s.id,count:left}:null;}for(const u of this.owned(a.id).filter(u=>u.location==='reserve'&&u.cargo)){const left=Inventory.addTo(a.inventory.slots,u.cargo.id,u.cargo.count);u.cargo=left?{...u.cargo,count:left}:null;}return true;}
+  if(c.action==='collect'){const b=this.base(a.id);if(!b||!this.nearBase(a))return false;for(let n=0;n<b.slots.length;n++){const s=b.slots[n];if(!s)continue;const left=Inventory.addTo(a.inventory.slots,s.id,s.count);if(left<s.count)this.sim.markItem(s.id);b.slots[n]=left?{id:s.id,count:left}:null;}for(const u of this.owned(a.id).filter(u=>u.location==='reserve'&&u.cargo)){const left=Inventory.addTo(a.inventory.slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count)this.sim.markItem(u.cargo.id);u.cargo=left?{...u.cargo,count:left}:null;}return true;}
   return this.assign(a,this.data.units[c.id],{location:c.location,slot:c.slot});
  }
  action(a,kind,tier){const u=this.ready(a);if(!u||!COMPANION_TYPES[u.kind].capabilities.attack)return null;const def=COMPANION_TYPES[u.kind].capabilities.attack;
@@ -71,7 +71,7 @@ class Companions {
  }
  snapshot(){return structuredClone(this.data);}
  static validate(data,actors,shots){const fail=()=>{throw Error('동료 저장 상태 손상');};if(data===undefined){if(shots.some(p=>p.companionId))fail();return;}if(!data||!data.units||!data.bases||!Number.isSafeInteger(data.sequence)||data.sequence<0||Object.keys(data.units).length>128||Object.keys(data.bases).length>64)fail();const slots=new Set(),kinds=new Set(),bodies=new Set();
-  for(const [owner,b]of Object.entries(data.bases))if(!b||b.owner!==owner||!b.pos||!Object.values(b.pos).every(Number.isFinite)||!Array.isArray(b.slots)||b.slots.length!==9||!b.slots.every(Inventory.validateStack.bind(Inventory)))fail();
+  for(const [owner,b]of Object.entries(data.bases))if(!b||b.owner!==owner||!b.pos||!['x','y','z'].every(k=>Number.isFinite(b.pos[k]))||!Array.isArray(b.slots)||b.slots.length!==9||!b.slots.every(Inventory.validateStack.bind(Inventory)))fail();
   for(const [id,u]of Object.entries(data.units)){
    const n=Number(id.slice(10)),kindKey=u?.owner+':'+u?.kind;
    if(!/^companion:[1-9]\d*$/.test(id)||n>data.sequence||!u||u.id!==id||!COMPANION_TYPES[u.kind]||!data.bases[u.owner]||kinds.has(kindKey)||!['reserve','work','combat'].includes(u.location)||!['idle','travel','gather','carry','flight','return'].includes(u.phase)||![u.cooldown,u.progress,u.retry].every(Number.isFinite)||u.cooldown<0||!u.pos||!['x','y','z'].every(k=>Number.isFinite(u.pos[k]))||u.cargo&&(!Inventory.validateStack(u.cargo)||u.cargo.count>COMPANION_TYPES[u.kind].capabilities.carry.capacity)||u.location==='work'&&(!Number.isFinite(u.body)||!Number.isFinite(u.collider))||u.location!=='work'&&u.body!==null)fail();
