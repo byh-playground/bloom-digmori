@@ -7,7 +7,7 @@ class Companions {
  nearBase(a){const b=this.base(a.id);return b&&V.len(V.sub(a.pos,b.pos))<=7;}
  equipped(a,slot=a.companionSlot){return this.owned(a.id).find(u=>u.location==='combat'&&u.slot===slot)||null;}
  ready(a){const u=this.equipped(a);return u&&u.phase==='idle'&&u.cooldown<=0&&!u.pending?u:null;}
- socket(a,slot=0){slot=slot===a.companionSlot?0:slot===0&&a.companionSlot>=0?a.companionSlot:slot;const f=V.norm({x:a.facing.x,y:0,z:a.facing.z}),side={x:f.z,y:0,z:-f.x};return V.add(a.pos,V.add({x:0,y:slot===2?1.3:.85,z:0},V.add(V.scale(side,slot===1?-.4:.4),V.scale(f,.3))));}
+ socket(a){return V.add(companionRoot(a),{x:0,y:.9,z:0});}
  recruit(a,kind){if(!COMPANION_TYPES[kind]||this.all().length>=128||this.owned(a.id).some(u=>u.kind===kind)||V.len(V.sub(a.pos,this.sim.terrain.spawn))>8)return false;
   if(!this.base(a.id)){if(Object.keys(this.data.bases).length>=64)return false;this.data.bases[a.id]={owner:a.id,pos:{...this.sim.terrain.spawn},slots:Array(9).fill(null)};}
   const id='companion:'+ ++this.data.sequence;this.data.units[id]={id,owner:a.id,kind,location:'reserve',slot:null,phase:'idle',cooldown:0,pending:null,cargo:null,target:null,progress:0,retry:0,pos:this.socket(a),previous:this.socket(a),velocity:{x:0,y:0,z:0},type:'companion',body:null,collider:null};
@@ -16,12 +16,14 @@ class Companions {
  removeBody(u){if(u.body!==null){this.sim.physics.removeBody(u);u.body=null;u.collider=null;}}
  stopShot(u){for(const p of Object.values(this.sim.projectiles))if(p.companionId===u.id){u.pos={...p.pos};this.sim.physics.removeBody(p);delete this.sim.projectiles[p.id];}}
  assign(a,u,destination){if(!u||u.owner!==a.id||!['reserve','work','combat'].includes(destination.location))return false;
+  if(u.pending&&destination.location===u.location&&(u.location!=='combat'||destination.slot===u.slot)){u.pending=null;return true;}
   if(destination.location==='combat'&&(!Number.isInteger(destination.slot)||destination.slot<0||destination.slot>=COMPANION_SLOTS))return false;
   if(destination.location==='work'&&(!this.nearBase(a)||!COMPANION_TYPES[u.kind].capabilities.gather))return false;
-  const other=destination.location==='combat'?this.equipped(a,destination.slot):null;if(other&&other!==u&&(other.phase!=='idle'||other.pending||a.combat.action?.companionId===other.id))return false;
+  const other=destination.location==='combat'?this.equipped(a,destination.slot):null;if(other&&other!==u)return false;
+  if(destination.location==='combat'&&this.owned(a.id).some(v=>v!==u&&v.pending?.location==='combat'&&v.pending.slot===destination.slot))return false;
   // Never teleport a live projectile or duplicate carried resources into a second placement.
   if(u.cargo&&u.location!=='work'&&destination.location==='combat')return false;
-  if(u.phase==='flight'||u.phase==='return'||u.cargo&&u.location==='work'){u.pending={...destination};if(u.phase==='flight'){this.stopShot(u);u.phase='return';}return true;}
+  if(u.phase==='flight'||u.phase==='return'||u.cargo&&u.location==='work'){u.pending={...destination};return true;}
   if(u.location==='combat'&&(a.combat.action?.companionId===u.id||a.companionSlot===u.slot&&['charge','secondary','guard'].includes(a.combat.state))){const c=a.combat;Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;c.charge=0;c.secondary=false;}
   const oldSlot=u.slot;this.removeBody(u);if(other&&other!==u){other.location='reserve';other.slot=null;}
   u.location=destination.location;u.slot=destination.location==='combat'?destination.slot:null;u.phase='idle';u.pending=null;u.target=null;u.progress=0;
@@ -30,16 +32,31 @@ class Companions {
   this.sim.emit('companion-assigned',a,{companionId:u.id,location:u.location});return true;
  }
  command(a,c){if(c.action==='recruit')return this.recruit(a,c.kind);
-  if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){a.companionSlot=c.slot;Combat.resetCombo(a.combat);return true;}return false;}
+  if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){if(a.companionSlot!==c.slot&&['charge','secondary','guard'].includes(a.combat.state)){a.combat.state='idle';a.combat.charge=0;a.combat.action=null;}a.companionSlot=c.slot;Combat.resetCombo(a.combat);return true;}return false;}
   if(c.action==='collect'){const b=this.base(a.id);if(!b||!this.nearBase(a))return false;for(let n=0;n<b.slots.length;n++){const s=b.slots[n];if(!s)continue;const left=Inventory.addTo(a.inventory.slots,s.id,s.count);if(left<s.count)this.sim.markItem(s.id);b.slots[n]=left?{id:s.id,count:left}:null;}for(const u of this.owned(a.id).filter(u=>u.location==='reserve'&&u.cargo)){const left=Inventory.addTo(a.inventory.slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count)this.sim.markItem(u.cargo.id);u.cargo=left?{...u.cargo,count:left}:null;}return true;}
   return this.assign(a,this.data.units[c.id],{location:c.location,slot:c.slot});
  }
- action(a,kind,tier){const u=this.ready(a);if(!u||!COMPANION_TYPES[u.kind].capabilities.attack)return null;const def=COMPANION_TYPES[u.kind].capabilities.attack;
-  return {name:kind,weapon:def.mode==='ball'?'bow':'sword',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'swing',motion:'sweep',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,origin:this.socket(a,u.slot),owner:a.id,combo:0,comboCount:1,tier,wind:300,active:def.mode==='ball'?80:280,recovery:350,reach:def.reach,arc:1.9,damage:def.damage*(tier?1.5:1),poise:def.poise,cost:12,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,staminaRefunded:false,sequence:0};
+ action(a,kind,tier){const u=this.ready(a);if(!u||!COMPANION_TYPES[u.kind].capabilities.attack||!['light','charged'].includes(kind))return null;const def=Combat.weapon(a,this.sim),mult=kind==='charged'?(tier===2?2:1.5):1;
+  return {name:kind,weapon:def.mode==='ball'?'bow':'fist',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'companionClaw',motion:def.mode==='ball'?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,tier,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep((def.damage+(a.rpg?.skills.might||0)*5)*mult,STAT_SCALE.damage),poise:statStep(def.poise*mult,STAT_SCALE.poise),cost:statStep(def.cost*(tier?1+tier*.5:1),STAT_SCALE.stamina),impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,staminaRefunded:false,sequence:0};
  }
  start(a,act){const u=this.data.units[act.companionId];if(!u||this.ready(a)!==u)return false;u.cooldown=COMPANION_TYPES[u.kind].capabilities.attack.cooldown;return true;}
  launched(shot){const u=this.data.units[shot.companionId];if(u){u.phase='flight';u.pos={...shot.pos};}}
  returned(shot){const u=this.data.units[shot.companionId];if(u&&u.phase==='flight'){u.pos={...shot.pos};u.phase='return';}}
+ activity(u){
+  if(u.phase==='flight'){const shot=Object.values(this.sim.projectiles).find(p=>p.companionId===u.id);return shot?.throwPhase==='ground'?'착지 · 잠깐 쉬는 중':shot?.spent?'낙하 중':'포물선 비행';}
+  if(u.phase==='return')return '회수 중';
+  if(u.location==='reserve'&&u.cargo)return '보관함 가득 참 · 자원 수거 대기';
+  const c=this.sim.actors[u.owner]?.combat,act=c?.action;if(c?.state==='attack'&&act?.companionId===u.id)return c.elapsed<act.wind?'공격 준비':c.elapsed<act.wind+act.active?(act.kind==='companionBall'?'투척':'집게 접촉'):'공격 회복';
+  return u.cooldown>0?'준비까지 '+(u.cooldown/1000).toFixed(1)+'초':u.location==='combat'?'공격 준비됨':u.phase==='carry'?'거점으로 운반':u.phase==='gather'?'채집 중':u.phase==='travel'?'자원으로 이동':'대기';
+ }
+  updateThrow(shot){const u=this.data.units[shot.companionId],a=u&&this.sim.actors[u.owner],body=this.sim.physics.world.getRigidBody(shot.body);if(!u||!a||!body)return;
+   const def=COMPANION_TYPES[u.kind].capabilities.attack;shot.spent=!!shot.spent||shot.age>shot.lifetime;
+  const support=this.sim.physics.ballSupport(shot);shot.supportTicks=support?(shot.supportTicks||0)+1:0;
+   if(shot.supportTicks>=2){if(shot.throwPhase!=='ground'){const radius=shot.radius||def.projectile.radius,center=V.add(support.point,V.scale(support.normal,radius+.015));body.setTranslation(center,true);body.setLinvel({x:0,y:0,z:0},true);body.setAngvel({x:0,y:0,z:0},true);body.setGravityScale(0,true);shot.pos={...center};shot.velocity={x:0,y:0,z:0};shot.throwPhase='ground';shot.groundMs=0;shot.spent=true;this.sim.emit('companion-landed',a,{companionId:u.id,point:{...support.point}});}shot.groundMs=(shot.groundMs||0)+CFG.stepMs;}
+   else{body.setGravityScale(def.projectile.gravity,true);shot.groundMs=0;shot.throwPhase=shot.spent?'fall':'flight';}
+  if(shot.throwPhase==='ground'&&shot.groundMs>=def.groundHoldMs){this.returned(shot);this.sim.physics.removeBody(shot);delete this.sim.projectiles[shot.id];return;}
+  if(shot.pos.y<CFG.bottom-2||shot.age>12000&&V.len(shot.velocity)<.08&&!support){this.stopShot(u);if(a.companionSlot===u.slot)a.companionSlot=-1;u.location='reserve';u.slot=null;u.phase='idle';u.pending=null;this.sim.emit('companion-safety',a,{reason:shot.pos.y<CFG.bottom?'월드 밖':'끼임'});}
+ }
  unavailable(a){for(const u of this.owned(a.id)){this.stopShot(u);this.removeBody(u);u.location='reserve';u.slot=null;u.phase='idle';u.pending=null;u.target=null;}a.companionSlot=-1;}
  completePending(a,u){const pending=u.pending;u.pending=null;if(pending&&!this.assign(a,u,pending))this.assign(a,u,{location:'reserve'});}
  target(u){const b=this.base(u.owner),g=COMPANION_TYPES[u.kind].capabilities.gather,world=this.sim.terrain,claimed=new Set(this.all().filter(v=>v!==u&&v.target).map(v=>v.target.key)),out=[];
@@ -59,7 +76,7 @@ class Companions {
    if(u.phase==='flight'){const p=Object.values(sim.projectiles).find(p=>p.companionId===u.id);if(p)u.pos={...p.pos};else u.phase='return';continue;}
    if(u.phase==='return'){const to=this.socket(a,u.slot),delta=V.sub(to,u.pos),dist=V.len(delta);u.pos=dist<.4?to:V.add(u.pos,V.scale(V.norm(delta),Math.min(dist,10*dt/1000)));if(dist<.4){u.phase='idle';this.completePending(a,u);}continue;}
    if(u.location!=='work'){if(u.location==='combat')u.pos=this.socket(a,u.slot);continue;}
-   if(u.cargo){u.phase='carry';if(this.move(u,V.add(this.base(a.id).pos,{x:1,y:1,z:0}))){const left=Inventory.addTo(this.base(a.id).slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count){sim.markItem(u.cargo.id);sim.emit('companion-delivery',a,{item:u.cargo.id,count:u.cargo.count-left});}u.cargo=left?{...u.cargo,count:left}:null;if(!u.cargo){u.phase='idle';this.completePending(a,u);}}continue;}
+   if(u.cargo){u.phase='carry';if(this.move(u,V.add(this.base(a.id).pos,{x:1,y:1,z:0}))){const left=Inventory.addTo(this.base(a.id).slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count){sim.markItem(u.cargo.id);sim.emit('companion-delivery',a,{item:u.cargo.id,count:u.cargo.count-left});}u.cargo=left?{...u.cargo,count:left}:null;if(!u.cargo){u.phase='idle';this.completePending(a,u);}else{this.removeBody(u);u.location='reserve';u.slot=null;u.phase='idle';u.pending=null;u.target=null;u.progress=0;sim.emit('companion-storage-full',a);}}continue;}
    if(!u.target){u.retry-=dt;if(u.retry>0)continue;u.target=this.target(u);u.retry=1000;u.progress=0;if(!u.target){u.phase='idle';continue;}}
    const t=u.target;if(sim.terrain.get(t.x,t.y,t.z)!==t.id){u.target=null;continue;}
    u.phase='travel';if(!this.move(u,{x:t.x+.5,y:t.y+1.35,z:t.z+.5}))continue;u.phase='gather';u.progress+=dt*COMPANION_TYPES[u.kind].capabilities.gather.speed;
@@ -81,7 +98,7 @@ class Companions {
    if(u.target&&(!['x','y','z','id'].every(k=>Number.isInteger(u.target[k]))||u.target.key!==blockKey(u.target.x,u.target.y,u.target.z)||!COMPANION_TYPES[u.kind].capabilities.gather.blocks.includes(BLOCKS[u.target.id]?.id)))fail();
    if(u.phase==='flight'&&(u.location!=='combat'||shots.filter(p=>p.companionId===id&&p.source===u.owner).length!==1))fail();
   }
-  for(const p of shots)if(p.companionId&&(!data.units[p.companionId]||data.units[p.companionId].owner!==p.source||data.units[p.companionId].phase!=='flight'))fail();
+  for(const p of shots)if(p.companionId&&(!data.units[p.companionId]||data.units[p.companionId].owner!==p.source||data.units[p.companionId].phase!=='flight'||p.spent!==undefined&&typeof p.spent!=='boolean'||p.throwPhase!==undefined&&!['flight','fall','ground'].includes(p.throwPhase)||p.groundMs!==undefined&&(!Number.isFinite(p.groundMs)||p.groundMs<0)||p.supportTicks!==undefined&&(!Number.isInteger(p.supportTicks)||p.supportTicks<0)))fail();
   for(const a of actors){if(a.companionSlot!==undefined&&(!Number.isInteger(a.companionSlot)||a.companionSlot< -1||a.companionSlot>=COMPANION_SLOTS))fail();const id=a.combat?.action?.companionId;if(id&&(!data.units[id]||data.units[id].owner!==a.id||data.units[id].location!=='combat'))fail();}
  }
 }

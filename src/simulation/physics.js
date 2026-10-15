@@ -143,6 +143,13 @@ class Physics {
  sight(from,to,excludeActor=null){const delta=V.sub(to,from),length=V.len(delta);if(length<.001)return true;
   const hit=this.terrain.ray(from,V.scale(delta,1/length),length);return !hit||hit.distance>=length-.03;
  }
+ /** Terrain support only: a wall or another actor is not a landing. */
+ ballSupport(shot){const r=shot.radius||.29,C=CFG.chunk,ray=new this.R.Ray(shot.pos,{x:0,y:-1,z:0});let support=null;
+  for(let x=Math.floor((shot.pos.x-r)/C);x<=Math.floor((shot.pos.x+r)/C);x++)for(let z=Math.floor((shot.pos.z-r)/C);z<=Math.floor((shot.pos.z+r)/C);z++)for(let y=Math.floor((shot.pos.y-r-.12)/C);y<=Math.floor(shot.pos.y/C);y++){
+   const col=this.chunkCollider(chunkKey(x,y,z)),hit=col?.castRayAndGetNormal(ray,r+.12,true);if(!hit||hit.timeOfImpact<r*.35||hit.normal.y<=.45||Math.abs(V.dot(shot.velocity,hit.normal))>1.2)continue;
+   if(!support||hit.timeOfImpact<support.distance)support={distance:hit.timeOfImpact,normal:{...hit.normal},point:V.add(shot.pos,{x:0,y:-hit.timeOfImpact,z:0})};}
+  return support;
+ }
  /** Closest active *other* actor under the camera-aligned aim ray. */
  aimEnemy(actor,reach){const eye=V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),ray=new this.R.Ray(eye,actor.facing),wall=this.terrain.ray(eye,actor.facing,reach),limit=wall?wall.distance:reach;let best=limit,found=null;
   const candidates=[...this.tags.entries()].filter(([,tag])=>tag.type==='actor'&&tag.id!==actor.id).sort((a,b)=>cmp(a[1].id,b[1].id));

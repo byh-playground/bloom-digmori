@@ -8,18 +8,20 @@ class Simulation {
  markItem(id){this.progress[id]=true;}
  spawnDrop(item,count,pos){if(!ITEMS[item]||count<=0||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id='drop:'+ ++this.sequence,h=hash3(this.sequence,0,this.tick,this.terrain.seed),drop={id,type:'drop',item,count,pos:{x:pos.x,y:pos.y+.35,z:pos.z},age:0};this.drops[id]=drop;
   this.physics.addBall(drop,.16,{x:((h%99)/99-.5)*1.5,y:2.5,z:(((h>>>8)%99)/99-.5)*1.5});return true;}
- fire(actor,action){if(Object.keys(this.projectiles).length>=64)return;const dir=V.norm(action.dir),eye=V.add(actor.pos,{x:0,y:actor.offset*1.65,z:0}),origin=action.origin?{...action.origin}:V.add(eye,V.scale(dir,.65*(actor.scale||1)));
-  if(!this.physics.sight(eye,origin,actor)){this.emit('wall',actor);return;}const projectile=action.projectile||(action.companionId?COMPANION_TYPES[action.companionKind]?.capabilities.attack.projectile:null)||{speed:actor.enemy?13:26,lift:0,gravity:.2,radius:.11},velocity=V.add(V.scale(dir,projectile.speed),{x:0,y:projectile.lift,z:0});const id='shot:'+ ++this.sequence,shot={id,type:'shot',source:actor.id,companionId:action.companionId||null,companionKind:action.companionKind||null,lifetime:action.companionId?action.reach/projectile.speed*1000:5000,enemy:actor.enemy,damage:action.damage,poise:action.poise,impulse:action.impulse,weapon:action.weapon,tier:action.tier||0,sequence:action.sequence,cost:action.cost||0,name:action.name,combo:action.combo||0,staminaRefunded:false,dir:{...dir},pos:origin,age:0};this.projectiles[id]=shot;
+  fire(actor,action){if(Object.keys(this.projectiles).length>=64)return;const dir=V.norm(action.dir),eye=V.add(actor.pos,{x:0,y:actor.offset*1.65,z:0}),origin=action.companionId?V.add(companionRoot(actor,dir),{x:0,y:.9,z:0}):action.origin?{...action.origin}:V.add(eye,V.scale(dir,.65*(actor.scale||1)));
+  if(!this.physics.sight(eye,origin,actor)){this.emit('wall',actor);return;}const projectile=action.projectile||(action.companionId?COMPANION_TYPES[action.companionKind]?.capabilities.attack.projectile:null)||{speed:actor.enemy?13:26,lift:0,gravity:.2,radius:.11},velocity=V.add(V.scale(dir,projectile.speed),{x:0,y:projectile.lift,z:0});const id='shot:'+ ++this.sequence,shot={id,type:'shot',source:actor.id,companionId:action.companionId||null,companionKind:action.companionKind||null,lifetime:action.companionId?action.reach/projectile.speed*1000:5000,enemy:actor.enemy,damage:action.damage,poise:action.poise,impulse:action.impulse,weapon:action.weapon,tier:action.tier||0,sequence:action.sequence,cost:action.cost||0,name:action.name,combo:action.combo||0,staminaRefunded:false,dir:{...dir},pos:origin,age:0,...(action.companionId?{spent:false,throwPhase:'flight',groundMs:0,supportTicks:0}:{})};this.projectiles[id]=shot;
   // One native CCD sphere: initial velocity plus the same world gravity as actors. Rendering reads its integrated position.
   this.physics.addBall(shot,projectile.radius,velocity,projectile.gravity);this.companions.launched(shot);this.emit('shot',actor);}
  projectileContact(id,tag){const shot=this.projectiles[id];if(!shot||!tag||tag.type==='drop'||tag.type==='companion'||tag.type==='shot'||tag.id===shot.source)return;
-  let contact=null,accepted=false;
+  if(shot.companionId){if(shot.spent)return;shot.spent=true;}
+   let contact=null,accepted=false;
   if(tag.type==='actor'){const target=this.actors[tag.id],col=target&&this.physics.world.getCollider(target.collider),other=this.physics.world.getCollider(shot.collider),pair=col&&other?col.contactCollider(other,.20):null;
    if(pair)contact={point:{...pair.point1},normal:{...pair.normal1}};
    if(target)accepted=Combat.hit(shot.source,target,shot,this,contact);
   }
   if(!accepted)this.emit('spark',{id:shot.id,pos:shot.pos,enemy:shot.enemy},{point:contact?.point||{...shot.pos},normal:contact?.normal||V.scale(V.norm(shot.flightVelocity||shot.velocity||shot.dir),-1),weapon:shot.weapon||'bow'});
-  this.companions.returned(shot);this.physics.removeBody(shot);delete this.projectiles[id];
+  if(shot.companionId){shot.throwPhase='fall';return;}
+  this.physics.removeBody(shot);delete this.projectiles[id];
  }
  stationInReach(actor,key,kind){if(!actor||!key)return false;const xyz=key.split(',').map(Number);if(xyz.length!==3||!xyz.every(Number.isFinite))return false;const id=this.terrain.get(...xyz);return BLOCKS[id]?.station===kind&&V.len(V.sub({x:xyz[0]+.5,y:xyz[1],z:xyz[2]+.5},actor.pos))<=CFG.reach+1;}
  aim(actor){return this.terrain.ray(V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),actor.facing,CFG.reach);}
@@ -133,7 +135,7 @@ class Simulation {
    for(const command of entry?.commands||[]){try{this.command(actor,decodeCommand(command.payload));}catch(e){this.emit('invalid-command',actor,{message:e.message});}}
    this.physics.flushTerrainChanges();
    const selected=Inventory.stats(actor).item,previous=actor.inputPrevious;
-   if(input.enabled&&input.left&&!previous.left){const enemy=this.physics.aimEnemy(actor,Combat.weapon(actor).reach),block=this.aim(actor),canMine=actor.companionSlot<0&&(!selected?.weapon||!!selected?.tool),attackBusy=['charge','attack'].includes(actor.combat.state);previous.primary=!input.attackOnly&&canMine&&block&&!enemy&&!attackBusy?'mine':'attack';}
+   if(input.enabled&&input.left&&!previous.left){const enemy=this.physics.aimEnemy(actor,Combat.weapon(actor,this).reach),block=this.aim(actor),canMine=actor.companionSlot<0&&(!selected?.weapon||!!selected?.tool),attackBusy=['charge','attack'].includes(actor.combat.state);previous.primary=!input.attackOnly&&canMine&&block&&!enemy&&!attackBusy?'mine':'attack';}
    this.mine(actor,input.enabled&&(input.mine||input.left&&previous.primary==='mine'));
    if(input.enabled&&input.right&&!previous.right&&!selected?.weapon&&actor.companionSlot<0){if(selected?.id==='bucket'||selected?.id==='waterBucket')this.useBucket(actor);else this.place(actor);}
    this.physics.flushTerrainChanges();
@@ -152,7 +154,7 @@ class Simulation {
   const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.dead&&!a.suspended).sort((a,b)=>cmp(a.id,b.id));
   for(const id of Object.keys(this.drops).sort(cmp)){const d=this.drops[id];d.age+=CFG.stepMs;for(const p of players){if(d.age<350||V.len(V.sub(V.add(p.pos,{x:0,y:.6,z:0}),d.pos))>1.8)continue;const old=d.count;d.count=Inventory.addTo(p.inventory.slots,d.item,d.count);if(d.count<old){this.markItem(d.item);this.emit('pickup',p,{item:d.item,count:old-d.count});}if(!d.count)break;}
    if(!d.count||d.age>CFG.dropLife||d.pos.y<CFG.bottom-10){this.physics.removeBody(d);delete this.drops[id];}}
-  for(const [id,s]of Object.entries(this.projectiles)){s.age+=CFG.stepMs;if(s.age>(s.lifetime??5000)||s.pos.y<CFG.bottom){this.companions.returned(s);this.physics.removeBody(s);delete this.projectiles[id];}}
+  for(const [id,s]of Object.entries(this.projectiles)){s.age+=CFG.stepMs;if(s.companionId){this.companions.updateThrow(s);continue;}if(s.age>(s.lifetime??5000)||s.pos.y<CFG.bottom){this.companions.returned(s);this.physics.removeBody(s);delete this.projectiles[id];}}
   if(this.tick>=this.nextSpawn){this.nextSpawn=this.tick+CFG.mobs.spawnEveryTicks;if(CFG.mobs.nightSpawn){const night=this.night(),enemyCount=Object.values(this.actors).filter(a=>a.enemy&&!a.dead).length;if(!night){for(const e of Object.values(this.actors)){if(!e.enemy||e.boss||e.dead||e.structureKey)continue;if(players.every(p=>V.len(V.sub(p.pos,e.pos))>32)){this.physics.removeBody(e);delete this.actors[e.id];}}}let spawned=0;for(const p of night?players:[]){if(enemyCount+spawned>=10)break;const h=hash3(this.tick,0,hashStr(p.id),this.terrain.seed),x=Math.floor(p.pos.x)+((h%2)?1:-1)*(10+h%8),z=Math.floor(p.pos.z)+(((h>>>4)%2)?1:-1)*(8+(h>>>8)%8),y=this.terrain.height(x,z)+1.2;
     if(y<CFG.sea+1||Math.hypot(x,z)<8||this.terrain.get(x,Math.floor(y),z))continue;if(this.addEnemy(['beetle','spore','guardian'][h%3],{x:x+.5,y,z:z+.5}))spawned++;}}if(CFG.mobs.dungeonEncounters)this.tickDungeonEncounters(players);}
   this.tick=context.tick+1;this.revision++;this.silent=false;METRICS.add('simulation.tick',performance.now()-started);

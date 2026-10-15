@@ -9,8 +9,8 @@ class ScenePresentation {
    'motion.distance':R.LINEAR,'motion.speed':R.LINEAR,'motion.land':R.COUNTDOWN_MS,'motion.brake':R.COUNTDOWN_MS,'motion.air':R.LINEAR,'motion.grounded':R.STEP,'motion.impact':R.LINEAR,
    'mine.target':R.STATE_KEY,'mine.elapsed':R.LINEAR,'swim.inWater':R.STEP,inventory:R.STEP,companionSlot:R.STEP
   };}
-  class ItemView extends R {static renderSchema={id:R.STEP,displayKind:R.STEP,'pos.x':R.POSITION_X,'pos.y':R.POSITION_Y,'pos.z':R.POSITION_Z,item:R.STEP,age:R.LINEAR,enemy:R.STEP,dir:R.STEP,companionId:R.STEP,companionKind:R.STEP};}
-  class CompanionView extends R {static renderSchema={id:R.STEP,displayKind:R.STEP,owner:R.STEP,kind:R.STEP,location:R.STEP,slot:R.STEP,phase:R.STATE_KEY,'pos.x':R.POSITION_X,'pos.y':R.POSITION_Y,'pos.z':R.POSITION_Z,cooldown:R.COUNTDOWN_MS,cargo:R.STEP,progress:R.LINEAR};}
+  class ItemView extends R {static renderSchema={id:R.STEP,displayKind:R.STEP,'pos.x':R.POSITION_X,'pos.y':R.POSITION_Y,'pos.z':R.POSITION_Z,item:R.STEP,age:R.LINEAR,enemy:R.STEP,dir:R.STEP,companionId:R.STEP,companionKind:R.STEP,spent:R.STEP,throwPhase:R.STATE_KEY,groundMs:R.LINEAR};}
+  class CompanionView extends R {static renderSchema={id:R.STEP,displayKind:R.STEP,owner:R.STEP,kind:R.STEP,location:R.STEP,slot:R.STEP,phase:R.STATE_KEY,'pos.x':R.POSITION_X,'pos.y':R.POSITION_Y,'pos.z':R.POSITION_Z,cooldown:R.COUNTDOWN_MS,cargo:R.STEP,target:R.STEP,progress:R.LINEAR};}
   this.types={actor:ActorView,drop:ItemView,shot:ItemView,companion:CompanionView};this.runtime=new sdk.PresentationRuntime({stepMs:CFG.stepMs,delayMs:CFG.stepMs,snapDistance:8});this.revision=0;this.generation=0;this.entries=new Map();this.reset();
  }
  reset(mode='reset'){this.revision++;this.mode=mode;this.world=null;this.tick=-1;this.epoch=-1;this.entries.clear();}

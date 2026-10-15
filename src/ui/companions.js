@@ -28,7 +28,8 @@ class CompanionPanel {
   if(action==='meet'){this.tab='companions';this.page=Object.keys(COMPANION_TYPES).indexOf(kind);this.refresh();this.focus('card-'+kind);return;}
   if(this.request)return;
   if(action==='recruit'){this.send({action:'recruit',kind});return;}
-  if(!u||u.pending)return;
+  if(!u)return;
+  if(action==='cancel'){this.send({action:'assign',id:u.id,location:u.location,slot:u.slot});return;}
   if(action==='recall'){this.send({action:'assign',id:u.id,location:'reserve'});return;}
   if(action==='work'){this.send({action:'assign',id:u.id,location:'work'});return;}
   if(action==='equip'){
@@ -37,19 +38,15 @@ class CompanionPanel {
    this.send({action:'assign',id:u.id,location:'combat',slot});
   }
  }
- status(u){
-  if(!u)return '아직 만나지 않았어요';
-  const phase={idle:'대기',travel:'자원으로 이동',gather:'채집 중',carry:'거점으로 운반',flight:'발사 중',return:'손으로 복귀'},location=u.location==='work'?'작업 중':u.location==='combat'?'전투 '+(u.slot+1):'대기';
-  const pending=u.pending?(u.pending.location==='combat'?'전투 '+(u.pending.slot+1):u.pending.location==='work'?'작업':'대기'):null;
-  return location+' · '+phase[u.phase]+(u.cargo?' · '+ITEMS[u.cargo.id].name+' ×'+u.cargo.count:'')+(pending?' → 복귀 후 '+pending:'')+(u.cooldown>0?' · '+(u.cooldown/1000).toFixed(1)+'초':'');
- }
+ status(u){if(!u)return '아직 만나지 않았어요';const pending=u.pending?(u.pending.location==='combat'?'전투 '+(u.pending.slot+1):u.pending.location==='work'?'작업':'대기'):null;
+  return (u.location==='work'?'작업':u.location==='combat'?'전투 '+(u.slot+1):'대기')+' · '+this.app.sim.companions.activity(u)+(u.cargo?' · '+ITEMS[u.cargo.id].name+' ×'+u.cargo.count:'')+(pending?' → 완료 후 '+pending:'');}
  card(kind,index,units,near,canMeet){
-  const def=COMPANION_TYPES[kind],u=units.find(u=>u.kind===kind),work=this.tab==='work';let action,label,reason='',disabled=!!this.request||!!u?.pending;
+  const def=COMPANION_TYPES[kind],u=units.find(u=>u.kind===kind),work=this.tab==='work';let action,label,reason='',disabled=!!this.request;
   if(!u){action=work?'meet':'recruit';label=work?'동료 탭에서 만나기':'함께하기';if(!work&&!canMeet){disabled=true;reason='시작 거점 8m 안에서 만날 수 있어요.';}}
-  else if(u.pending){action='recall';label='복귀 후 배치 변경';reason='운반·비행이 끝나면 요청한 배치로 옮겨요.';}
+  else if(u.pending){action='cancel';label='배치 변경 요청 취소';reason='착지·회수/운반 완료 후 변경해요. 눌러 요청을 취소할 수 있어요.';}
   else if(work){action=u.location==='work'?'recall':'work';label=u.location==='work'?'작업 회수':'거점 작업 보내기';if(action==='work'&&!near){disabled=true;reason='거점 7m 안으로 돌아오면 배치할 수 있어요.';}}
   else{action=u.location==='combat'?'recall':'equip';label=u.location==='combat'?'전투 '+(u.slot+1)+' · 탭하여 해제':'첫 빈 슬롯에 장착';if(u.location==='reserve'&&u.cargo){disabled=true;reason='보관함에서 운반 자원을 먼저 받아주세요.';}}
-  const role=work?def.capabilities.gather.blocks.map(id=>BLOCKS[BID[id]].name).join(' · '):(def.art==='ball'?'포물선 발사 · 자동 복귀':'근접 검 · 길게 눌러 차지');
+  const role=work?def.capabilities.gather.blocks.map(id=>BLOCKS[BID[id]].name).join(' · '):(def.art==='ball'?'투척 · 착지 후 잠깐 대기·회수':'집게 전진 · 접촉 후 회수');
   const quickAction=work?(u?.location==='combat'?'recall':'equip'):(u?.location==='work'?'recall':'work'),quickLabel=work?(u?.location==='combat'?'전투 해제':'전투 장착'):(u?.location==='work'?'작업 회수':'작업 보내기');
   if(u&&!near&&quickAction==='work'&&!reason)reason='작업 배치는 거점 7m 안에서';
   const quick=u?'<button type="button" data-focus-key="quick-'+kind+'" data-companion-action="'+quickAction+'" data-kind="'+kind+'" '+(this.request||u.pending||quickAction==='work'&&!near||quickAction==='equip'&&u.location==='reserve'&&u.cargo?'disabled ':'')+'>'+quickLabel+'</button>':'';
@@ -60,7 +57,7 @@ class CompanionPanel {
  }
  renderDetail(kind){
   const def=COMPANION_TYPES[kind],attack=def.capabilities.attack,gather=def.capabilities.gather;
-  return '<section class="companion-detail"><div class="companion-detail-head"><button type="button" id="companion-detail-back" data-focus-key="detail-back">← 카드로</button><h3>'+def.icon+' '+def.name+'</h3></div><div class="companion-detail-body"><h4>전투</h4><p>'+(def.art==='ball'?'누른 뒤 놓으면 실제 구체를 포물선으로 발사합니다. 적·지형의 첫 충돌 뒤 손으로 돌아오며 복귀 중에는 피해를 주지 않아요.':'공격을 누른 뒤 놓으면 베기, 길게 누르면 차지합니다. 기존 무기와 같은 기력과 근접 판정을 사용해요.')+'</p><div class="companion-facts"><span>피해 '+attack.damage+'</span><span>재사용 '+attack.cooldown/1000+'초</span></div><h4>거점 작업</h4><p>'+gather.blocks.map(id=>escapeHtml(BLOCKS[BID[id]].name)).join(' · ')+' 채집 → 한 개씩 운반 → 9칸 보관함. 거점 7m 안에서 배치하고, 회수는 어디서든 요청할 수 있어요.</p><p>한 동료는 한 곳에만 배치됩니다. 운반·비행 중 배치 변경은 복귀 후 반영되며 자원은 보존돼요.</p></div></section>';
+  return '<section class="companion-detail"><div class="companion-detail-head"><button type="button" id="companion-detail-back" data-focus-key="detail-back">← 카드로</button><h3>'+def.icon+' '+def.name+'</h3></div><div class="companion-detail-body"><h4>전투</h4><p>'+(def.art==='ball'?'누른 뒤 놓으면 같은 조개를 포물선으로 던집니다. 첫 타격 뒤에도 실제 낙하해 땅에서 잠깐 머문 후 회수합니다. 첫 타격 이후에는 다시 피해를 주지 않아요.':'기본 공격 때 수확집게가 잠깐 나타나 턱을 벌리고 팔을 전진시켜 집습니다. 실제 턱 접촉으로 피해를 주고, 팔을 당겨 사라집니다. 길게 누르면 차지해요.')+'</p><div class="companion-facts"><span>피해 '+attack.damage+'</span><span>재사용 '+attack.cooldown/1000+'초</span></div><h4>거점 작업</h4><p>'+gather.blocks.map(id=>escapeHtml(BLOCKS[BID[id]].name)).join(' · ')+' 채집 → 한 개씩 운반 → 9칸 보관함. 거점 7m 안에서 배치하고, 회수는 어디서든 요청할 수 있어요.</p><p>한 동료는 한 곳에만 배치됩니다. 운반·비행 중 배치 변경은 복귀 후 반영되며 자원은 보존돼요.</p></div></section>';
  }
  refresh(force=false){
   const app=this.app,a=app.actor();if(!a)return;const system=app.sim.companions,units=system.owned(a.id),base=system.base(a.id),near=system.nearBase(a),canMeet=V.len(V.sub(a.pos,app.sim.terrain.spawn))<=8;

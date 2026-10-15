@@ -14,7 +14,7 @@ class Controls {
   }else{e.preventDefault();canvas.setPointerCapture(e.pointerId);this.touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
    const gesture={startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,moved:false,held:false,timer:null};this.gestures.set(e.pointerId,gesture);
    gesture.timer=setTimeout(()=>{if(gesture.moved||this.touches.size!==1||app.modal())return;gesture.held=true;gesture.heldAt=performance.now();
-    const a=app.actor(),selected=a?Inventory.stats(a).item:null,enemy=a&&app.sim.physics.aimEnemy(a,Combat.weapon(a).reach),block=a&&app.sim.aim(a);
+    const a=app.actor(),selected=a?Inventory.stats(a).item:null,enemy=a&&app.sim.physics.aimEnemy(a,Combat.weapon(a,this.app.sim).reach),block=a&&app.sim.aim(a);
     if(block&&!enemy&&!selected?.weapon&&a.companionSlot<0){gesture.heldAction='mine';this.buttons.mine=true;}else{gesture.heldAction='attack';this.pressAction('left','touch');}
    },this.gestureHoldMs);
    if(this.touches.size===2){this.pinch=this.touchDistance();for(const v of this.gestures.values()){clearTimeout(v.timer);v.moved=true;if(v.held){this.buttons.mine=false;this.releaseAction('left');}}}
@@ -46,9 +46,10 @@ class Controls {
   }else if(cancel||g.moved||this.app.modal())return;
   if(this.app.modal())return;
   const a=this.app.actor();if(!a||a.dead)return;
+  if(a.companionSlot>=0){this.pressAction('left','touch');this.releaseAction('left');return;}
   const aim=direction(this.app.renderer.camera.yaw,this.app.renderer.camera.pitch);
   // Renderer aim and game input share this camera vector; next tick sets facing before commands.
-  const preview={...a,facing:aim},enemy=this.app.sim.physics.aimEnemy(preview,Combat.weapon(a).reach),block=this.app.sim.aim(preview),item=Inventory.stats(a).item;
+  const preview={...a,facing:aim},enemy=this.app.sim.physics.aimEnemy(preview,Combat.weapon(a,this.app.sim).reach),block=this.app.sim.aim(preview),item=Inventory.stats(a).item;
   if(enemy){this.pressAction('left','touch');this.releaseAction('left');return;}
   if(block&&BLOCKS[block.id]?.station){this.app.command({op:'interact'});return;}
   if(item?.id==='bucket'||item?.id==='waterBucket'){this.pressAction('right','touch');this.releaseAction('right');return;}

@@ -9,7 +9,7 @@ function actionTiming(action,elapsed){if(!action)return{stage:'idle',phase:0,fra
  const phase=clamp((elapsed-action.wind-action.active)/Math.max(1,action.recovery),0,1);return{stage:'recover',phase,frame:6+Math.min(1,Math.floor(phase*2)),active:false};
 }
 function attackClip(action){
- if(['arrow','spit','precision','quickshot'].includes(action.kind))return 'bow';
+ if(['companionBall','arrow','spit','precision','quickshot'].includes(action.kind))return 'bow';
  const motion=attackMotion(action);if(motion==='overhead')return 'overhead';
  if(action.weapon==='shield'||action.kind==='bash')return 'bash';
  if(motion==='thrust'||motion==='thrustReverse'||action.weapon==='fist')return motion==='thrustReverse'?'thrustReverse':'thrust';
