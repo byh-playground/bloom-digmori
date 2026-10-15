@@ -124,7 +124,12 @@ class CompanionRenderer {
    companionAttachedQuad(r,socket.layer==='back'?this.behind:this.front,visual,socket,art,this.atlas.frames[mode+'/0/'+Math.round(clamp(charge,0,1)*7)],'A');
    const cuff=companionAtlasPointWorld(r,visual,socket,socket.layer);r.box(dyn,V.add(cuff,{x:0,y:-.04,z:0}),{x:.11,y:.09,z:.035},[.40,.59,.35]);
   }
-  for(const p of Object.values(view.projectiles))if(p.companionId&&p.companionKind&&r.worldVisualReady(p.pos,.3))this.world(this.front,p.pos,p.companionKind,1);
+  for(const p of Object.values(view.projectiles))if(p.companionId&&p.companionKind&&r.worldVisualReady(p.pos,.3)){
+   this.world(this.front,p.pos,p.companionKind,1);
+   // Shadow and sphere use the same interpolated world point and terrain height.
+   const radius=COMPANION_TYPES[p.companionKind].capabilities.attack.projectile.radius,origin=V.add(p.pos,{x:0,y:-radius,z:0}),hit=sim.terrain.ray(origin,{x:0,y:-1,z:0},12);
+   if(hit&&hit.normal.y>.7){const size=.27/(1+hit.distance*.2);r.box(dyn,{x:p.pos.x,y:origin.y-hit.distance+.012,z:p.pos.z},{x:size*2,y:.01,z:size*1.3},[.20,.30,.22]);}
+  }
  }
  draw(front){drawCompanionSprites(this.r,front?this.front:this.behind,this.atlas.tex);}
 }

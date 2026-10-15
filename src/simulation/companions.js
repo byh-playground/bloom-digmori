@@ -35,7 +35,7 @@ class Companions {
   return this.assign(a,this.data.units[c.id],{location:c.location,slot:c.slot});
  }
  action(a,kind,tier){const u=this.ready(a);if(!u||!COMPANION_TYPES[u.kind].capabilities.attack)return null;const def=COMPANION_TYPES[u.kind].capabilities.attack;
-  return {name:kind,weapon:def.mode==='ball'?'bow':'sword',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'swing',motion:'sweep',companionId:u.id,companionKind:u.kind,companionMode:def.mode,origin:this.socket(a,u.slot),owner:a.id,combo:0,comboCount:1,tier,wind:300,active:def.mode==='ball'?80:280,recovery:350,reach:def.reach,arc:1.9,damage:def.damage*(tier?1.5:1),poise:def.poise,cost:12,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,staminaRefunded:false,sequence:0};
+  return {name:kind,weapon:def.mode==='ball'?'bow':'sword',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'swing',motion:'sweep',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,origin:this.socket(a,u.slot),owner:a.id,combo:0,comboCount:1,tier,wind:300,active:def.mode==='ball'?80:280,recovery:350,reach:def.reach,arc:1.9,damage:def.damage*(tier?1.5:1),poise:def.poise,cost:12,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,staminaRefunded:false,sequence:0};
  }
  start(a,act){const u=this.data.units[act.companionId];if(!u||this.ready(a)!==u)return false;u.cooldown=COMPANION_TYPES[u.kind].capabilities.attack.cooldown;return true;}
  launched(shot){const u=this.data.units[shot.companionId];if(u){u.phase='flight';u.pos={...shot.pos};}}
