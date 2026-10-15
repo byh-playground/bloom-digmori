@@ -19,6 +19,8 @@ jobs:
           node-version: '22'
       - name: Build single HTML and provenance
         run: node scripts/build.mjs
+      - name: Build companion combat design preview
+        run: node scripts/build-companion-preview.mjs
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist

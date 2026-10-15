@@ -1,5 +1,7 @@
 # 디그모리 · Digmori
 
+**[전투 동료 디자인 비교 프리뷰](https://byh-playground.github.io/bloom-digmori/previews/companion-combat/)** — 공형 발사·복귀와 생물 검을 비교합니다. 동료 노동은 확정 방향이며 전투 부착은 디자인 검토 중입니다. 제품 기본 전투와 저장은 변경하지 않습니다. [프리뷰 소스·실행 방법](previews/companion-combat/README.md)
+
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
 **[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.2**
