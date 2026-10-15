@@ -7,6 +7,7 @@ const BASIC_CHAIN=Object.freeze([
 ]);
 const OVERHEAD_ARC=Object.freeze({from:1.02,to:-.72});
 function attackMotion(action){
+ if(isClawAction(action))return 'clamp';
  if(action.motion)return action.motion;
  if(action.kind==='overhead'||action.kind==='slam')return 'overhead';
  if(['thrust','lunge','double','punch'].includes(action.kind)||action.weapon==='spear')return 'thrust';
@@ -26,6 +27,9 @@ const IDENTITY_ROTATION=Object.freeze({x:0,y:0,z:0,w:1}),ZERO_VECTOR=Object.free
 function rotateByQuaternion(v,q){const tx=2*(q.y*v.z-q.z*v.y),ty=2*(q.z*v.x-q.x*v.z),tz=2*(q.x*v.y-q.y*v.x);return{x:v.x+q.w*tx+q.y*tz-q.z*ty,y:v.y+q.w*ty+q.z*tx-q.x*tz,z:v.z+q.w*tz+q.x*ty-q.y*tx};}
 function weaponHitRadius(action,scale=1){const widths={fist:.30,dagger:.20,spear:.18,greatsword:.34,axe:.29,shield:.34};return (widths[action.weapon]||CFG.combat.hit.radius)*Math.min(scale,2);}
 function attackSamples(actor,action,from,to){
+ if(isClawAction(action)){const out=[],count=Math.max(1,Math.ceil(Math.abs(to-from)*12));for(let n=1;n<=count;n++){
+  const previous=clawWorldPose(actor,action,action.wind+lerp(from,to,(n-1)/count)*action.active),pose=clawWorldPose(actor,action,action.wind+lerp(from,to,n/count)*action.active);
+  for(let i=0;i<pose.tips.length;i++)out.push({phase:lerp(from,to,n/count),pose:{origin:pose.origin},from:previous.tips[i],to:pose.tips[i],radius:.16});}return out;}
  const radius=weaponHitRadius(action,actor.scale||1),span=Math.abs(to-from),angle=(attackMotion(action)==='overhead'?OVERHEAD_ARC.from-OVERHEAD_ARC.to:Math.abs(action.arc||0))*span,
   step=Math.min(CFG.combat.hit.angularStep,radius/Math.max(.1,action.reach)*.85),count=clamp(Math.ceil(angle/step),1,CFG.combat.hit.maxSamples),out=[];
  for(let i=0;i<=count;i++){const phase=lerp(from,to,i/count),pose=attackPose(actor,action,phase);out.push({phase,pose,from:V.add(pose.origin,V.scale(pose.dir,Math.min(.25,pose.reach))),to:pose.tip,radius});}
@@ -53,9 +57,9 @@ class Combat {
  static spend(a,n){const s=a.combat.stamina;if(s.value+1e-5<n)return false;s.value=Math.max(0,s.value-n);s.delay=CFG.stamina.delay;return true;}
  static sprintCost(a,distance){if(!a?.sprinting||a.enemy||distance<=.0001)return 0;const s=a.combat.stamina,cost=qf(Math.max(0,distance)*CFG.stamina.sprintPerMeter);if(cost<=0)return 0;s.value=qf(Math.max(0,s.value-cost));s.delay=CFG.stamina.delay;if(s.value<=.001)a.sprinting=false;return cost;}
  static refundOnHit(source,payload,blocked){if(!source||source.enemy||blocked||payload.staminaRefunded||!Number.isFinite(payload.cost)||payload.cost<=0)return 0;let ratio=CFG.stamina.hitRefund;if(payload.name==='charged')ratio=CFG.stamina.chargedRefund;else if(payload.name==='light'&&payload.combo>=2)ratio=CFG.stamina.finisherRefund;const planned=Math.min(payload.cost,statStep(payload.cost*ratio,STAT_SCALE.stamina)),s=source.combat.stamina,gained=Math.max(0,Math.min(planned,RPG.staminaMax(source)-s.value));payload.staminaRefunded=true;if(gained>0)s.value=qf(s.value+gained);return gained;}
- static weapon(a){const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,poise:10,reach:3.0,arc:1.25,cost:10,weight:0,wind:200,active:100,recovery:350,combo:3,charge:[550,1100],skill:'punch',secondary:'guard',guard:.12};}
+ static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=COMPANION_TYPES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.art==='ball'?80:280,recovery:350,arc:1.9,secondary:'none',guard:0};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,poise:10,reach:3.0,arc:1.25,cost:10,weight:0,wind:200,active:100,recovery:350,combo:3,charge:[550,1100],skill:'punch',secondary:'guard',guard:.12};}
  static resetCombo(c){c.combo=0;c.comboUntil=0;c.comboWeapon=null;c.queued=false;}
- static equipmentKey(a){return Inventory.stats(a).item?.id||'fist';}
+ static equipmentKey(a,sim=null){return sim?.companions.equipped(a)?.id||Inventory.stats(a).item?.id||'fist';}
  static makeAction(a,kind,tier=0,sim=null){if(sim&&!a.enemy&&a.companionSlot>=0)return sim.companions.action(a,kind,tier);const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
   const melee=weapon!=='bow'&&weapon!=='shield',count=melee?BASIC_CHAIN.length:w.combo;
   const continuing=c.comboWeapon===weaponKey&&(c.comboUntil>0||c.state==='attack'&&c.action?.name==='light');
@@ -107,7 +111,7 @@ class Combat {
  }
  static updatePlayer(a,input,sim){const c=a.combat,dt=CFG.stepMs;let move={x:input.x,y:0,z:input.z},speed=CFG.player.walk;a.sprinting=false;
   a.facing=direction(input.yaw,input.pitch);a.yaw=input.yaw;a.pitch=input.pitch;
-  if(c.comboWeapon&&c.comboWeapon!==this.equipmentKey(a))this.resetCombo(c);
+   if(c.comboWeapon&&c.comboWeapon!==this.equipmentKey(a,sim))this.resetCombo(c);
   if(!input.enabled){this.resetCombo(c);if(['charge','secondary','guard'].includes(c.state)){c.state='idle';c.charge=0;c.action=null;}c.left=false;c.right=false;c.secondary=false;if(c.state==='roll')return{move:c.action.dir,speed:rollSpeed(c.action,c.elapsed),jump:false,autoJump:false};return{move:{x:0,y:0,z:0},speed:0,jump:false};}
   const ld=input.left&&!c.left,lu=!input.left&&c.left,rd=input.right&&!c.right,ru=!input.right&&c.right;
   // Shift is an intent, not a locally guessed terrain action. All peers resolve it
@@ -118,10 +122,10 @@ class Combat {
   if(ld&&c.state!=='attack'&&this.canAct(c)&&(a.companionSlot<0||sim.companions.ready(a))){c.state='charge';c.charge=0;c.elapsed=0;c.action=null;}
   if(c.state==='charge'&&input.left)c.charge+=dt;
   if(lu&&c.state==='charge'){
-   const w=this.weapon(a),tier=c.charge>=w.charge[1]?2:c.charge>=w.charge[0]?1:0;
+    const w=this.weapon(a,sim),tier=c.charge>=w.charge[1]?2:c.charge>=w.charge[0]?1:0;
    this.start(a,this.makeAction(a,tier?'charged':'light',tier,sim),sim);if(c.state==='charge'){this.resetCombo(c);c.state='idle';sim.emit('exhausted',a);}
   }
-  if(rd&&this.canAct(c)&&(a.companionSlot<0||sim.companions.ready(a))){this.resetCombo(c);c.state='secondary';c.charge=0;c.secondary=false;c.action=null;}
+   if(rd&&a.companionSlot<0&&this.canAct(c)){this.resetCombo(c);c.state='secondary';c.charge=0;c.secondary=false;c.action=null;}
   if(input.right&&c.state==='secondary'){
    c.charge+=dt;if(c.charge>=CFG.input.hold){c.secondary=true;if(this.weapon(a).secondary==='guard'){c.state='guard';c.elapsed=0;}}
   }
