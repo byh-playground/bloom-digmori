@@ -162,6 +162,13 @@ class VoxelWorld {
   if(Math.abs(x-24)<=4&&Math.abs(z+14)<=4)h=4;
   h=clamp(h,-8,24);this.heights.set(key,h);return h;
  }
+ vegetationSite(x,z,biome=BIOMES[this.climate(x,z).id]){const rule=biome.vegetation,h=this.height(x,z),climate=this.climate(x,z);
+  if(!rule.density||h<rule.minHeight||h>rule.maxHeight||climate.wet<rule.minWet||rule.maxHeat!==undefined&&climate.heat>rule.maxHeat)return null;
+  const ground=h<CFG.sea+2?'sand':biome.surface;if(!rule.roots.includes(BLOCKS[BID[ground]]?.id)||this.edits.has(blockKey(x,h,z)))return null;
+  let low=Infinity,high=-Infinity,total=0;for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dz)continue;const next=this.height(x+dx,z+dz);low=Math.min(low,next);high=Math.max(high,next);total+=next;}
+  if(high-low>rule.maxSlope)return null;const exposure=Math.max(0,h-total/8);if(exposure>rule.maxExposure)return null;
+  return{height:h,canopy:rule.canopy};
+ }
  biome(x,z){const h=this.height(Math.floor(x),Math.floor(z));return h<3?'이슬 해안':BIOMES[this.climate(x,z).id].name;}
  caveAnchors(minX,minZ,maxX,maxZ){const out=[],spacing=CFG.worldgen.caveSpacing,margin=CFG.worldgen.caveLength+8;
   const add=c=>{if(c&&c.x+margin>=minX&&c.x-margin<=maxX&&c.z+margin>=minZ&&c.z-margin<=maxZ)out.push(c);};
@@ -213,7 +220,7 @@ class VoxelWorld {
   if(depth<=2)return h<CFG.sea+2?BID.sand:BID[biome.soil];
   const vein=(salt,scale=.17)=>noise(x*scale,y*scale*.91,z*scale,this.seed+salt)*.68+noise(x*scale*.47,y*scale*.51,z*scale*.47,this.seed+salt+1)*.32;
   // Resource depth/rarity comes from RESOURCE_DEFS; worldgen and UI never duplicate the bands.
-  for(let i=RESOURCE_DEFS.length-1;i>=0;i--){const r=RESOURCE_DEFS[i],band=this.oreBand(y,r.min,r.max,r.peak);if(band>0&&vein(r.salt,r.scale)>r.threshold-band*r.peakBonus-(r.id===biome.ore?biome.oreBonus:0))return BID[r.id];}
+  for(let i=RESOURCE_DEFS.length-1;i>=0;i--){const r=RESOURCE_DEFS[i],band=this.oreBand(y,r.min,r.max,r.peak);if(band>0&&vein(r.salt,r.scale)>r.threshold-band*r.peakBonus-(r.id===biome.resources.ore?biome.resources.bonus:0))return BID[r.id];}
   if(y<CFG.bottom+3&&noise(x*.12,0,z*.12,this.seed+543)>.4)return BID.obsidian;
   return BID.stone;
  }
@@ -315,23 +322,24 @@ class VoxelWorld {
      if(x<x0||x>=x0+C||z<z0||z>=z0+C||key%5!==0||generatedStructures.some(s=>Math.abs(x-s.x)<46&&Math.abs(z-s.z)<47))continue;
      for(let y=Math.max(y0,CFG.bottom+4);y<Math.min(y0+C,-8);y++){
       const j=(x-x0)+C*((y-y0)+C*(z-z0));
-      if(out[j]||y<=y0||hash3(x,y,z,this.seed+2992)%19!==0)continue;
-      if(out[j-C]===BID.stone)out[j]=BID.crystalBloom;
+      if(out[j]||y<=y0)continue;
+      const biome=BIOMES[this.climate(x,z).id],roll=hash3(x,y,z,this.seed+2993)%10000;
+      if(out[j-C]===BID.stone&&roll<Math.floor(biome.decorations.caveBloom*10000))out[j]=BID.crystalBloom;
      }
     }
    }
   const write=(x,y,z,id)=>{if(x>=x0&&x<x0+C&&y>=y0&&y<y0+C&&z>=z0&&z<z0+C){const idx=(x-x0)+C*((y-y0)+C*(z-z0));if(!out[idx])out[idx]=id;}};
   for(let gz=Math.floor((z0-4)/7);gz<=Math.floor((z0+C+4)/7);gz++)for(let gx=Math.floor((x0-4)/7);gx<=Math.floor((x0+C+4)/7);gx++){
-   const hsh=hash3(gx,0,gz,this.seed+701),tx=gx*7+(hsh%5)+1,tz=gz*7+((hsh>>>4)%5)+1,h=this.height(tx,tz);
-   if(h<3||h>18||Math.hypot(tx,tz)<7||Math.hypot(tx-24,tz+14)<6||generatedStructures.some(s=>Math.hypot(tx-s.x,tz-s.z)<12))continue;
+   const hsh=hash3(gx,0,gz,this.seed+701),tx=gx*7+(hsh%5)+1,tz=gz*7+((hsh>>>4)%5)+1;
+   if(Math.hypot(tx,tz)<7||Math.hypot(tx-24,tz+14)<6||generatedStructures.some(s=>Math.hypot(tx-s.x,tz-s.z)<12))continue;
    if(naturalCaves.some(c=>{const dx=tx-c.x,dz=tz-c.z,t=dx*c.dx+dz*c.dz,w=Math.abs(-dx*c.dz+dz*c.dx);return t>=-6&&t<=CFG.worldgen.caveLength+6&&w<7;}))continue;
-   const biome=BIOMES[this.climate(tx,tz).id];if(hsh%100>biome.trees)continue;
-   const tall=4+(hsh>>>8)%3,fungus=biome.fungus;
-   for(let y=h+1;y<=h+tall;y++)write(tx,y,tz,fungus?BID.stem:BID.log);
+   const biome=BIOMES[this.climate(tx,tz).id],site=this.vegetationSite(tx,tz,biome);if(!site||hsh%100>=biome.vegetation.density)continue;
+   const h=site.height,tall=4+(hsh>>>8)%3,canopy=site.canopy;
+   for(let y=h+1;y<=h+tall;y++)write(tx,y,tz,canopy==='cap'?BID.stem:BID.log);
    for(let y=h+tall-1;y<=h+tall+1;y++)for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++){
     if(Math.abs(dx)+Math.abs(dz)>3-(y===h+tall+1?1:0))continue;
     if(dx===0&&dz===0&&y<h+tall+1)continue;
-    write(tx+dx,y,tz+dz,fungus?BID.cap:BID.leaves);
+    write(tx+dx,y,tz+dz,canopy==='cap'?BID.cap:BID.leaves);
    }
   }
   write(24,5,-14,BID.altar);

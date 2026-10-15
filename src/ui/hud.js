@@ -13,13 +13,13 @@ function projectWorldToScreen(m,pos,width,height){
 class EnemyHealthHUD {
  constructor(renderer){this.r=renderer;this.root=document.getElementById('enemy-labels');this.nodes=new Map();this.world=null;this.samples=[];this.clock=0;this.mobile=matchMedia('(pointer:coarse)').matches;}
  reset(){for(const v of this.nodes.values())v.node.remove();this.nodes.clear();this.world=null;this.clock=0;this.samples=[];}
- create(a){const node=document.createElement('div');node.className='enemy-label';node.dataset.actorId=a.id;
-  const caption=document.createElement('div');caption.className='enemy-caption';const name=document.createElement('span');name.className='enemy-name';name.textContent=a.enemy?(ENEMIES[a.kind]?.name||'생물'):('플레이어 · '+String(a.id).slice(0,6));
+ create(a){const node=document.createElement('div');node.className='enemy-label';node.dataset.actorId=a.id;node.classList.toggle('candidate',!!a.candidateCompanion);
+  const caption=document.createElement('div');caption.className='enemy-caption';const name=document.createElement('span');name.className='enemy-name';name.textContent=a.candidateCompanion?COMPANION_TYPES[a.candidateCompanion].name+' - neutral companion':a.enemy?(ENEMIES[a.kind]?.name||'생물'):('플레이어 · '+String(a.id).slice(0,6));
   const warning=document.createElement('span');warning.className='enemy-warning';warning.textContent='!';warning.hidden=true;caption.append(name,warning);
   const bar=document.createElement('div');bar.className='enemy-health';bar.setAttribute('role','progressbar');bar.setAttribute('aria-label',name.textContent+' 생명력');
   const trail=document.createElement('i');trail.className='enemy-health-trail';const fill=document.createElement('i');fill.className='enemy-health-fill';bar.append(trail,fill);
   const number=document.createElement('div');number.className='enemy-hp-value';node.append(caption,bar,number);this.root.append(node);
-  const meter=healthMeter(a.hp,a.maxHp),entry={node,bar,fill,trail,number,warning,hp:meter.value,max:meter.maximum,trailRatio:meter.ratio,changedAt:-Infinity,flashUntil:0};this.nodes.set(a.id,entry);return entry;
+  const meter=healthMeter(a.hp,a.maxHp),entry={node,bar,fill,trail,number,name,warning,hp:meter.value,max:meter.maximum,trailRatio:meter.ratio,changedAt:-Infinity,flashUntil:0};this.nodes.set(a.id,entry);return entry;
  }
  visible(terrain,eye,point){const delta=V.sub(point,eye),length=V.len(delta);if(length<.03)return true;const hit=terrain.ray(eye,V.scale(delta,1/length),length);return !hit||hit.distance>=length-.05;}
  update(sim,local,dt=0,actors,authority){if(!this.root)return;if(this.world!==sim.terrain){this.reset();this.world=sim.terrain;}
@@ -41,7 +41,7 @@ class EnemyHealthHUD {
    else if(meter.value<entry.hp){entry.trailRatio=Math.max(entry.trailRatio,entry.hp/entry.max);entry.changedAt=this.clock;entry.flashUntil=this.clock+170;}
    entry.hp=meter.value;entry.max=meter.maximum;
    if(this.clock-entry.changedAt>HEALTH_HUD.trailDelay)entry.trailRatio=Math.max(meter.ratio,entry.trailRatio-Math.max(0,dt)/HEALTH_HUD.trailDuration);
-   entry.number.textContent=meter.text;entry.fill.style.transform='scaleX('+meter.ratio+')';entry.trail.style.transform='scaleX('+Math.max(entry.trailRatio,meter.ratio)+')';
+   entry.name.textContent=a.candidateCompanion?COMPANION_TYPES[a.candidateCompanion].name+(a.targetId?' - retaliating':' - neutral companion'):a.enemy?(ENEMIES[a.kind]?.name||'enemy'):('player '+String(a.id).slice(0,6));entry.node.classList.toggle('candidate',!!a.candidateCompanion);entry.node.classList.toggle('retaliating',!!a.targetId);entry.number.textContent=meter.text;entry.fill.style.transform='scaleX('+meter.ratio+')';entry.trail.style.transform='scaleX('+Math.max(entry.trailRatio,meter.ratio)+')';
    entry.bar.setAttribute('aria-valuemin','0');entry.bar.setAttribute('aria-valuemax',String(meter.maximum));entry.bar.setAttribute('aria-valuenow',String(meter.value));entry.bar.setAttribute('aria-valuetext',meter.text);
    entry.node.dataset.hp=String(meter.value);entry.node.dataset.maxHp=String(meter.maximum);entry.node.classList.toggle('targeted',a.id===aim);entry.node.classList.toggle('critical',meter.ratio<=.25);entry.node.classList.toggle('damaged',this.clock<entry.flashUntil);entry.node.classList.toggle('boss',!!a.boss);entry.node.classList.toggle('player',!a.enemy);
    entry.warning.hidden=!(a.combat.state==='attack'&&a.combat.action&&a.combat.elapsed<a.combat.action.wind);

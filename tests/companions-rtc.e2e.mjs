@@ -1,38 +1,45 @@
-import{chromium}from'playwright';import fs from'node:fs';import http from'node:http';import assert from'node:assert/strict';
-const begin=Date.now(),report={checks:[]},errors=[];let browser,server;const out=new URL('../artifacts/companions/',import.meta.url);fs.mkdirSync(out,{recursive:true});const timer=setTimeout(()=>{console.error('RTC E2E exceeded 180 seconds');process.exit(1)},180000);const pass=(name,evidence)=>{console.log('PASS '+name);report.checks.push({name,evidence})};
-const card=async(p,kind,action)=>{await p.locator('[data-card-kind="'+kind+'"] [data-companion-action="'+action+'"]').click();await p.waitForFunction(()=>!Bloom.app.companionPanel.request);};
-// Sequential peer reads may be on different ticks. Compare placement contracts;
-// physical projectile positions below are compared only at matching tick numbers.
-const placements=units=>Object.values(units).map(({id,owner,kind,location,slot,pending,cargo})=>({id,owner,kind,location,slot,pending,cargo}));
-try{
-server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)))});await new Promise(r=>server.listen(0,'127.0.0.1',r));browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();const contexts=[await browser.newContext({viewport:{width:1100,height:800}}),await browser.newContext({viewport:{width:1100,height:800}})],pages=[];
-for(const context of contexts){const p=await context.newPage();p.setDefaultTimeout(8000);p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:'+server.address().port+'/');await p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});pages.push(p)}
-const[host,join]=pages;
-await host.click('#network-btn');await host.click('#host-room');await host.waitForFunction(()=>Bloom.app.net.session&&Bloom.app.actor(),null,{timeout:45000});const room=await host.locator('#room-code').inputValue();await join.click('#network-btn');await join.fill('#room-code',room);await join.click('#join-room');
-for(const p of pages)await p.waitForFunction(()=>Bloom.app.net.session?.players.length===2&&Object.values(Bloom.app.sim.actors).filter(a=>!a.enemy).length===2,null,{timeout:45000});
-const ids=await Promise.all(pages.map(p=>p.evaluate(()=>Bloom.app.localId)));assert.notEqual(ids[0],ids[1]);pass('two real Nostr/WebRTC room members admitted',{room,players:ids});
-const observe=p=>p.evaluate(()=>({id:Bloom.app.localId,tick:Bloom.app.sim.tick,units:Bloom.app.sim.companions.snapshot().units,bases:Bloom.app.sim.companions.snapshot().bases,status:Bloom.app.net.status,phase:Bloom.app.net.phase}));
-for(const p of pages){await p.click('#companions-btn');await card(p,'shell','recruit');await card(p,'leaf','recruit');await p.waitForFunction(()=>Bloom.app.sim.companions.owned(Bloom.app.localId).length===2)}
-for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().length===4);pass('four unique owned companions synchronized');
-for(const p of pages)await card(p,'shell','work');
-for(const p of pages)await p.waitForFunction(()=>Object.values(Bloom.app.sim.companions.data.bases).every(b=>b.slots.some(Boolean)),null,{timeout:25000});
-for(const p of pages)await card(p,'shell','recall');
-for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().every(u=>u.location==='reserve'),null,{timeout:15000});
-let a=await observe(host),b=await observe(join);assert.deepEqual(placements(a.units),placements(b.units));assert.deepEqual(a.bases,b.bases);pass('authoritative labor resources and reserved placements agree on both peers',{bases:a.bases});
-const hostShell=Object.values(a.units).find(u=>u.owner===a.id&&u.kind==='shell').id;
-await join.evaluate(id=>Bloom.app.command({op:'companion',action:'assign',id,location:'combat',slot:0}),hostShell);await join.waitForTimeout(350);assert.equal((await observe(host)).units[hostShell].location,'reserve');pass('remote owner cannot reassign another player companion');
-for(const p of pages){await card(p,'shell','equip');await card(p,'leaf','equip');await p.click('#companions-close')}
-for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().every(u=>u.location==='combat'));a=await observe(host);b=await observe(join);assert.deepEqual(placements(a.units),placements(b.units));pass('two equipped slots per owner synchronize without duplicate location',{hostTick:a.tick,joinTick:b.tick,placements:placements(a.units)});
-for(const p of pages)await p.evaluate(()=>{window.__ballTrace=[];let last=-1;const until=performance.now()+5000;function sample(){const s=Bloom.app.sim;if(s.tick!==last){last=s.tick;for(const p of Object.values(s.projectiles))if(p.companionId){const body=s.physics.world.getRigidBody(p.body);window.__ballTrace.push({tick:s.tick,id:p.id,source:p.source,pos:{...p.pos},gravity:body.gravityScale(),radius:p.radius});}}if(performance.now()<until)requestAnimationFrame(sample)}sample()});
-await host.keyboard.press('KeyZ');await host.mouse.click(550,350);
-for(const p of pages)await p.waitForFunction(()=>window.__ballTrace.length>2,null,{timeout:6000});
-const traces=await Promise.all(pages.map(p=>p.evaluate(()=>window.__ballTrace)));for(const trace of traces){assert.equal(new Set(trace.map(s=>s.id)).size,1);assert(trace.every(s=>s.source===ids[0]&&s.gravity===1&&s.radius===.29));}
-const second=new Map(traces[1].map(s=>[s.tick,s]));let common=0;for(const point of traces[0]){const other=second.get(point.tick);if(!other)continue;assert(Math.hypot(point.pos.x-other.pos.x,point.pos.y-other.pos.y,point.pos.z-other.pos.z)<1e-6);common++;}assert(common>=2);pass('one full-gravity sphere has identical physical samples on both RTC peers',{commonTicks:common,traces});
-for(const p of pages)await p.waitForFunction(id=>Bloom.app.sim.companions.data.units[id].phase==='idle',hostShell,{timeout:6000});
-const native=[];for(const p of pages)native.push(await p.evaluate(async()=>{const out=[];for(const pc of Bloom.app.net.room.peerConnections.values()){const stats=await pc.getStats();for(const s of stats.values())if(s.type==='candidate-pair'&&s.state==='succeeded'&&s.nominated)out.push({state:s.state,bytesSent:s.bytesSent,bytesReceived:s.bytesReceived});}return out;}));assert(native.every(rows=>rows.some(s=>s.bytesSent>0&&s.bytesReceived>0)));pass('native RTC nominated candidate pairs carry actual data',{native});
-await join.click('#network-btn');await join.click('#reconnect-room');await join.waitForFunction(id=>Bloom.app.net.session?.players.length===2&&Bloom.app.actor()?.id===id&&Bloom.app.net.phase==='running',ids[1],{timeout:45000});
-for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.all().length===4,null,{timeout:20000});a=await observe(host);b=await observe(join);assert.equal(b.id,ids[1]);assert.deepEqual(Object.keys(a.units).sort(),Object.keys(b.units).sort());assert.deepEqual(a.bases,b.bases);assert.equal(Object.values(b.units).filter(u=>u.owner===ids[1]).length,2);pass('official room identity resumes after reconnect with same companions and resources');
-assert.deepEqual(errors,[]);report.status='PASS';report.final=[a,b];report.limits=['Two local Edge contexts with native RTC and public Nostr relay; external NAT not checked','Combat damage covered by companion input E2E, not repeated here'];
-}catch(e){report.status='FAIL';report.error=e.stack;console.error(e);process.exitCode=1;}
-finally{report.elapsedMs=Date.now()-begin;report.errors=errors;fs.writeFileSync(new URL('rtc-result.json',out),JSON.stringify(report,null,2));clearTimeout(timer);await browser?.close();server?.close()}
+import {chromium} from 'playwright';
+import fs from 'node:fs';
+import http from 'node:http';
+import assert from 'node:assert/strict';
 
+const began=Date.now(),report={checks:[]},errors=[];let browser,server;
+const out=new URL('../artifacts/companions/',import.meta.url);fs.mkdirSync(out,{recursive:true});
+const timeout=setTimeout(()=>{console.error('RTC companion E2E exceeded 180 seconds');process.exit(1)},180000);
+const pass=(name,evidence)=>{report.checks.push({name,evidence});console.log('PASS '+name)};
+const observeCandidate=(p,id)=>p.evaluate(id=>{const a=Bloom.app.actor(),c=Bloom.app.sim.actors[id];return c&&{id:c.id,kind:c.candidateCompanion,targetId:c.targetId,hp:c.hp,pos:{...c.pos},player:{...a.pos}}},id);
+async function approach(p,id,stopAt=2.6){const until=Date.now()+50000;let previous=Infinity,stale=Date.now(),side='KeyD',last=null;await p.locator('#world').focus();while(Date.now()<until){const s=await observeCandidate(p,id);if(!s)throw Error('candidate vanished: '+id);last=s;const dist=Math.hypot(s.pos.x-s.player.x,s.pos.z-s.player.z);if(dist<=stopAt)return s;await p.evaluate(({player,target})=>{const c=Bloom.app.renderer.camera;c.yaw=Math.atan2(-(target.x-player.x),-(target.z-player.z));c.pitch=.12;},{player:s.player,target:s.pos});if(dist<previous-.06){previous=dist;stale=Date.now();}else if(Date.now()-stale>1200){await p.keyboard.down(side);await p.waitForTimeout(600);await p.keyboard.up(side);side=side==='KeyD'?'KeyA':'KeyD';stale=Date.now();previous=Infinity;continue;}await p.keyboard.down('KeyW');await p.waitForTimeout(170);await p.keyboard.up('KeyW');await p.waitForTimeout(25);}throw Error('could not approach the RTC candidate: '+JSON.stringify(last));}
+const placementState=p=>p.evaluate(()=>({id:Bloom.app.localId,tick:Bloom.app.sim.tick,units:Bloom.app.sim.companions.snapshot().units,bases:Bloom.app.sim.companions.snapshot().bases,actors:Object.values(Bloom.app.sim.actors).filter(a=>a.candidateCompanion).map(a=>({id:a.id,kind:a.candidateCompanion,targetId:a.targetId,combat:a.combat.state}))}));
+const normalize=units=>Object.values(units).map(({id,owner,kind,location,slot,pending,cargo})=>({id,owner,kind,location,slot,pending,cargo})).sort((a,b)=>a.id.localeCompare(b.id));
+
+try{
+ server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html;charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)))});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
+ const contexts=[await browser.newContext({viewport:{width:1100,height:800}}),await browser.newContext({viewport:{width:1100,height:800}})],pages=[];
+ for(const context of contexts){const p=await context.newPage();p.setDefaultTimeout(10000);p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:'+server.address().port+'/');await p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});pages.push(p);}
+ const[host,join]=pages;await host.locator('#network-btn').click();await host.locator('#host-room').click();await host.waitForFunction(()=>Bloom.app.net.session&&Bloom.app.actor(),null,{timeout:45000});const room=await host.locator('#room-code').inputValue();
+ await join.locator('#network-btn').click();await join.locator('#room-code').fill(room);await join.locator('#join-room').click();
+ for(const p of pages)await p.waitForFunction(()=>Bloom.app.net.session?.players.length===2&&Object.values(Bloom.app.sim.actors).filter(a=>!a.enemy).length===2,null,{timeout:45000});
+ const ids=await Promise.all(pages.map(p=>p.evaluate(()=>Bloom.app.localId)));assert.notEqual(ids[0],ids[1]);pass('two Edge clients join the live Nostr/WebRTC room',{room,players:ids});
+
+ await host.waitForFunction(()=>!Bloom.app.sim.night()&&Object.values(Bloom.app.sim.actors).some(a=>a.candidateCompanion),null,{timeout:30000});
+ let first=await host.evaluate(()=>{const p=Bloom.app.actor();return Object.values(Bloom.app.sim.actors).filter(a=>a.candidateCompanion&&!a.dead).sort((x,y)=>Math.hypot(x.pos.x-p.pos.x,x.pos.z-p.pos.z)-Math.hypot(y.pos.x-p.pos.x,y.pos.z-p.pos.z))[0]?.id;});let close=await approach(host,first,1.8);
+ for(let attempt=0;attempt<4;attempt++){const pose=await observeCandidate(host,first);await host.evaluate(({player,target})=>{const c=Bloom.app.renderer.camera;c.yaw=Math.atan2(-(target.x-player.x),-(target.z-player.z));c.pitch=.12;},{player:pose.player,target:pose.pos});await host.mouse.move(550,400);await host.mouse.down();await host.waitForTimeout(100);await host.mouse.up();try{await host.waitForFunction(({id,owner})=>Bloom.app.sim.actors[id]?.targetId===owner,{id:first,owner:ids[0]},{timeout:1800});break;}catch{await host.waitForTimeout(300);}}
+ for(const p of pages)await p.waitForFunction(({id,owner})=>Bloom.app.sim.actors[id]?.targetId===owner,{id:first,owner:ids[0]}, {timeout:15000});
+ let states=await Promise.all(pages.map(p=>placementState(p)));let targetRows=states.map(s=>s.actors.find(a=>a.id===first));assert(targetRows.every(a=>a?.targetId===ids[0]&&a.combat==='attack'),'RTC retaliation mismatch: '+JSON.stringify({ids,targets:targetRows}));pass('candidate retaliation target and attack state agree across both RTC simulations',{targets:targetRows});
+
+ await host.keyboard.press('KeyK');const recruit=host.locator('[data-candidate-id="'+first+'"]');await recruit.waitFor({state:'visible'});await host.waitForFunction(id=>{const a=Bloom.app.actor(),c=Bloom.app.sim.actors[id];return !!c&&Math.hypot(a.pos.x-c.pos.x,a.pos.z-c.pos.z)<=4.5},first,{timeout:5000});await recruit.click();
+ for(const p of pages)await p.waitForFunction(()=>Bloom.app.sim.companions.owned(Bloom.app.localId).length===1||Bloom.app.sim.companions.all().length===1,null,{timeout:10000});
+ const owned=await host.evaluate(()=>Bloom.app.sim.companions.owned(Bloom.app.localId));assert.equal(owned.length,1);const unitId=owned[0].id;assert.equal(owned[0].owner,ids[0]);pass('host recruits one candidate with a stable individual ID',{unitId,kind:owned[0].kind,owner:owned[0].owner});
+ await host.locator('[data-companion-slot-target="0"]').click();await host.locator('[data-unit-id="'+unitId+'"] [data-companion-action="equip"]').click();
+ for(const p of pages)await p.waitForFunction(id=>Bloom.app.sim.companions.data.units[id]?.location==='combat',unitId,{timeout:10000});
+ states=await Promise.all(pages.map(placementState));assert.deepEqual(normalize(states[0].units),normalize(states[1].units));assert.deepEqual(states[0].bases,states[1].bases);pass('individual ownership and combat slot replicate identically',{units:normalize(states[0].units)});
+
+ await join.evaluate(id=>Bloom.app.command({op:'companion',action:'assign',id,location:'combat',slot:1}),unitId);await host.waitForTimeout(350);states=await Promise.all(pages.map(placementState));assert.equal(states[0].units[unitId].slot,0);assert.equal(states[1].units[unitId].slot,0);pass('a remote peer cannot place another owner’s individual in its slot');
+ const native=[];for(const p of pages)native.push(await p.evaluate(async()=>{const rows=[];for(const pc of Bloom.app.net.room.peerConnections.values()){const stats=await pc.getStats();for(const s of stats.values())if(s.type==='candidate-pair'&&s.state==='succeeded'&&s.nominated)rows.push({state:s.state,bytesSent:s.bytesSent,bytesReceived:s.bytesReceived});}return rows;}));assert(native.every(rows=>rows.some(s=>s.bytesSent>0&&s.bytesReceived>0)));pass('nominated native RTC candidate pairs carry data in both directions',{native});
+
+ await join.locator('#network-btn').click();await join.locator('#reconnect-room').click();await join.waitForFunction(id=>Bloom.app.net.session?.players.length===2&&Bloom.app.actor()?.id===id&&Bloom.app.net.phase==='running',ids[1],{timeout:45000});
+ for(const p of pages)await p.waitForFunction(({id,owner})=>Bloom.app.sim.companions.data.units[id]?.owner===owner,{id:unitId,owner:ids[0]},{timeout:12000});states=await Promise.all(pages.map(placementState));assert.deepEqual(normalize(states[0].units),normalize(states[1].units));pass('reconnect preserves room identity and companion slot ownership',{players:ids,unitId});
+ assert.deepEqual(errors,[]);report.status='PASS';report.limit='Two local Edge clients through the live public signaling/RTC path; external NAT combinations not covered.';
+}catch(error){report.status='FAIL';report.error=error.stack;console.error(error);process.exitCode=1;}
+finally{report.elapsedMs=Date.now()-began;report.errors=errors;fs.writeFileSync(new URL('rtc-result.json',out),JSON.stringify(report,null,2));clearTimeout(timeout);await browser?.close();server?.close();}

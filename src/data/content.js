@@ -1,9 +1,9 @@
 const BIOMES=Object.freeze({
- meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',trees:18,fungus:false,ore:'coalOre',oreBonus:0},
- forest:{name:'포자 수림',surface:'grass',soil:'dirt',trees:82,fungus:false,ore:'coalOre',oreBonus:.025},
- fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',trees:64,fungus:true,ore:'ironOre',oreBonus:.015},
- dry:{name:'모래 구릉',surface:'sand',soil:'sand',trees:5,fungus:false,ore:'goldOre',oreBonus:.025},
- cold:{name:'서리 고원',surface:'snow',soil:'dirt',trees:24,fungus:false,ore:'ironOre',oreBonus:.025}
+ meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',resources:{ore:'coalOre',bonus:0},vegetation:{density:18,canopy:'leaves',roots:['grass'],minHeight:3,maxHeight:15,maxSlope:1,maxExposure:2.5,minWet:-.8},decorations:{caveBloom:.035},wildlife:['shell','leaf']},
+ forest:{name:'포자 수림',surface:'grass',soil:'dirt',resources:{ore:'coalOre',bonus:.025},vegetation:{density:82,canopy:'leaves',roots:['grass'],minHeight:3,maxHeight:16,maxSlope:1,maxExposure:2,minWet:-.2},decorations:{caveBloom:.055},wildlife:['shell','leaf']},
+ fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',resources:{ore:'ironOre',bonus:.015},vegetation:{density:64,canopy:'cap',roots:['mycelium'],minHeight:3,maxHeight:15,maxSlope:1,maxExposure:2.5,minWet:-.2},decorations:{caveBloom:.08},wildlife:['leaf']},
+ dry:{name:'모래 구릉',surface:'sand',soil:'sand',resources:{ore:'goldOre',bonus:.025},vegetation:{density:0,canopy:'leaves',roots:['grass'],minHeight:3,maxHeight:12,maxSlope:0,maxExposure:1,minWet:.15},decorations:{caveBloom:.005},wildlife:['shell']},
+ cold:{name:'서리 고원',surface:'snow',soil:'dirt',resources:{ore:'ironOre',bonus:.025},vegetation:{density:24,canopy:'leaves',roots:['snow'],minHeight:3,maxHeight:17,maxSlope:1,maxExposure:2.5,maxHeat:.15},decorations:{caveBloom:.035},wildlife:['shell','leaf']}
 });
 const BLOCKS=[
  {id:'air',name:'공기',color:'#ffffff',solid:false},
