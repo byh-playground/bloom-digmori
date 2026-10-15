@@ -25,7 +25,7 @@ class Physics {
    const lo={x:Math.min(p.x,end.x)-radius-margin,y:Math.min(p.y,end.y,apex)-margin,z:Math.min(p.z,end.z)-radius-margin},hi={x:Math.max(p.x,end.x)+radius+margin,y:Math.max(p.y,end.y,apex)+height+margin,z:Math.max(p.z,end.z)+radius+margin};
    for(let z=Math.floor(lo.z/C);z<=Math.floor(hi.z/C);z++)for(let y=Math.max(Math.floor(CFG.bottom/C),Math.floor(lo.y/C));y<=Math.min(Math.ceil(CFG.top/C)-1,Math.floor(hi.y/C));y++)for(let x=Math.floor(lo.x/C);x<=Math.floor(hi.x/C);x++)set.add(chunkKey(x,y,z));};
   for(const a of actors){if(a.dead||a.suspended)continue;const body=a.body!=null?this.world.getRigidBody(a.body):null;const scale=a.scale||1,r=CFG.player.radius*scale,h=2*(CFG.player.radius+CFG.player.halfHeight)*scale,v=body?body.linvel():a.velocity||{x:0,y:0,z:0};
-   bounds(required,a.pos,v,dt,r,h,a.enemy?CFG.terrain.margin:Math.max(CFG.terrain.margin,CFG.reach));bounds(predictive,a.pos,v,CFG.terrain.predictSeconds,r,h,CFG.terrain.margin+1);}
+   bounds(required,a.pos,v,dt,r,h,a.enemy||a.speciesId||a.boss?CFG.terrain.margin:Math.max(CFG.terrain.margin,CFG.reach));bounds(predictive,a.pos,v,CFG.terrain.predictSeconds,r,h,CFG.terrain.margin+1);}
   for(const e of [...drops,...shots]){const b=this.world.getRigidBody(e.body),v=b?b.linvel():e.velocity||{x:0,y:0,z:0},r=e.radius||(e.type==='shot'?.11:.16),p={x:e.pos.x,y:e.pos.y-r,z:e.pos.z};const gravityScale=b?.gravityScale?.()??(e.type==='shot'?.2:1);bounds(required,p,v,dt,r,r*2,CFG.terrain.margin,gravityScale);if(e.type==='shot'||b&&!b.isSleeping())bounds(predictive,p,v,CFG.terrain.predictSeconds*.5,r,r*2,.5,gravityScale);}
   for(const k of required)predictive.delete(k);return{required:[...required].sort(cmp),predictive:[...predictive].sort(cmp)};
  }
@@ -116,7 +116,7 @@ class Physics {
   }
   const max=(actor.knock>0?CFG.combat.knockback.drag:actor.combat.state==='roll'?70:CFG.player.acceleration)*dt,d={x:clamp(move.x*speed-vel.x,-max,max),y:0,z:clamp(move.z*speed-vel.z,-max,max)};
   b.applyImpulse({x:d.x*m,y:0,z:d.z*m},true);const ground=this.ground(actor,actor.pos,CFG.movement.groundGap,true);actor.grounded=!!ground&&vel.y<2;
-  const autoStep=allowAutoJump&&!jump&&!actor.enemy&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(move.x,move.z)>.35&&this.autoJump(actor,move);
+  const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(move.x,move.z)>.35&&this.autoJump(actor,move);
   if((jump||autoStep)&&actor.grounded){const vertical=autoStep?Math.sqrt(2*CFG.player.gravity*CFG.movement.autoStepRise):CFG.player.jump;
    b.applyImpulse({x:0,y:(vertical-vel.y)*m,z:0},true);actor.grounded=false;}
  }

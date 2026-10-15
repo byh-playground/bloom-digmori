@@ -44,20 +44,20 @@ function contactCast(collider,ball,from,to){
  return {point:{...point},normal:V.norm(normal),fraction:t};
 }
 function knockbackResponse(target,power,blocked=false,heavy=false){
- const k=CFG.combat.knockback,resistance=target.enemy?(k.enemies[target.kind]??1):k.playerResistance,
+ const k=CFG.combat.knockback,creature=target.boss?'boss':target.speciesId||target.kind,resistance=creature?(k.creatures[creature]??k.enemies[creature]??1):k.playerResistance,
   horizontal=clamp(power*resistance*(blocked?k.guardScale:1),0,k.maxSpeed),lift=blocked?.12:clamp(.55+horizontal*.115+(heavy?.25:0),.5,2.3),
   duration=blocked?120:Math.round((k.duration+(heavy?100:0))*clamp(resistance,.5,1.1));
  return {horizontal,lift,duration};
 }
 
-/* One action executor and one hit resolver for players, regular enemies and bosses. */
+/* One action executor and one hit resolver for players, retaliating wildlife, hostile mobs, and bosses. */
 class Combat {
  static state(){return {state:'idle',elapsed:0,action:null,charge:0,left:false,right:false,secondary:false,combo:0,comboUntil:0,comboWeapon:null,queued:false,airRollUsed:false,stamina:{value:CFG.player.stamina,delay:0},poise:{damage:0,delay:0},invul:0};}
  static canAct(c){return c.state==='idle'||c.state==='guard'||c.state==='charge'||c.state==='secondary'||(c.state==='attack'&&c.elapsed>=c.action.wind+c.action.active+c.action.recovery*.68);}
  static spend(a,n){const s=a.combat.stamina;if(s.value+1e-5<n)return false;s.value=Math.max(0,s.value-n);s.delay=CFG.stamina.delay;return true;}
  static sprintCost(a,distance){if(!a?.sprinting||a.enemy||distance<=.0001)return 0;const s=a.combat.stamina,cost=qf(Math.max(0,distance)*CFG.stamina.sprintPerMeter);if(cost<=0)return 0;s.value=qf(Math.max(0,s.value-cost));s.delay=CFG.stamina.delay;if(s.value<=.001)a.sprinting=false;return cost;}
  static refundOnHit(source,payload,blocked){if(!source||source.enemy||blocked||payload.staminaRefunded||!Number.isFinite(payload.cost)||payload.cost<=0)return 0;let ratio=CFG.stamina.hitRefund;if(payload.name==='charged')ratio=CFG.stamina.chargedRefund;else if(payload.name==='light'&&payload.combo>=2)ratio=CFG.stamina.finisherRefund;const planned=Math.min(payload.cost,statStep(payload.cost*ratio,STAT_SCALE.stamina)),s=source.combat.stamina,gained=Math.max(0,Math.min(planned,RPG.staminaMax(source)-s.value));payload.staminaRefunded=true;if(gained>0)s.value=qf(s.value+gained);return gained;}
- static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=COMPANION_TYPES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.art==='ball'?80:280,recovery:350,arc:1.9,secondary:'none',guard:0};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,poise:10,reach:3.0,arc:1.25,cost:10,weight:0,wind:200,active:100,recovery:350,combo:3,charge:[550,1100],skill:'punch',secondary:'guard',guard:.12};}
+ static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=SPECIES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.art==='ball'?80:280,recovery:350,arc:1.9,secondary:'none',guard:0};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,poise:10,reach:3.0,arc:1.25,cost:10,weight:0,wind:200,active:100,recovery:350,combo:3,charge:[550,1100],skill:'punch',secondary:'guard',guard:.12};}
  static resetCombo(c){c.combo=0;c.comboUntil=0;c.comboWeapon=null;c.queued=false;}
  static equipmentKey(a,sim=null){return sim?.companions.equipped(a)?.id||Inventory.stats(a).item?.id||'fist';}
  static makeAction(a,kind,tier=0,sim=null){if(sim&&!a.enemy&&a.companionSlot>=0)return sim.companions.action(a,kind,tier);const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
@@ -178,7 +178,7 @@ class Combat {
   const c=target.combat,point=contact?.point||V.add(target.pos,{x:0,y:target.offset||.9,z:0});
   if(c.invul>0||c.state==='roll'&&c.elapsed>=CFG.iframes.start&&c.elapsed<CFG.iframes.end){sim.emit('evade',target,{point,sourceId});return false;}
   let damage=payload.damage,poise=payload.poise,blocked=false,guardBreak=false;
-  const stats=target.enemy?{defense:target.boss?25:0,poise:target.maxPoise}:Inventory.stats(target),projectile=payload.type==='shot',
+  const stats=target.boss||target.speciesId||target.enemy?{defense:target.boss?25:0,poise:target.maxPoise}:Inventory.stats(target),projectile=payload.type==='shot',
    incoming=projectile?V.norm(V.scale(payload.flightVelocity||payload.velocity||payload.dir,-1)):source?V.norm(V.sub(source.pos,target.pos)):V.scale(payload.dir,-1);
   if(c.state==='guard'&&V.dot(V.norm({x:target.facing.x,y:0,z:target.facing.z}),V.norm({x:incoming.x,y:0,z:incoming.z}))>.5){
    const w=this.weapon(target),cost=damage*(1-w.guard*.55)+poise*.2;
@@ -189,12 +189,12 @@ class Combat {
   c.poise.damage+=poise;c.poise.delay=CFG.poise.delay;
   const stagger=guardBreak||c.poise.damage>=stats.poise,heavy=payload.tier>0||payload.poise>=40||stagger,lethal=target.hp<=0;
   if(stagger){this.resetCombo(c);c.state='stagger';c.elapsed=0;c.action=null;c.charge=0;c.secondary=false;c.queued=false;c.poise.damage=0;sim.emit('stagger',target,{point,sourceId});}
+  if(target.speciesId&&source){target.wildState='retaliating';target.enemy=true;target.targetId=source.id;}
   if(!target.enemy)c.invul=200;
   let push=projectile?V.norm({x:(payload.flightVelocity||payload.velocity||payload.dir).x,y:0,z:(payload.flightVelocity||payload.velocity||payload.dir).z}):source?V.norm({x:target.pos.x-source.pos.x,y:0,z:target.pos.z-source.pos.z}):V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   if(V.len(push)<.001)push=V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   const response=knockbackResponse(target,payload.impulse||4,blocked,heavy);sim.physics.impulse(target,push,response.horizontal,response);
   const staminaRefund=this.refundOnHit(source,payload,blocked);
-  if(target.candidateCompanion&&source&&!source.enemy)target.targetId=source.id;
   const event={damage,staminaRefund,point:{...point},normal:contact?.normal||V.scale(push,-1),direction:push,sourceId,weapon:payload.weapon||(projectile?'bow':'fist'),tier:payload.tier||0,sequence:payload.sequence||0,heavy,stagger,guardBreak,blocked,lethal,power:response.horizontal};
   sim.emit(blocked?'guard':'hit',target,event);
   if(source)sim.emit('attack-hit',source,{...event,targetId:target.id});

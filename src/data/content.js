@@ -99,8 +99,9 @@ const ENEMIES={beetle:{name:'가시갑충',kind:'bug',hp:100,poise:50,speed:2.6,
  crystalWisp:{name:'수정 정령',kind:'fungus',hp:75,poise:25,speed:3,damage:20,poiseDamage:15,reach:15,wind:650,active:100,recovery:1100,loot:[['crystalShard',2]],tint:[.55,.89,1,1],size:.95,ranged:true},
  cryptKnight:{name:'유적의 철갑 기사',kind:'bug',hp:175,poise:100,speed:2.3,damage:30,poiseDamage:30,reach:2.7,wind:850,active:175,recovery:1000,loot:[['iron',2],['crystalShard',1]],tint:[.78,.73,.96,1],size:1.35},
  spore:{name:'떠도는 포자사수',kind:'fungus',hp:75,poise:25,speed:2,damage:15,poiseDamage:10,reach:16,wind:900,active:100,recovery:1500,loot:[['food',2],['fiber',1]],tint:[.82,.72,.98,1],size:1.0,ranged:true},
- guardian:{name:'철갑 경비병',kind:'bug',hp:200,poise:100,speed:2.1,damage:25,poiseDamage:25,reach:2.6,wind:900,active:175,recovery:1000,loot:[['iron',1],['seed',3]],tint:[.7,.86,.77,1],size:1.3},
- boss:{name:'잠든 화원의 수호자',kind:'fungus',hp:1000,poise:250,speed:2.5,damage:35,poiseDamage:40,reach:4.3,wind:1000,active:200,recovery:1400,loot:[['heart',1],['diamond',3]],tint:[1,.69,.68,1],size:2.8}};
+ guardian:{name:'철갑 경비병',kind:'bug',hp:200,poise:100,speed:2.1,damage:25,poiseDamage:25,reach:2.6,wind:900,active:175,recovery:1000,loot:[['iron',1],['seed',3]],tint:[.7,.86,.77,1],size:1.3}};
+// The altar guardian is a special encounter, not part of the wild species roster.
+const BOSS=Object.freeze({name:'잠든 화원의 수호자',kind:'fungus',hp:1000,poise:250,speed:2.5,damage:35,poiseDamage:40,reach:4.3,wind:1000,active:200,recovery:1400,loot:[['heart',1],['diamond',3]],tint:[1,.69,.68,1],size:2.8});
 
 
 const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'}),endurance:Object.freeze({name:'지구력',description:'최대 기력 +10'})});
@@ -109,6 +110,6 @@ const QUESTS=Object.freeze([
  Object.freeze({id:'stone_pick',title:'석기 도구',hint:'돌 곡괭이를 제작하세요.'}),
  Object.freeze({id:'crystalShard',title:'동굴 속 푸른빛',hint:'Y -10 아래 공명 수정을 채광하세요.'}),
  Object.freeze({id:'chests',title:'고대의 보물',hint:'폐광 또는 유적의 보물함을 F로 여세요.'}),
- Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 수호체를 쓰러뜨리세요.'}),
+ Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 적대 생물을 모두 쓰러뜨리세요.'}),
  Object.freeze({id:'boss',title:'잠든 화원의 수호자',hint:'꽃 제단에서 수호자 보스에 도전하세요.'})
 ]);
