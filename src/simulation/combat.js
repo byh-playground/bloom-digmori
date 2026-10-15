@@ -194,6 +194,7 @@ class Combat {
   if(V.len(push)<.001)push=V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   const response=knockbackResponse(target,payload.impulse||4,blocked,heavy);sim.physics.impulse(target,push,response.horizontal,response);
   const staminaRefund=this.refundOnHit(source,payload,blocked);
+  if(target.candidateCompanion&&source&&!source.enemy)target.targetId=source.id;
   const event={damage,staminaRefund,point:{...point},normal:contact?.normal||V.scale(push,-1),direction:push,sourceId,weapon:payload.weapon||(projectile?'bow':'fist'),tier:payload.tier||0,sequence:payload.sequence||0,heavy,stagger,guardBreak,blocked,lethal,power:response.horizontal};
   sim.emit(blocked?'guard':'hit',target,event);
   if(source)sim.emit('attack-hit',source,{...event,targetId:target.id});
