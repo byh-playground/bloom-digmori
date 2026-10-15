@@ -56,7 +56,7 @@ class Combat {
  static weapon(a){const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,poise:10,reach:3.0,arc:1.25,cost:10,weight:0,wind:200,active:100,recovery:350,combo:3,charge:[550,1100],skill:'punch',secondary:'guard',guard:.12};}
  static resetCombo(c){c.combo=0;c.comboUntil=0;c.comboWeapon=null;c.queued=false;}
  static equipmentKey(a){return Inventory.stats(a).item?.id||'fist';}
- static makeAction(a,kind,tier=0){const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
+ static makeAction(a,kind,tier=0,sim=null){if(sim&&!a.enemy&&a.companionSlot>=0)return sim.companions.action(a,kind,tier);const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
   const melee=weapon!=='bow'&&weapon!=='shield',count=melee?BASIC_CHAIN.length:w.combo;
   const continuing=c.comboWeapon===weaponKey&&(c.comboUntil>0||c.state==='attack'&&c.action?.name==='light');
   const combo=kind==='light'&&continuing?c.combo%count:0,stage=kind==='light'&&melee?BASIC_CHAIN[combo]:null;
@@ -71,7 +71,7 @@ class Combat {
    arc:w.arc,damage:statStep(Math.max(STAT_SCALE.damage,w.damage+damageBonus+(a.rpg?.skills.might||0)*5)*mult*(1+combo*.1),STAT_SCALE.damage),poise:statStep(w.poise*mult,STAT_SCALE.poise),cost:statStep(w.cost*(kind==='charged'?1+tier*.5:kind==='skill'?1.5:1),STAT_SCALE.stamina),
    impulse:(CFG.combat.knockback.weapons[weapon]||5)*(1+(mult-1)*.55+combo*.08),enemy:a.enemy,dir:{...a.facing},hits:[],touched:[],fired:false,staminaRefunded:false,sequence:0};
  }
- static start(a,action,sim){const c=a.combat;if(!this.canAct(c)||!this.spend(a,action.cost))return false;
+ static start(a,action,sim){const c=a.combat;if(!action||!this.canAct(c)||action.companionId&&sim.companions.ready(a)?.id!==action.companionId||!this.spend(a,action.cost))return false;if(action.companionId&&!sim.companions.start(a,action))return false;
   action.sequence=++sim.actionSequence;action.enemy=a.enemy;c.state='attack';c.elapsed=0;c.action=action;c.charge=0;c.secondary=false;c.queued=false;
   if(action.name==='light'){c.combo=action.combo+1;c.comboUntil=0;c.comboWeapon=action.weaponKey;}else this.resetCombo(c);
   sim.emit('windup',a,{kind:action.kind,weapon:action.weapon,tier:action.tier,combo:action.combo,comboCount:action.comboCount,label:action.comboLabel});return true;
@@ -82,7 +82,7 @@ class Combat {
   // The continuation window starts AFTER recovery, never at the initial button press.
   if(act.name==='light'&&c.comboWeapon===act.weaponKey&&c.combo<act.comboCount)c.comboUntil=CFG.combat.combo.window;
   else this.resetCombo(c);
-  if(queue&&!a.enemy&&!this.start(a,this.makeAction(a,'light'),sim)){this.resetCombo(c);sim.emit('exhausted',a);}
+  if(queue&&!a.enemy&&!this.start(a,this.makeAction(a,'light',0,sim),sim)){this.resetCombo(c);sim.emit('exhausted',a);}
  }
  static roll(a,move,sim){const c=a.combat,stats=Inventory.stats(a),r=CFG.roll[stats.weightClass],body=sim.physics.world.getRigidBody(a.body);
   // Roll is the deliberate cancel transition out of windup/active/recovery/charge.
@@ -115,22 +115,22 @@ class Combat {
   const submerged=sim.terrain.water.bodyState(a.pos,CFG.player.eyeHeight,CFG.player.radius*(a.scale||1)).inWater;
   if(input.roll&&!submerged)this.roll(a,move,sim);
   if(c.state==='attack'&&ld)c.queued=true; // One buffered successor; repeated taps never create a hidden multi-hit queue.
-  if(ld&&c.state!=='attack'&&this.canAct(c)){c.state='charge';c.charge=0;c.elapsed=0;c.action=null;}
+  if(ld&&c.state!=='attack'&&this.canAct(c)&&(a.companionSlot<0||sim.companions.ready(a))){c.state='charge';c.charge=0;c.elapsed=0;c.action=null;}
   if(c.state==='charge'&&input.left)c.charge+=dt;
   if(lu&&c.state==='charge'){
    const w=this.weapon(a),tier=c.charge>=w.charge[1]?2:c.charge>=w.charge[0]?1:0;
-   this.start(a,this.makeAction(a,tier?'charged':'light',tier),sim);if(c.state==='charge'){this.resetCombo(c);c.state='idle';sim.emit('exhausted',a);}
+   this.start(a,this.makeAction(a,tier?'charged':'light',tier,sim),sim);if(c.state==='charge'){this.resetCombo(c);c.state='idle';sim.emit('exhausted',a);}
   }
-  if(rd&&this.canAct(c)){this.resetCombo(c);c.state='secondary';c.charge=0;c.secondary=false;c.action=null;}
+  if(rd&&this.canAct(c)&&(a.companionSlot<0||sim.companions.ready(a))){this.resetCombo(c);c.state='secondary';c.charge=0;c.secondary=false;c.action=null;}
   if(input.right&&c.state==='secondary'){
    c.charge+=dt;if(c.charge>=CFG.input.hold){c.secondary=true;if(this.weapon(a).secondary==='guard'){c.state='guard';c.elapsed=0;}}
   }
   if(ru){
    if(c.state==='guard'){c.state='idle';c.action=null;}
    else if(c.state==='secondary'){
-    const action=this.makeAction(a,c.secondary?'secondary':'skill',c.charge>1200?2:1);
-    if(c.secondary&&action.kind==='spin'){action.arc=TAU;action.active=650;action.recovery=700;action.cost=35;action.damage*=1.3;}
-    if(c.secondary&&action.kind==='precision'){action.kind='arrow';action.damage*=1.8;action.cost=28;action.reach=45;}
+    const action=this.makeAction(a,c.secondary?'secondary':'skill',c.charge>1200?2:1,sim);
+    if(c.secondary&&action?.kind==='spin'){action.arc=TAU;action.active=650;action.recovery=700;action.cost=35;action.damage*=1.3;}
+    if(c.secondary&&action?.kind==='precision'){action.kind='arrow';action.damage*=1.8;action.cost=28;action.reach=45;}
     if(!this.start(a,action,sim)){c.state='idle';sim.emit('exhausted',a);}
    }
   }
@@ -151,8 +151,8 @@ class Combat {
   if(c.state!=='attack')return;const act=c.action,prev=c.elapsed-dt,end=act.wind+act.active;
   if(c.elapsed>act.wind&&prev<end){
    if(!act.swung){act.swung=true;sim.emit('swing',a,{weapon:act.weapon,kind:act.kind,tier:act.tier,sequence:act.sequence,combo:act.combo,comboCount:act.comboCount,label:act.comboLabel});}
-   if(['arrow','quickshot','spit','precision'].includes(act.kind)){
-    if(!act.fired){act.fired=true;if(!a.enemy&&!Inventory.takeFrom(a.inventory.slots,'arrow',1)){sim.emit('no-arrow',a);}else sim.fire(a,act);}
+   if(['companionBall','arrow','quickshot','spit','precision'].includes(act.kind)){
+    if(!act.fired){act.fired=true;if(act.kind!=='companionBall'&&!a.enemy&&!Inventory.takeFrom(a.inventory.slots,'arrow',1)){sim.emit('no-arrow',a);}else sim.fire(a,act);}
    }else if(act.kind==='burst'){
     if(!act.fired){act.fired=true;for(const t of Object.values(sim.actors).sort((a,b)=>cmp(a.id,b.id))){if(t.id===a.id||t.dead||t.suspended)continue;const d=V.sub(t.pos,a.pos);if(V.len(d)<act.reach&&sim.physics.sight(V.add(a.pos,{x:0,y:1,z:0}),V.add(t.pos,{x:0,y:1,z:0}),a))this.hit(a.id,t,act,sim);}sim.emit('burst',a,{radius:act.reach});}
    }else{
