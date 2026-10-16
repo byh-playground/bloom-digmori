@@ -1,9 +1,9 @@
 const BIOMES=Object.freeze({
- meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',resources:{ore:'coalOre',bonus:0},vegetation:{density:18,canopy:'leaves',roots:['grass'],minHeight:3,maxHeight:15,maxSlope:1,maxExposure:2.5,minWet:-.8},decorations:{caveBloom:.035},wildlife:['shell','leaf']},
- forest:{name:'포자 수림',surface:'grass',soil:'dirt',resources:{ore:'coalOre',bonus:.025},vegetation:{density:82,canopy:'leaves',roots:['grass'],minHeight:3,maxHeight:16,maxSlope:1,maxExposure:2,minWet:-.2},decorations:{caveBloom:.055},wildlife:['shell','leaf']},
- fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',resources:{ore:'ironOre',bonus:.015},vegetation:{density:64,canopy:'cap',roots:['mycelium'],minHeight:3,maxHeight:15,maxSlope:1,maxExposure:2.5,minWet:-.2},decorations:{caveBloom:.08},wildlife:['leaf']},
- dry:{name:'모래 구릉',surface:'sand',soil:'sand',resources:{ore:'goldOre',bonus:.025},vegetation:{density:0,canopy:'leaves',roots:['grass'],minHeight:3,maxHeight:12,maxSlope:0,maxExposure:1,minWet:.15},decorations:{caveBloom:.005},wildlife:['shell']},
- cold:{name:'서리 고원',surface:'snow',soil:'dirt',resources:{ore:'ironOre',bonus:.025},vegetation:{density:24,canopy:'leaves',roots:['snow'],minHeight:3,maxHeight:17,maxSlope:1,maxExposure:2.5,maxHeat:.15},decorations:{caveBloom:.035},wildlife:['shell','leaf']}
+ meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-.13,.10]},maxSlope:1,maxExposure:2.5},vegetation:{density:18,canopy:'leaves'},resources:{ore:'coalOre',bonus:0,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[-.13,.10]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-.13,.10]}}},wildlife:['shell','leaf']},
+ forest:{name:'포자 수림',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,16],climate:{heat:[-.15,.15],wet:[.10,1]},maxSlope:1,maxExposure:2},vegetation:{density:82,canopy:'leaves'},resources:{ore:'coalOre',bonus:.025,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[.10,1]}},decorations:{caveBloom:{chance:.055,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[.10,1]}}},wildlife:['shell','leaf']},
+ fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',habitat:{surfaces:['mycelium'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-1,-.13]},maxSlope:1,maxExposure:2.5},vegetation:{density:64,canopy:'cap'},resources:{ore:'ironOre',bonus:.015,substrate:'stone',minDepth:3,surface:'mycelium',climate:{heat:[-.15,.15],wet:[-1,-.13]}},decorations:{caveBloom:{chance:.08,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-1,-.13]}}},wildlife:['leaf']},
+ dry:{name:'모래 구릉',surface:'sand',soil:'sand',habitat:{surfaces:['sand'],elevation:[3,12],climate:{heat:[.15,1],wet:[-1,1]},maxSlope:0,maxExposure:1},vegetation:{density:0,canopy:'leaves'},resources:{ore:'goldOre',bonus:.025,substrate:'stone',minDepth:3,surface:'sand',climate:{heat:[.15,1],wet:[-1,1]}},decorations:{caveBloom:{chance:.005,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[.15,1],wet:[-1,1]}}},wildlife:['shell']},
+ cold:{name:'서리 고원',surface:'snow',soil:'dirt',habitat:{surfaces:['snow'],elevation:[3,10],climate:{heat:[-1,-.15],wet:[-1,1]},maxSlope:.75,maxExposure:1},vegetation:{density:8,canopy:'leaves'},resources:{ore:'ironOre',bonus:.025,substrate:'stone',minDepth:3,surface:'snow',climate:{heat:[-1,-.15],wet:[-1,1]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-1,-.15],wet:[-1,1]}}},wildlife:['shell','leaf']}
 });
 const BLOCKS=[
  {id:'air',name:'공기',color:'#ffffff',solid:false},
@@ -35,10 +35,10 @@ const BLOCKS=[
 ];
 const BID=Object.fromEntries(BLOCKS.map((b,i)=>[b.id,i]));
 const RESOURCE_DEFS=Object.freeze([
- Object.freeze({id:'coalOre',name:'석탄',min:-4,max:24,peak:10,tool:'나무 곡괭이',hint:'얕은 동굴·바위 능선',salt:12,scale:.20,threshold:.43,peakBonus:.17}),
- Object.freeze({id:'ironOre',name:'철',min:-18,max:16,peak:2,tool:'돌 곡괭이',hint:'동굴·폐광 주변',salt:33,scale:.17,threshold:.46,peakBonus:.18}),
- Object.freeze({id:'goldOre',name:'금',min:-28,max:-4,peak:-16,tool:'철 곡괭이',hint:'깊은 동굴·던전 벽',salt:63,scale:.15,threshold:.50,peakBonus:.16}),
- Object.freeze({id:'diamondOre',name:'다이아몬드',min:-31,max:-15,peak:-24,tool:'철 곡괭이',hint:'최심부·고대 화원 유적',salt:47,scale:.18,threshold:.56,peakBonus:.14})
+ Object.freeze({id:'coalOre',name:'석탄',min:-4,max:24,peak:10,substrate:'stone',tool:'나무 곡괭이',hint:'얕은 동굴·바위 능선',salt:12,scale:.20,threshold:.43,peakBonus:.17}),
+ Object.freeze({id:'ironOre',name:'철',min:-18,max:16,peak:2,substrate:'stone',tool:'돌 곡괭이',hint:'동굴·폐광 주변',salt:33,scale:.17,threshold:.46,peakBonus:.18}),
+ Object.freeze({id:'goldOre',name:'금',min:-28,max:-4,peak:-16,substrate:'stone',tool:'철 곡괭이',hint:'깊은 동굴·던전 벽',salt:63,scale:.15,threshold:.50,peakBonus:.16}),
+ Object.freeze({id:'diamondOre',name:'다이아몬드',min:-31,max:-15,peak:-24,substrate:'stone',tool:'철 곡괭이',hint:'최심부·고대 화원 유적',salt:47,scale:.18,threshold:.56,peakBonus:.14})
 ]);
 const RESOURCE_BY_ID=Object.freeze(Object.fromEntries(RESOURCE_DEFS.map(def=>[def.id,def])));
 const resourceRangeText=id=>{const r=RESOURCE_BY_ID[id];return r?`${r.name} Y ${r.min}~${r.max}`:'';};
