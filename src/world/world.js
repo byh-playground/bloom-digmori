@@ -16,6 +16,7 @@ const DUNGEON_EDGES=Object.freeze([[0,1],[0,2],[1,3],[2,4],[3,5],[4,5],[1,4]]);
 /* Seed + integer block edits own the world; meshes/LOD/physics caches never own gameplay state. */
 const FACE_DIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 const blockKey=(x,y,z)=>x+','+y+','+z,chunkKey=(x,y,z)=>x+':'+y+':'+z,columnKey=(x,z)=>x+':'+z;
+const biomeRangeContains=(value,range)=>Array.isArray(range)&&value>=range[0]&&value<=range[1];
 /* FluidWorld owns water sources + flowing levels. Terrain remains solid-only.
  * Minecraft-inspired: eight levels, seven horizontal steps, falling columns,
  * finite deterministic tick budget, and one snapshot owner for multiplayer. */
@@ -162,11 +163,11 @@ class VoxelWorld {
   if(Math.abs(x-24)<=4&&Math.abs(z+14)<=4)h=4;
   h=clamp(h,-8,24);this.heights.set(key,h);return h;
  }
- vegetationSite(x,z,biome=BIOMES[this.climate(x,z).id]){const rule=biome.vegetation,h=this.height(x,z),climate=this.climate(x,z);
-  if(!rule.density||h<rule.minHeight||h>rule.maxHeight||climate.wet<rule.minWet||rule.maxHeat!==undefined&&climate.heat>rule.maxHeat)return null;
-  const ground=h<CFG.sea+2?'sand':biome.surface;if(!rule.roots.includes(BLOCKS[BID[ground]]?.id)||this.edits.has(blockKey(x,h,z)))return null;
+ vegetationSite(x,z,biome=BIOMES[this.climate(x,z).id]){const rule=biome.vegetation,habitat=biome.habitat,h=this.height(x,z),climate=this.climate(x,z);
+  if(!rule.density||!biomeRangeContains(h,habitat.elevation)||!biomeRangeContains(climate.heat,habitat.climate.heat)||!biomeRangeContains(climate.wet,habitat.climate.wet))return null;
+  const ground=h<CFG.sea+2?'sand':biome.surface;if(!habitat.surfaces.includes(BLOCKS[BID[ground]]?.id)||this.edits.has(blockKey(x,h,z)))return null;
   let low=Infinity,high=-Infinity,total=0;for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dz)continue;const next=this.height(x+dx,z+dz);low=Math.min(low,next);high=Math.max(high,next);total+=next;}
-  if(high-low>rule.maxSlope)return null;const exposure=Math.max(0,h-total/8);if(exposure>rule.maxExposure)return null;
+  if(high-low>habitat.maxSlope)return null;const exposure=Math.max(0,h-total/8);if(exposure>habitat.maxExposure)return null;
   return{height:h,canopy:rule.canopy};
  }
  biome(x,z){const h=this.height(Math.floor(x),Math.floor(z));return h<3?'이슬 해안':BIOMES[this.climate(x,z).id].name;}
@@ -215,12 +216,13 @@ class VoxelWorld {
  rawTerrain(x,y,z,h){if(y<=CFG.bottom)return BID.bedrock;if(y>=CFG.top||y>h)return 0;
   const depth=h-y;
   if(this.caveCarve(x,y,z,depth))return 0;
-  const biome=BIOMES[this.climate(x,z).id];
+  const climate=this.climate(x,z),biome=BIOMES[climate.id];
   if(y===h)return h<CFG.sea+2?BID.sand:BID[biome.surface];
   if(depth<=2)return h<CFG.sea+2?BID.sand:BID[biome.soil];
   const vein=(salt,scale=.17)=>noise(x*scale,y*scale*.91,z*scale,this.seed+salt)*.68+noise(x*scale*.47,y*scale*.51,z*scale*.47,this.seed+salt+1)*.32;
   // Resource depth/rarity comes from RESOURCE_DEFS; worldgen and UI never duplicate the bands.
-  for(let i=RESOURCE_DEFS.length-1;i>=0;i--){const r=RESOURCE_DEFS[i],band=this.oreBand(y,r.min,r.max,r.peak);if(band>0&&vein(r.salt,r.scale)>r.threshold-band*r.peakBonus-(r.id===biome.resources.ore?biome.resources.bonus:0))return BID[r.id];}
+  const profile=biome.resources,resourceSite=depth>=profile.minDepth&&profile.substrate==='stone'&&profile.surface===biome.surface&&biomeRangeContains(climate.heat,profile.climate.heat)&&biomeRangeContains(climate.wet,profile.climate.wet);
+  for(let i=RESOURCE_DEFS.length-1;i>=0;i--){const r=RESOURCE_DEFS[i],band=this.oreBand(y,r.min,r.max,r.peak);if(r.substrate===profile.substrate&&band>0&&vein(r.salt,r.scale)>r.threshold-band*r.peakBonus-(resourceSite&&r.id===profile.ore?profile.bonus:0))return BID[r.id];}
   if(y<CFG.bottom+3&&noise(x*.12,0,z*.12,this.seed+543)>.4)return BID.obsidian;
   return BID.stone;
  }
@@ -323,8 +325,8 @@ class VoxelWorld {
      for(let y=Math.max(y0,CFG.bottom+4);y<Math.min(y0+C,-8);y++){
       const j=(x-x0)+C*((y-y0)+C*(z-z0));
       if(out[j]||y<=y0)continue;
-      const biome=BIOMES[this.climate(x,z).id],roll=hash3(x,y,z,this.seed+2993)%10000;
-      if(out[j-C]===BID.stone&&roll<Math.floor(biome.decorations.caveBloom*10000))out[j]=BID.crystalBloom;
+      const climate=this.climate(x,z),rule=BIOMES[climate.id].decorations.caveBloom,roll=hash3(x,y,z,this.seed+2993)%10000;
+      if(y>=rule.y[0]&&y<=rule.y[1]&&rule.host==='stone'&&biomeRangeContains(climate.heat,rule.climate.heat)&&biomeRangeContains(climate.wet,rule.climate.wet)&&out[j-C]===BID[rule.host]&&roll<Math.floor(rule.chance*10000))out[j]=BID.crystalBloom;
      }
     }
    }

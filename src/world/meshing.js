@@ -3,7 +3,7 @@
 class MeshBuilder {
  constructor(){this.epoch=0;this.jobSerial=0;this.pending=new Map();this.ready=[];this.jobs=[];this.worker=null;this.local=null;this.current=null;this.mode='uninitialized';this.stats={sent:0,accepted:0,discarded:0,failed:0};this.seen=0;}
  source(){return `const BIOMES=${JSON.stringify(BIOMES)},CFG=${JSON.stringify(CFG)},BLOCKS=${JSON.stringify(BLOCKS)},BID=${JSON.stringify(BID)},RESOURCE_DEFS=${JSON.stringify(RESOURCE_DEFS)},DUNGEON_ROOMS=${JSON.stringify(DUNGEON_ROOMS)},DUNGEON_THEMES=${JSON.stringify(DUNGEON_THEMES)},DUNGEON_EDGES=${JSON.stringify(DUNGEON_EDGES)};
-const clamp=${clamp},lerp=${lerp},cmp=${cmp},sq=${sq},hash3=${hash3},noise=${noise},fbm=${fbm},blockKey=${blockKey},chunkKey=${chunkKey},columnKey=${columnKey};
+const clamp=${clamp},lerp=${lerp},cmp=${cmp},sq=${sq},hash3=${hash3},noise=${noise},fbm=${fbm},blockKey=${blockKey},chunkKey=${chunkKey},columnKey=${columnKey},biomeRangeContains=${biomeRangeContains};
 const METRICS={add(){}};
 ${FluidWorld.toString()}
 ${VoxelWorld.toString()}
