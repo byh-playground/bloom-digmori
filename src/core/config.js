@@ -1,9 +1,10 @@
 
 const DEPENDENCIES=Object.freeze({
  rapier:{package:'@dimforge/rapier3d-deterministic-compat',version:'0.21.0',url:'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs',mirrors:['https://unpkg.com/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs'],timeoutMs:15000},
- gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'baa96876876a08013ad28b5a71c83bfadd285fab',distCommit:'72b09b260edf9650353017acb49c06873fe9f5a1',manifestSha256:'c713809653043e8eb1d9b629c0c2734e9526217f69e04b49283d068c1b5d7da7',timeoutMs:15000,
-  networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'3bded746222c0aa1769697442b579922d406e67d79e3dbf65df5580dd387c007'}),rollback:Object.freeze({file:'rollback.js',sha256:'2c64772369f1bb110a7d5d7f090f687115ca42f9219edf957e1af87e56348696'})}),
-  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'64d1297162f07e78904954628a5c9595e1eddf576b8612a58f41ed594638c37c'}),input:Object.freeze({file:'input.js',sha256:'ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168'}),simloop:Object.freeze({file:'simloop.js',sha256:'1be543dc7e15ef7c87043af98a1fb49a0a45a779098bfa085dc7509709f1ea9c'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84'}),audio:Object.freeze({file:'audio.js',sha256:'7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a'})})}
+ gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'0abe586967704e193a5e85b6b0c598e58bbf193b',distCommit:'95d8676e3eaaa9f80aeed2e3361e258381511c77',manifestSha256:'64699fdd06eef0f94e874703cbb9f7e87c5f1ef067c68241b7dc17d9b172f625',timeoutMs:15000,
+  networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'3bded746222c0aa1769697442b579922d406e67d79e3dbf65df5580dd387c007'}),rollback:Object.freeze({file:'rollback.js',sha256:'cd6353610bf4e8c3b457ee17b4f6b3f9db7df0f261d7c6e74a25d3c07006076c'})}),
+  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'72260336a6c3f2ee0357a303fa8943dd8cfa4f7deea5d9517d311d4cd8796a71'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'193c0e00bd60b89ea59a74be5badb898420ffbd350eb9cd3b7f6b56600d33a74'}),input:Object.freeze({file:'input.js',sha256:'ae84399953c7e54c8d96408c97208f42b2246a8ac27ef5265053cb0beb306168'}),simloop:Object.freeze({file:'simloop.js',sha256:'f1d348b2f6a80b69c867b9bd45fc359f6d0b238885d85edfe0e9b73d03f043f4'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'469a820e22730cdff9a0e4cd37fcbbfa4ffc9af3e39eab6d9a784e1d544caf84'}),audio:Object.freeze({file:'audio.js',sha256:'7e3e16d34ce88124e6ba7699f16d23107a3e42ee93ea5a16691e856e5865c14a'}),rendering:Object.freeze({file:'rendering.js',sha256:'5ec22f1b4c3689b11cd0d4c14acc017b94ce5c11afc859df399898645976e227'}),vectorAssets:Object.freeze({file:'vector-assets.js',sha256:'16400cab82c41e6bf7f6457dd292955dc95e140d806cf5e4c353d8ca74568fbb'}),vectorAssetLoader:Object.freeze({file:'vector-assets-loader.js',sha256:'bdc951f4f6b912a9beea98c2d6056c437064a4e08f4602ede92a2ecbd47e47cf'})})},
+ vectorAssets:Object.freeze({pebbleMole:Object.freeze({url:'assets/companions/pebble-mole.svg',sourcePath:'src/assets/companions/pebble-mole.svg',sha256:'f2dfee77c89084741620974a40d1eb3e49fc9d8c9f813776280d2da7bcdc3cb4',maxBytes:65536,curveSegments:16})})
 });
 /* Digmori — 게임별 스탯 프로필의 SSOT. 시간=ms, 거리=m, HP=생명력. */
 // 표시값을 임의로 떼우지 않는다. 설정 피해/강인도/스태미나는 5단위,
@@ -11,7 +12,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5,poise:5,stamina:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.28.12',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.28.13',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,

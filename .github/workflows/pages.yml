@@ -23,6 +23,16 @@ jobs:
         run: node scripts/build.mjs
       - name: Build companion combat design preview
         run: node scripts/build-companion-preview.mjs
+      - name: Install Chromium for the real SVG/WebGL scenario
+        run: npx playwright install --with-deps chromium
+      - name: Validate source SVG loading, camera, animation, and world depth
+        run: npm run test:companion-svg
+      - name: Save actual browser screenshots and validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digmori-companion-svg-browser-evidence
+          path: artifacts/companion-svg/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist

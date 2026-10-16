@@ -10,7 +10,9 @@ const output=process.env.TEST_REPORT;
 try {
  let url=process.env.TEST_URL;
  if(!url){server=http.createServer((req,res)=>{
-  if(new URL(req.url,'http://localhost').pathname==='/bloom-digmori/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)));}
+  const route=new URL(req.url,'http://localhost').pathname;
+  if(route==='/bloom-digmori/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)));}
+  else if(route==='/bloom-digmori/assets/companions/pebble-mole.svg'){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/companions/pebble-mole.svg',import.meta.url)));}
   else{res.writeHead(404);res.end();}
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));url='http://127.0.0.1:'+server.address().port+'/bloom-digmori/';}
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'chromium'),headless:true});
@@ -83,9 +85,9 @@ try {
  await mobile.tap('#journal-btn');
  const mobileUI=await mobile.evaluate(()=>{const el=document.querySelector('#journal .panel'),r=el.getBoundingClientRect();return{visible:!document.querySelector('#journal').hidden,left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};});
  assert(mobileUI.visible&&mobileUI.left>=0&&mobileUI.top>=0&&mobileUI.right<=mobileUI.width+1&&mobileUI.bottom<=mobileUI.height+1);
- await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,6);assert.deepEqual(errors,[]);
+ await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,9);assert.deepEqual(errors,[]);
  Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/mouse/touch; read-only state observations; no mocked SDK or game-state fixture'});
- console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:6,errors:0}));
+ console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:9,errors:0}));
 } catch(error){Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
 

@@ -14,7 +14,6 @@
   "presentation/animation.js",
   "presentation/art.js",
   "presentation/companion-art.js",
-  "presentation/companions.js",
   "presentation/renderer.js",
   "ui/hud.js",
   "ui/companions.js",
