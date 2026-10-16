@@ -3,6 +3,7 @@ function db(){return new Promise((resolve,reject)=>{const r=indexedDB.open('Bloo
 async function storeSave(bytes){const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction('world','readwrite');tx.objectStore('world').put(bytes,'solo');tx.oncomplete=()=>{d.close();resolve()};tx.onerror=()=>{d.close();reject(tx.error)};});}
 async function readSave(){const d=await db();return new Promise((resolve,reject)=>{const r=d.transaction('world','readonly').objectStore('world').get('solo');r.onsuccess=()=>{d.close();resolve(r.result)};r.onerror=()=>{d.close();reject(r.error)};});}
 let app,bootPromise=null,bootAttempt=0;
+let companionVectorLoader=null,companionVectorPromise=null;
 const gamekitBase=dependency=>`https://cdn.jsdelivr.net/gh/${dependency.repository}@${dependency.distCommit}/`;
 // Import commit-pinned, distribution-ready ESM directly. Do not depend on crypto.subtle,
 // Blob import, or opaque file:// origins. The pinned SHA declarations are build/audit metadata.
@@ -22,7 +23,19 @@ async function loadGamekit(dependency=DEPENDENCIES.gamekit,onProgress=()=>{}){
  for(const [name,module]of results)modules[name]=module;
  if(typeof modules.interpolation.RenderObject!=='function'||typeof modules.interpolation.PresentationRuntime!=='function')throw Error('GameKit display API mismatch');
  if(typeof modules.input.ActionState!=='function'||typeof modules.input.createDOMInput!=='function'||typeof modules.simloop.createLoop!=='function'||typeof modules.simloop.createDeadlineScheduler!=='function'||typeof modules.presentation.PresentationEventQueue!=='function'||typeof modules.audio.AudioPlayer!=='function')throw Error('Gamekit 공개 API 불일치');
+ if(typeof modules.rendering.WebGLDevice!=='function'||typeof modules.rendering.MeshRenderer!=='function'||typeof modules.vectorAssets.createVectorAsset!=='function'||typeof modules.vectorAssetLoader.createVectorAssetLoader!=='function')throw Error('GameKit SVG 월드 렌더 API 불일치');
  return Object.freeze(modules);
+}
+async function loadCompanionVectorAsset(gamekit){
+ if(!companionVectorPromise){
+  const definition=DEPENDENCIES.vectorAssets.pebbleMole;
+  companionVectorLoader=gamekit.vectorAssetLoader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:1});
+  const url=new URL(definition.url,location.href);
+  companionVectorPromise=companionVectorLoader.load(url,{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false}).catch(error=>{
+   companionVectorLoader?.dispose();companionVectorLoader=null;companionVectorPromise=null;throw error;
+  });
+ }
+ return companionVectorPromise;
 }
 async function loadExternalRapier(dependency=DEPENDENCIES.rapier,onProgress=()=>{},retry=0){
  const urls=[dependency.url,...(dependency.mirrors||[])],failures=[];
@@ -50,14 +63,17 @@ async function boot(){
   window.BloomDiagnostics.setPhase('gamekit');
   $('load-status').textContent='Bloom Gamekit 공통 모듈을 불러오고 있어요.';
   const gamekit=await loadGamekit(DEPENDENCIES.gamekit,e=>{$('load-status').textContent='Bloom Gamekit · '+e.name+' 모듈 로딩 중';console.info('Bloom gamekit',e.name,e.url);});
+  window.BloomDiagnostics.setPhase('vector-art');
+  $('load-status').textContent='원본 동료 SVG를 불러오고 있어요.';
+  const companionVector=await loadCompanionVectorAsset(gamekit);
   window.BloomDiagnostics.setPhase('rapier');
   const R=await loadExternalRapier(DEPENDENCIES.rapier,e=>{
    $('load-status').textContent=e.phase==='initialize'?'물리 엔진을 초기화하고 있어요.':(e.index?'다른 CDN에서 물리 엔진을 다시 불러오고 있어요.':'물리 엔진을 CDN에서 불러오고 있어요.');
    console.info('Bloom dependency',e.phase,e.url);
   },attempt);
   window.BloomDiagnostics.setPhase('simulation');
-  app=new App(R,gamekit);
-  window.Bloom={app,diagnostics:window.BloomDiagnostics,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
+  app=new App(R,gamekit,companionVector);
+  window.Bloom={app,diagnostics:window.BloomDiagnostics,vectorAssetLoader:companionVectorLoader,companionVector,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
   app.start();window.BloomDiagnostics.setPhase('playing');console.info('Bloom boot: ready');return app;
  }catch(e){console.error(e);window.BloomDiagnostics.report(e,{kind:'boot-error',visibility:'fatal',origin:e.stage||'boot'});$('load-title').textContent='화원을 불러오지 못했어요';$('load-status').textContent=e.message;$('loading').querySelector('.spinner').style.display='none';$('load-retry').hidden=false;$('load-retry').disabled=false;return null;
  }finally{bootPromise=null;}})();return bootPromise;

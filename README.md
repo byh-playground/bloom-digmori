@@ -6,7 +6,7 @@
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.11**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.13**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
@@ -26,7 +26,7 @@
 
 ## 로컬 실행·개발
 
-Node.js 22 이상. `npm ci`로 고정된 빌드 의존성을 설치한 뒤 빌드합니다. 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
+Node.js 22 이상. `npm ci`로 고정된 테스트 의존성을 설치한 뒤 빌드합니다. 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
 
 ```sh
 git clone https://github.com/byh-playground/bloom-digmori.git
@@ -36,7 +36,7 @@ npm run build
 npm run dev
 ```
 
-브라우저에서 http://127.0.0.1:8000/bloom-digmori/ 를 엽니다. 배포 산출물은 **dist/index.html 하나**이며 게임 CSS·로직을 포함합니다. 외부 SDK까지 내장한 오프라인 HTML은 아닙니다. `file://` 직접 실행은 이번 검증 범위가 아닙니다.
+브라우저에서 http://127.0.0.1:8000/bloom-digmori/ 를 엽니다. 배포 산출물은 게임 HTML과 원본 SVG 한 파일이며, 게임 CSS·로직은 HTML에 포함됩니다. 외부 SDK까지 내장한 오프라인 HTML은 아닙니다. `file://` 직접 실행은 이번 검증 범위가 아닙니다.
 
 ```sh
 npm ci
@@ -78,9 +78,9 @@ dist/             자동 생성; Git에 넣지 않음
 | 구성 | 고정 기준 |
 | --- | --- |
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
-| Bloom GameKit | v0.3.1 · dist `72b09b260edf9650353017acb49c06873fe9f5a1` |
-| Pebble Mole vector art | SVG source compiled at build time with Bloom GameKit vector compiler `0.6.0` from `9f3b67625cae75c80c58a293fd7a7a94486e403b`; runtime rendering bundle is generated into `dist/index.html` |
-| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio |
+| Bloom GameKit | v0.10.4 · dist `95d8676e3eaaa9f80aeed2e3361e258381511c77` |
+| Pebble Mole vector art | `src/assets/companions/pebble-mole.svg` is copied byte-for-byte to Pages and SHA-256 checked; the startup loader fetches, compiles once, and caches it as an in-memory retained mesh |
+| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio, rendering, vector-assets, vector-assets-loader |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
 | 그래픽·저장 | WebGL, 청크 Worker, IndexedDB 및 월드 파일 |
 
@@ -88,11 +88,17 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 ## 버전·저장 호환
 
-게임은 **0.28.12**, snapshotVersion은 **0.26.0**입니다. 30 TPS와 저장 형식을 유지합니다. 바이옴 식생·자원 규칙은 월드 시드에서 결정적으로 다시 계산하며, 기존 저장·저장 키·지형 편집을 보존하고 전체 월드를 강제로 재생성하지 않습니다. 아직 편집되지 않은 청크는 열릴 때 새 규칙으로 생성됩니다. 0.25.0을 포함한 snapshotVersion 0.26.0 이전 저장은 기존과 같이 새 월드가 필요합니다. 자동 변환 어댑터나 이전 저장 삭제 기능은 없습니다.
+게임은 **0.28.13**, snapshotVersion은 **0.26.0**입니다. 30 TPS와 저장 형식을 유지합니다. 바이옴 식생·자원 규칙은 월드 시드에서 결정적으로 다시 계산하며, 기존 저장·저장 키·지형 편집을 보존하고 전체 월드를 강제로 재생성하지 않습니다. 아직 편집되지 않은 청크는 열릴 때 새 규칙으로 생성됩니다. 0.25.0을 포함한 snapshotVersion 0.26.0 이전 저장은 기존과 같이 새 월드가 필요합니다. 자동 변환 어댑터나 이전 저장 삭제 기능은 없습니다.
 
 브라우저 저장은 출처에 종속됩니다. 기존 로컬/다른 사이트 저장이 새 Pages 주소로 자동 이동하지 않습니다. 0.26.0 월드는 게임의 내보내기·가져오기를 사용할 수 있습니다.
 
 ## 검증
+
+### 0.28.13 원본 SVG 직접 렌더링
+
+배포는 제작 원본 SVG만 그대로 포함합니다. 시작 시 GameKit 0.10.4의 고정된 벡터 로더가 URL, SHA-256, 바이트 상한, 곡선 품질을 확인해 한 번 컴파일하며, 제한된 캐시에 보관합니다. 조약돌 두더지는 같은 WebGL 컨텍스트에서 유지 메시로 직접 그리므로 카메라·월드 깊이·SVG의 파츠 애니메이션을 사용합니다. `dist/index.html` 안으로 빌드 결과를 생성하거나 픽셀 아틀라스로 굽지 않습니다.
+
+이전 0.28.10–0.28.12 구현은 빌드 시 SVG를 컴파일하고 여러 애니메이션 프레임을 캔버스/텍스처 아틀라스로 구워 단일 HTML에 넣었습니다. 이 방식은 원본과 파생 에셋을 둘로 늘리고, 아트 변경 때마다 배포 빌드에 벡터 컴파일러를 끌어들이며, SVG를 실제 월드 메시로 렌더하지 않는 나쁜 사례입니다. 앞으로는 이 경로를 되살리지 말고 `AGENTS.md`의 규칙을 따릅니다.
 
 0.28.2는 GameKit v0.3.1로 SDK pin과 manifest/module 해시를 갱신합니다. 기존 공식 `PresentationRuntime.capture/frame`, `STATE_KEY`, `teleport` 계약을 유지하며 LocalInputPreview는 사용하지 않습니다. 30 TPS와 snapshotVersion 0.26.0은 그대로입니다. 이번 실제 실행 범위와 미검증 항목은 업데이트 PR에 기록합니다.
 
@@ -125,10 +131,10 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 ## 0.28.10 조약돌 두더지 아트
 
-공형 동료와 야생 후보의 외형을 조약돌 두더지로 교체했습니다. 동료 종류 ID·능력·전투 수치·저장 형식과 나무꾼 외형은 유지합니다.
+공형 동료와 야생 후보의 외형을 조약돌 두더지로 교체했습니다. 동료 종류 ID·능력·전투 수치·저장 형식과 나무꾼 외형은 유지합니다. 당시 빌드 시 생성하던 프레임 아틀라스 배포 경로는 0.28.13에서 제거하고 원본 SVG를 시작 시 공통 로더로 불러오는 방식으로 바꿨습니다.
 
 ## 0.28.9 생물·벽 이동 변경
 
 기존 적대 몹 종류와 야간 적대 스폰을 제거했습니다. snapshotVersion 0.26.0 저장에 남은 레거시 야생 개체는 포획 가능한 shell/leaf 종으로 한 번 변환하며, 사망한 레거시 몹은 제거합니다. 월드 시드·지형 편집·보유 동료와 인벤토리는 유지합니다. 제단 보스는 포획 가능한 warden 종으로 취급하면서 처치/포획 보상은 유지합니다. 이동은 기존 축 정렬 상자 충돌을 유지하고, 벽에 막힌 축 성분을 제거해 비껴 이동하도록 했습니다.
 
-동료 외형은 `src/assets/companions/pebble-mole.svg`를 단일 제작 원본으로 사용합니다. 빌드가 고정된 GameKit 벡터 컴파일러로 애니메이션 프레임 아틀라스를 생성해 HTML에 포함하며, 생성 파일은 Git에 넣지 않습니다. 이 외형 변경은 동료의 종 ID·능력·전투 수치·저장 형식을 바꾸지 않습니다. 나무꾼 외형은 기존 아틀라스를 유지합니다.
+동료 외형은 `src/assets/companions/pebble-mole.svg`를 단일 제작 원본으로 사용합니다. 0.28.10–0.28.12의 캔버스/텍스처 아틀라스 생성 방식은 나쁜 사례로 보존하며 재도입하지 않습니다. 0.28.13 이후에는 빌드가 원본 SVG만 바이트 그대로 배포하고, 실행 시작 때 고정된 GameKit 로더가 검증·컴파일해 WebGL 월드 메시로 직접 그립니다. 이 외형 변경은 동료의 종 ID·능력·전투 수치·저장 형식을 바꾸지 않습니다. 나무꾼의 기존 절차적 클로 아트는 별도 경로로 유지합니다.

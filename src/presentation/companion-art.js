@@ -1,38 +1,14 @@
-/* The existing woodcutter stays on its authored claw atlas; the pebble mole uses one GameKit SVG source. */
+/* The pebble mole stays as authored SVG and retained GameKit mesh geometry. */
 const COMPANION_SPRITE=Object.freeze({cell:128,pixelsPerMeter:32,size:2048});
+const VECTOR_FRAME_COUNTS=Object.freeze({idle:4,walk:4,work:4,return:4,prepare:8,flight:3,ground:3});
 
-function createPebbleMoleFrames(vectorKit,cell,clips){
- if(!vectorKit?.WebGLDevice||!vectorKit?.MeshRenderer||!vectorKit?.createVectorAsset||!vectorKit?.pebbleMole)throw Error('GameKit pebble mole asset is missing');
- const canvas=document.createElement('canvas');canvas.width=canvas.height=cell;
- const device=new vectorKit.WebGLDevice(canvas,{alpha:true,antialias:true,depth:false,stencil:false,preserveDrawingBuffer:true});
- const meshes=new vectorKit.MeshRenderer(device),asset=vectorKit.createVectorAsset(meshes,vectorKit.pebbleMole),players=new Map(),frames={};
- const [minX,minY,width,height]=asset.viewBox,viewScale=[1,.94,.80,.94,.82];
- const projection=view=>{const sx=viewScale[view],a=2*sx/width;return new Float32Array([a,0,0,0,-2/height,0,-a*(minX+width*.5),1+2*minY/height,1]);};
- try{
-  for(const [clip]of Object.entries(clips))players.set(clip,asset.createPlayer({clip}));
-  for(const [clip,count]of Object.entries(clips))for(let view=0;view<5;view++)for(let frame=0;frame<count;frame++){
-   const player=players.get(clip),duration=asset.metadata.clips[clip].durationMs;
-   player.setExpression(view>=3?'back':'front');player.seek(count===1?0:duration*frame/(count-1));
-   if(!device.beginFrame({width:cell,height:cell,clearColor:[0,0,0,0]}))throw Error('GameKit vector canvas is unavailable');
-   meshes.beginFrame();player.draw({projection:projection(view)});meshes.flush();device.endFrame();
-   const tile=document.createElement('canvas');tile.width=tile.height=cell;tile.getContext('2d').drawImage(canvas,0,0);frames[clip+'/'+view+'/'+frame]=tile;
-  }
-  return frames;
- }finally{asset.dispose();meshes.dispose();device.dispose();}
-}
-
-function createCompanionCombatAtlas(gl,vectorKit){
+function createCompanionCombatAtlas(gl){
  const {cell,pixelsPerMeter:S,size}=COMPANION_SPRITE,canvas=document.createElement('canvas');canvas.width=canvas.height=size;
  const dest=canvas.getContext('2d'),frames={};let index=0;
- const layouts={claw:{attack:12,work:4,return:4},ball:{prepare:8,flight:3,ground:3,return:3,work:4,idle:4,walk:4}};
- const vectorFrames=createPebbleMoleFrames(vectorKit,cell,layouts.ball);
+ const layouts={claw:{attack:12,work:4,return:4}};
  for(const [mode,clips]of Object.entries(layouts))for(const [clip,count]of Object.entries(clips))for(let view=0;view<5;view++)for(let frame=0;frame<count;frame++){
   const x=index%16*cell,y=Math.floor(index/16)*cell;
   if(y+cell>size)throw Error('동료 아틀라스 용량 초과');
-  if(mode==='ball'){
-   dest.drawImage(vectorFrames[clip+'/'+view+'/'+frame],x,y);
-   frames[mode+'/'+clip+'/'+view+'/'+frame]={u0:x/size,u1:(x+cell)/size,v0:1-y/size,v1:1-(y+cell)/size,x,y,w:cell,h:cell};index++;continue;
-  }
   const tile=document.createElement('canvas');tile.width=tile.height=cell;
   const c=tile.getContext('2d'),angle=view*Math.PI/4,ca=Math.cos(angle),sa=Math.sin(angle),shapes=[];
   const project=p=>({x:64+(-p.x*ca+p.z*sa)*S,y:96-(p.y-(p.x*sa+p.z*ca)*.20)*S,depth:p.x*sa+p.z*ca});
@@ -54,4 +30,78 @@ function createCompanionCombatAtlas(gl,vectorKit){
   dest.drawImage(tile,x,y);frames[mode+'/'+clip+'/'+view+'/'+frame]={u0:x/size,u1:(x+cell)/size,v0:1-y/size,v1:1-(y+cell)/size,x,y,w:cell,h:cell};index++;
  }
  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);for(const name of[gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,name,gl.NEAREST);for(const name of[gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,name,gl.CLAMP_TO_EDGE);return{tex,frames,canvas,count:index};
+}
+
+function svgWorldMatrix(viewBox,root,facing,sizeScale){
+ const [minX,minY,width,height]=viewBox,size=4*sizeScale/Math.max(width,height),forward=V.norm({x:facing.x,y:0,z:facing.z}),right={x:-forward.z,y:0,z:forward.x};
+ const offset=minX+width*.5;
+ return new Float32Array([right.x*size,0,right.z*size,0,0,-size,0,0,forward.x,0,forward.z,0,
+  root.x-right.x*offset*size,root.y-1+(minY+height)*size,root.z-right.z*offset*size,1]);
+}
+
+class CompanionRenderer {
+ constructor(renderer,gamekit,compiledAsset){
+  if(!gamekit?.rendering?.WebGLDevice||!gamekit?.rendering?.MeshRenderer||!gamekit?.vectorAssets?.createVectorAsset||!compiledAsset)throw Error('GameKit SVG world renderer is unavailable');
+  this.r=renderer;this.atlas=createCompanionCombatAtlas(renderer.gl);this.device=new gamekit.rendering.WebGLDevice(renderer.canvas,{alpha:false,antialias:true,depth:true,stencil:false});
+ this.meshes=new gamekit.rendering.MeshRenderer(this.device);this.asset=gamekit.vectorAssets.createVectorAsset(this.meshes,compiledAsset);this.players=new Map();this.samples=[];this.frameActive=false;
+ }
+ beginFrame(clearColor){this.frameActive=this.device.beginFrame({width:this.r.canvas.width,height:this.r.canvas.height,clearColor:[...clearColor,1],clearDepth:1});if(this.frameActive)this.meshes.beginFrame();return this.frameActive;}
+ endFrame(){if(!this.frameActive)return;this.meshes.flush('digmoriSvgFrameEnd');this.device.endFrame();this.frameActive=false;for(const [key,state]of this.players)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.players.delete(key);}}
+ dispose(){for(const state of this.players.values())state.player.dispose();this.players.clear();this.asset.dispose();this.meshes.dispose();this.device.dispose();this.r.gl.deleteTexture(this.atlas.tex);}
+ playerFor(key,clip,expression){let state=this.players.get(key);if(!state){state={player:this.asset.createPlayer({clip,startedAtMs:0}),clip,expression:null,lastSeen:this.r.frame};this.players.set(key,state);}else if(state.clip!==clip){state.player.play(clip,0);state.clip=clip;}
+  if(state.expression!==expression){state.player.setExpression(expression);state.expression=expression;}state.lastSeen=this.r.frame;return state.player;}
+ world(out,root,mode,clip,frame,dir={x:0,y:0,z:-1},sizeScale=1,key='',front=true,timeMs=null){
+  if(mode==='ball'){this.vectorWorld.push({root:{...root},clip,frame,dir:{...dir},sizeScale,key,front,timeMs});return;}
+  const r=this.r,view=(Math.round(Math.atan2(dir.x*cosQ(r.camera.yaw)-dir.z*sinQ(r.camera.yaw),dir.x*sinQ(r.camera.yaw)+dir.z*cosQ(r.camera.yaw))/(Math.PI/4))+8)%8,
+   folded=view>=5?8-view:view,art=this.atlas.frames[mode+'/'+clip+'/'+folded+'/'+frame];if(!art)return;
+  r.sprite(out,V.add(root,{x:0,y:-1,z:0}),4*sizeScale,4*sizeScale,art,[1,1,1,1],view>=5);this.samples.push({mode,clip,frame,view,sizeScale,root:{...root}});
+ }
+ drawVector(item){
+  if(!this.frameActive)return;
+  const r=this.r,forward=V.norm({x:item.dir.x,y:0,z:item.dir.z}),toCamera=V.norm({x:-r.forward.x,y:0,z:-r.forward.z}),expression=V.dot(forward,toCamera)>0?'front':'back',
+   player=this.playerFor(item.key,item.clip,expression),duration=this.asset.metadata.clips[item.clip].durationMs,count=VECTOR_FRAME_COUNTS[item.clip]||4,timeMs=Number.isFinite(item.timeMs)?item.timeMs:duration*Math.max(0,Math.min(count-1,item.frame))/Math.max(1,count-1),worldMatrix=svgWorldMatrix(this.asset.viewBox,item.root,item.dir,item.sizeScale);
+  player.seek(timeMs);player.draw({viewProjection:r.vp,worldMatrix,alpha:1,depthTest:true,depthWrite:false,depthFunc:'lequal'});this.meshes.flush('digmoriSvgActor');
+  this.samples.push({mode:'svg',key:item.key,clip:item.clip,frame:item.frame,expression,timeMs,depthTest:true,depthWrite:false,root:{...item.root},worldMatrix:Array.from(worldMatrix)});
+ }
+ prepare(view,sim,actor,dyn){
+  const r=this.r;this.behind=[];this.front=[];this.vectorWorld=[];this.samples=[];
+  for(const b of Object.values(sim.companions.data.bases))if(r.worldVisualReady(b.pos,.3))r.box(dyn,V.add(b.pos,{x:1,y:.02,z:0}),{x:.9,y:.45,z:.65},[.42,.53,.32]);
+  for(const candidate of Object.values(view.actors)){
+   if(candidate.speciesId!=='shell'||candidate.dead||candidate.suspended||!r.worldVisualReady(candidate.pos,.3))continue;
+   const visual=r.combatFx.pose(candidate),reaction=r.combatFx.reactions.get(candidate.id),sample=actorSpritePose(visual,r.camera.yaw,reaction);
+   let clip='idle',frame=sample.frame%4;
+   if(sample.clip==='walk'||sample.clip==='run'||sample.clip==='swim'||sample.clip==='brake'){clip='walk';frame=Math.floor(sample.frame/2)%4;}
+   else if(['hurt','hurtHeavy','stun','rise','fall','land'].includes(sample.clip)){clip='ground';frame=sample.frame%3;}
+   else if(visual.combat.state==='attack'){clip='work';frame=sample.frame%4;}
+   this.world(this.behind,V.add(candidate.pos,{x:0,y:1,z:0}),'ball',clip,frame,candidate.facing,.55,candidate.id,false,candidate.anim);
+  }
+  for(const u of Object.values(view.companions)){
+   const a=view.actors[u.owner];if(!a||a.dead||a.suspended)continue;const mode=SPECIES[u.kind].art;
+   if(u.location==='work'){
+    if(!r.worldVisualReady(u.pos,.3))continue;
+    const progress=u.phase==='gather'?u.progress/Math.max(1,BLOCKS[u.target?.id]?.hardness||650):0,
+     workDir=mode==='ball'&&u.phase==='gather'&&u.target?V.sub({x:u.target.x+.5,y:u.target.y+1,z:u.target.z+.5},u.pos):a.facing;
+    this.world(this.front,V.add(u.pos,{x:0,y:mode==='claw'?-.52:0,z:0}),mode,mode==='claw'&&u.phase==='gather'?'attack':'work',mode==='claw'&&u.phase==='gather'?Math.min(11,Math.floor(progress*12)):Math.min(3,Math.floor(progress*4)),workDir,mode==='claw'?1:.72,u.id,true,mode==='ball'?progress*this.asset.metadata.clips.work.durationMs:null);continue;
+   }
+   if(u.phase==='return'){
+    if(r.worldVisualReady(u.pos,.3)){const frame=Math.floor(sim.tick/3)%(mode==='claw'?4:3),dir=V.sub(sim.companions.socket(a,u.slot),u.pos);this.world(this.front,V.add(u.pos,{x:0,y:mode==='claw'?-.52:0,z:0}),mode,'return',frame,dir,mode==='claw'?1:.72,u.id,true,mode==='ball'?frame*this.asset.metadata.clips.return.durationMs/2:null);}
+    continue;
+   }
+   if(u.location!=='combat'||u.phase==='flight')continue;
+   const visual=r.combatFx.pose(a),c=visual.combat,act=c.action;if(c.state!=='attack'||act?.companionId!==u.id)continue;
+   if(mode==='claw'){
+    const timing=actionTiming(act,c.elapsed),stage=timing.stage==='wind'?0:timing.stage==='active'?1:2,frame=stage*4+Math.min(3,Math.floor(timing.phase*4)),compact=Math.min(r.canvas.clientWidth||innerWidth,r.canvas.clientHeight||innerHeight)<=480;
+    this.world(this.front,clawWorldPose(visual,act,c.elapsed).root,'claw','attack',frame,act.dir,compact?1.35:1,u.id,true);
+   }else if(!act.fired)this.world(this.front,V.add(companionRoot(visual,act.dir),{x:0,y:.9,z:0}),'ball','prepare',Math.min(7,Math.floor(c.elapsed/act.wind*8)),act.dir,.72,u.id,true,c.elapsed);
+  }
+  for(const p of Object.values(view.projectiles))if(p.companionId&&r.worldVisualReady(p.pos,.3)){
+   const clip=p.throwPhase==='ground'?'ground':'flight',frame=clip==='ground'?Math.min(2,Math.floor((p.groundMs||0)/SPECIES[p.companionKind].capabilities.attack.groundHoldMs*3)):Math.floor(p.age/120)%3;
+   this.world(this.front,p.pos,'ball',clip,frame,p.dir,.28,p.id,true,clip==='ground'?p.groundMs:p.age);
+   const radius=SPECIES[p.companionKind].capabilities.attack.projectile.radius,origin=V.add(p.pos,{x:0,y:-radius,z:0}),hit=sim.terrain.ray(origin,{x:0,y:-1,z:0},12);
+   if(hit&&hit.normal.y>.7){const size=.27/(1+hit.distance*.2);r.box(dyn,{x:p.pos.x,y:origin.y-hit.distance+.012,z:p.pos.z},{x:size*2,y:.01,z:size*1.3},[.20,.30,.22]);}
+  }
+ }
+ draw(front){for(const item of this.vectorWorld)if(item.front===front)this.drawVector(item);const vertices=front?this.front:this.behind;if(!vertices.length)return;
+  const r=this.r,gl=r.gl,p=r.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,r.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),r.ambient??1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,r.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);r.attrib(p,'p',3,36,0);r.attrib(p,'uv',2,36,12);r.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,vertices.length/9);
+ }
 }

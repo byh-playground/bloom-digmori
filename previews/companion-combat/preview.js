@@ -42,9 +42,10 @@ function drawFrame(t){
  const cssWidth=previewUI.exact.checked?referenceWidth:Math.min(referenceWidth,previewUI.stage.clientWidth),cssHeight=cssWidth*referenceHeight/referenceWidth;
  r.canvas.style.height=cssHeight+'px';
  const dpr=Math.min(PIXEL_CONTRACT.maxDpr,window.devicePixelRatio||1),width=Math.max(1,Math.round(cssWidth*dpr)),height=Math.max(1,Math.round(cssHeight*dpr));
- if(r.canvas.width!==width||r.canvas.height!==height){r.canvas.width=width;r.canvas.height=height;}gl.viewport(0,0,width,height);
+ if(r.canvas.width!==width||r.canvas.height!==height){r.canvas.width=width;r.canvas.height=height;}
  r.camera.distance=previewUI.close.checked?4.2:7.5;r.camera.pitch=Number(previewUI.pitch.value);previewUI.pitchOut.textContent=r.camera.pitch.toFixed(2);
  const state=fixture(t),{actor,action,sample,pose,deploy,cycle,beat}=state;
+ r.companionRenderer.beginFrame([.48,.67,.72]);gl.viewport(0,0,width,height);
  r.updateCamera(actor,{terrain:{ray:wallRay}});r.fog=new Float32Array([.48,.67,.72]);r.ambient=1;
  gl.clearColor(.48,.67,.72,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
  const scene=[],reach=combatMode==='ball'?2:1.2;
@@ -86,9 +87,10 @@ function drawFrame(t){
  previewUI.state.textContent=(combatMode==='ball'?'① 공 발사':'② 생물 검')+' · '+(action==='combat'?labels[beat.phase]:action)+' · '+sample.view*45+'°';
  if(playing)previewUI.timeline.value=String(cycle);
  previewUI.scale.textContent=`표시 ${Math.round(cssWidth)}×${Math.round(cssHeight)} · DPR ${dpr} · 캔버스 ${width}×${height} · 거리 ${r.camera.distance}m`;
+ r.companionRenderer.endFrame();
  window.symbioticPreview={revision:4,combatMode,beat,previewOnly:true,pixelContract:{...PIXEL_CONTRACT,dpr,cssSize:[cssWidth,cssHeight],equipment:ATTACHMENT_ART.map((a,i)=>({id:a.id,pixels:r.companions.frames[combatMode+'/'+i+'/0'].pixels,worldPerPixelX:PIXEL_CONTRACT.worldPerPixelX,worldPerPixelY:PIXEL_CONTRACT.worldPerPixelY}))},layout,action,sample,positions,deploy,sockets:contract.sockets,hand:contract.hand,elbow:contract.elbow,camera:{...r.camera},renderSize:[width,height],glError:gl.getError(),frames:(window.symbioticPreview?.frames||0)+1};
 }
-try{renderer=new Renderer(previewUI.preview);renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
+try{renderer=new Renderer(previewUI.preview,previewGamekit,previewVector);renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
 function showError(e){previewUI.error.style.display='block';previewUI.error.textContent='미리보기를 렌더하지 못했습니다: '+e.message+' · WebGL을 사용할 수 있는 브라우저에서 열어 주세요.';previewUI.state.textContent='렌더 실패';console.error(e);}
 
 // Deterministic browser review entry point; same live fixture, no alternative rendering path.
