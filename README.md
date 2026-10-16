@@ -6,7 +6,7 @@
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.9**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.10**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
@@ -26,11 +26,12 @@
 
 ## 로컬 실행·개발
 
-Node.js 22 이상. 빌드는 외부 패키지 설치 없이 실행할 수 있고, 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
+Node.js 22 이상. `npm ci`로 고정된 빌드 의존성을 설치한 뒤 빌드합니다. 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
 
 ```sh
 git clone https://github.com/byh-playground/bloom-digmori.git
 cd bloom-digmori
+npm ci
 npm run build
 npm run dev
 ```
@@ -78,6 +79,7 @@ dist/             자동 생성; Git에 넣지 않음
 | --- | --- |
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
 | Bloom GameKit | v0.3.1 · dist `72b09b260edf9650353017acb49c06873fe9f5a1` |
+| Pebble Mole vector art | SVG source compiled at build time with Bloom GameKit vector compiler `0.6.0` from `9f3b67625cae75c80c58a293fd7a7a94486e403b`; runtime rendering bundle is generated into `dist/index.html` |
 | GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
 | 그래픽·저장 | WebGL, 청크 Worker, IndexedDB 및 월드 파일 |
@@ -117,6 +119,12 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 게임 원본과 참고 조직 저장소에서 별도 게임 라이선스 부여를 확인하지 못해 임의의 MIT 등 라이선스를 추가하지 않았습니다. 공개 저장소라는 이유만으로 타사 재사용 권한을 부여하지 않습니다. 외부 Rapier 0.21.0 패키지는 [Apache-2.0](https://www.npmjs.com/package/@dimforge/rapier3d-deterministic-compat/v/0.21.0)이며 각 외부 의존성의 권리·고지는 해당 프로젝트를 따릅니다.
 
+## 0.28.10 조약돌 두더지 아트
+
+공형 동료와 야생 후보의 외형을 조약돌 두더지로 교체했습니다. 동료 종류 ID·능력·전투 수치·저장 형식과 나무꾼 외형은 유지합니다.
+
 ## 0.28.9 생물·벽 이동 변경
 
 기존 적대 몹 종류와 야간 적대 스폰을 제거했습니다. snapshotVersion 0.26.0 저장에 남은 레거시 야생 개체는 포획 가능한 shell/leaf 종으로 한 번 변환하며, 사망한 레거시 몹은 제거합니다. 월드 시드·지형 편집·보유 동료와 인벤토리는 유지합니다. 제단 보스는 포획 가능한 warden 종으로 취급하면서 처치/포획 보상은 유지합니다. 이동은 기존 축 정렬 상자 충돌을 유지하고, 벽에 막힌 축 성분을 제거해 비껴 이동하도록 했습니다.
+
+동료 외형은 `src/assets/companions/pebble-mole.svg`를 단일 제작 원본으로 사용합니다. 빌드가 고정된 GameKit 벡터 컴파일러로 애니메이션 프레임 아틀라스를 생성해 HTML에 포함하며, 생성 파일은 Git에 넣지 않습니다. 이 외형 변경은 동료의 종 ID·능력·전투 수치·저장 형식을 바꾸지 않습니다. 나무꾼 외형은 기존 아틀라스를 유지합니다.

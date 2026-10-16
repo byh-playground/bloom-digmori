@@ -4,13 +4,18 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "assets:compile": "node scripts/compile-companion-assets.mjs",
     "dev": "node scripts/serve.mjs",
     "test": "node tests/core.e2e.mjs",
     "test:companions": "node tests/companions.e2e.mjs",
     "test:companions:rtc": "node tests/companions-rtc.e2e.mjs"
   },
   "devDependencies": {
-    "playwright": "1.63.0"
+    "@xmldom/xmldom": "0.9.12",
+    "animejs": "4.5.0",
+    "bloom-gamekit-tooling": "git+https://github.com/byh-playground/bloom-gamekit.git#9f3b67625cae75c80c58a293fd7a7a94486e403b",
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "three": "0.186.1"
   }
 }
-
