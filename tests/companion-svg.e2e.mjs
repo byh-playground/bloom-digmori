@@ -138,11 +138,11 @@ try{
  await page.waitForFunction(({x,y,z})=>Bloom.app.renderer.readyChunks.has(Math.floor(x/16)+':'+Math.floor(y/16)+':'+Math.floor(z/16)),fixture.block,{timeout:5000});
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  const occlusionShot=path.join(out,'pebble-mole-world-depth-occlusion.png'),occludedPng=await page.locator('#world').screenshot({path:occlusionShot});evidence.screenshots.push(path.relative(root,occlusionShot));
- const depthOff=await page.evaluate(id=>{
-  const state=Bloom.app.renderer.companionRenderer.players.get(id),original=state.player.draw.bind(state.player);
-  state.player.draw=options=>original({...options,depthTest:false});
+ const depthOff=await page.evaluate(()=>{
+  const meshes=Bloom.app.renderer.companionRenderer.meshes,original=meshes.drawMesh.bind(meshes);
+  meshes.drawMesh=(mesh,options)=>original(mesh,{...options,depthTest:false});
   return true;
- },fixture.id);assert(depthOff);
+ });assert(depthOff);
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  const noDepthShot=path.join(out,'pebble-mole-depth-disabled.png'),noDepthPng=await page.locator('#world').screenshot({path:noDepthShot});evidence.screenshots.push(path.relative(root,noDepthShot));
  const beforeImage=decodePng(worldPng),occludedImage=decodePng(occludedPng),depthDisabledImage=decodePng(noDepthPng),center={x:beforeImage.width>>1,y:beforeImage.height>>1};
