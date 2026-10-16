@@ -3,8 +3,33 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import {inflateSync} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
+
+function decodePng(png){
+ assert(png.subarray(0,8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])),'invalid PNG signature');
+ let width=0,height=0,bitDepth=0,colorType=0,interlace=0;const chunks=[];
+ for(let offset=8;offset<png.length;){const length=png.readUInt32BE(offset),type=png.toString('ascii',offset+4,offset+8),data=png.subarray(offset+8,offset+8+length);offset+=length+12;if(type==='IHDR'){width=data.readUInt32BE(0);height=data.readUInt32BE(4);bitDepth=data[8];colorType=data[9];interlace=data[12];}else if(type==='IDAT')chunks.push(data);else if(type==='IEND')break;}
+ assert.equal(bitDepth,8,'browser screenshot PNG must use 8-bit samples');assert.equal(interlace,0,'browser screenshot PNG must not be interlaced');
+ const channels=colorType===6?4:colorType===2?3:0;assert(channels,'browser screenshot PNG must be RGB or RGBA');
+ const stride=width*channels,encoded=inflateSync(Buffer.concat(chunks)),pixels=Buffer.alloc(height*stride);let source=0;
+ for(let y=0;y<height;y++){
+  const filter=encoded[source++],row=y*stride,prev=row-stride;
+  for(let x=0;x<stride;x++){
+   const raw=encoded[source++],a=x>=channels?pixels[row+x-channels]:0,b=y?pixels[prev+x]:0,c=y&&x>=channels?pixels[prev+x-channels]:0;
+   let value=raw;if(filter===1)value+=a;else if(filter===2)value+=b;else if(filter===3)value+=Math.floor((a+b)/2);else if(filter===4){const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c);value+=pa<=pb&&pa<=pc?a:pb<=pc?b:c;}else assert.equal(filter,0,'unsupported PNG filter');pixels[row+x]=value&255;
+  }
+ }
+ return{width,height,channels,pixels};
+}
+function roiDelta(a,b,x,y,radiusX,radiusY){
+ assert.equal(a.width,b.width);assert.equal(a.height,b.height);let total=0,changed=0;
+ for(let py=Math.max(0,y-radiusY);py<Math.min(a.height,y+radiusY);py++)for(let px=Math.max(0,x-radiusX);px<Math.min(a.width,x+radiusX);px++){
+  const aa=(py*a.width+px)*a.channels,bb=(py*b.width+px)*b.channels;let delta=0;for(let c=0;c<3;c++)delta+=Math.abs(a.pixels[aa+c]-b.pixels[bb+c]);total+=delta;if(delta>24)changed++;
+ }
+ return{total,changed};
+}
 
 const root=fileURLToPath(new URL('../',import.meta.url)),dist=path.join(root,'dist'),out=path.join(root,'artifacts/companion-svg');
 fs.mkdirSync(out,{recursive:true});
@@ -102,11 +127,7 @@ try{
  pass('source-authored SVG animation changes retained part transforms at absolute display times',animation);
 
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- const noOccluder=await page.evaluate(()=>{
-  const canvas=document.querySelector('#world'),gl=Bloom.app.renderer.gl;gl.finish();const pixel=new Uint8Array(4);gl.readPixels(canvas.width>>1,canvas.height>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);return Array.from(pixel);
- });
- assert(noOccluder[3]>0,'the focused source mesh should paint a center-camera pixel');
- const worldShot=path.join(out,'pebble-mole-live-webgl.png');await page.locator('#world').screenshot({path:worldShot});evidence.screenshots.push(path.relative(root,worldShot));
+ const worldShot=path.join(out,'pebble-mole-live-webgl.png'),worldPng=await page.locator('#world').screenshot({path:worldShot});evidence.screenshots.push(path.relative(root,worldShot));
 
  const ray=await page.evaluate(({id,block})=>{
   const app=Bloom.app,terrain=app.sim.terrain,actor=app.actor(),c=app.sim.actors[id],target={x:c.pos.x,y:c.pos.y+1.1,z:c.pos.z},eye={x:actor.pos.x,y:actor.pos.y+Bloom.CFG.player.eyeHeight,z:actor.pos.z},d={x:target.x-eye.x,y:target.y-eye.y,z:target.z-eye.z},length=Math.hypot(d.x,d.y,d.z),dir={x:d.x/length,y:d.y/length,z:d.z/length};
@@ -116,19 +137,19 @@ try{
  assert.deepEqual({x:ray.ray?.x,y:ray.ray?.y,z:ray.ray?.z},fixture.block,'the block must be directly on the live camera ray in front of the SVG');
  await page.waitForFunction(({x,y,z})=>Bloom.app.renderer.readyChunks.has(Math.floor(x/16)+':'+Math.floor(y/16)+':'+Math.floor(z/16)),fixture.block,{timeout:5000});
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- const occluded=await page.evaluate(()=>{const canvas=document.querySelector('#world'),gl=Bloom.app.renderer.gl;gl.finish();const pixel=new Uint8Array(4);gl.readPixels(canvas.width>>1,canvas.height>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);return Array.from(pixel);});
- const occlusionShot=path.join(out,'pebble-mole-world-depth-occlusion.png');await page.locator('#world').screenshot({path:occlusionShot});evidence.screenshots.push(path.relative(root,occlusionShot));
+ const occlusionShot=path.join(out,'pebble-mole-world-depth-occlusion.png'),occludedPng=await page.locator('#world').screenshot({path:occlusionShot});evidence.screenshots.push(path.relative(root,occlusionShot));
  const depthOff=await page.evaluate(id=>{
   const state=Bloom.app.renderer.companionRenderer.players.get(id),original=state.player.draw.bind(state.player);
   state.player.draw=options=>original({...options,depthTest:false});
   return true;
  },fixture.id);assert(depthOff);
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- const withoutDepth=await page.evaluate(()=>{const canvas=document.querySelector('#world'),gl=Bloom.app.renderer.gl;gl.finish();const pixel=new Uint8Array(4);gl.readPixels(canvas.width>>1,canvas.height>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);return Array.from(pixel);});
- const delta=(a,b)=>a.slice(0,3).reduce((sum,value,index)=>sum+Math.abs(value-b[index]),0);
- assert(delta(noOccluder,occluded)>30,'the nearer voxel should visually hide the SVG mesh when the 3D depth test is enabled: '+JSON.stringify({noOccluder,occluded}));
- assert(delta(noOccluder,withoutDepth)<20,'disabling depth in the same live draw should put the SVG over that voxel: '+JSON.stringify({noOccluder,withoutDepth}));
- evidence.depthPixels={noOccluder,depthTestEnabled:occluded,depthTestDisabled:withoutDepth,block:ray.block,ray:ray.ray,deltaOccluded:delta(noOccluder,occluded),deltaDepthDisabled:delta(noOccluder,withoutDepth)};
+ const noDepthShot=path.join(out,'pebble-mole-depth-disabled.png'),noDepthPng=await page.locator('#world').screenshot({path:noDepthShot});evidence.screenshots.push(path.relative(root,noDepthShot));
+ const beforeImage=decodePng(worldPng),occludedImage=decodePng(occludedPng),depthDisabledImage=decodePng(noDepthPng),center={x:beforeImage.width>>1,y:beforeImage.height>>1};
+ const hidden=roiDelta(beforeImage,occludedImage,center.x,center.y+28,42,42),revealed=roiDelta(occludedImage,depthDisabledImage,center.x,center.y+28,42,42);
+ assert(hidden.changed>40&&hidden.total>3000,'the foreground voxel should hide part of the SVG in the actual browser screenshot: '+JSON.stringify({hidden,center,canvas:[beforeImage.width,beforeImage.height]}));
+ assert(revealed.changed>40&&revealed.total>3000,'disabling depth in the same live draw should reveal the SVG over the voxel in the actual browser screenshot: '+JSON.stringify({revealed,center,canvas:[beforeImage.width,beforeImage.height]}));
+ evidence.depthPixels={center,roi:{width:84,height:84,yOffset:28},depthTestEnabledScreenshotDelta:hidden,depthTestDisabledScreenshotDelta:revealed,block:ray.block,ray:ray.ray};
  pass('the actual WebGL world depth buffer occludes the SVG mesh; the same mesh is visible over the block when depth testing is disabled',evidence.depthPixels);
  assert.deepEqual(errors,[],'page errors: '+errors.join('; '));
  evidence.result='PASS';evidence.elapsedMs=Date.now();
