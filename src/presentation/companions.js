@@ -26,7 +26,8 @@ class CompanionRenderer {
    if(u.location==='work'){
     if(!r.worldVisualReady(u.pos,.3))continue;
     const progress=u.phase==='gather'?u.progress/Math.max(1,BLOCKS[u.target?.id]?.hardness||650):0;
-    this.world(this.front,V.add(u.pos,{x:0,y:mode==='claw'?-.52:0,z:0}),mode,mode==='claw'&&u.phase==='gather'?'attack':'work',mode==='claw'&&u.phase==='gather'?Math.min(11,Math.floor(progress*12)):Math.min(3,Math.floor(progress*4)),a.facing,mode==='claw'?1:.72);continue;
+    const workDir=mode==='ball'&&u.phase==='gather'&&u.target?V.sub({x:u.target.x+.5,y:u.target.y+1,z:u.target.z+.5},u.pos):a.facing;
+    this.world(this.front,V.add(u.pos,{x:0,y:mode==='claw'?-.52:0,z:0}),mode,mode==='claw'&&u.phase==='gather'?'attack':'work',mode==='claw'&&u.phase==='gather'?Math.min(11,Math.floor(progress*12)):Math.min(3,Math.floor(progress*4)),workDir,mode==='claw'?1:.72);continue;
    }
    if(u.phase==='return'){
     if(r.worldVisualReady(u.pos,.3)){

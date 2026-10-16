@@ -47,9 +47,10 @@
         "loop": "repeat",
         "easing": "inOutSine",
         "keyframes": [
-          { "timeMs": 0, "easing": "inOutSine", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-arm": { "rotation": -0.05 }, "right-arm": { "rotation": 0.08 }, "left-paw": { "rotation": 0 }, "right-paw": { "rotation": 0 } } },
-          { "timeMs": 210, "easing": "inOutSine", "parts": { "body": { "y": -5, "scaleX": 1.025, "scaleY": 0.975 }, "shell": { "rotation": 0.025 }, "left-arm": { "rotation": 0.14 }, "right-arm": { "rotation": -0.38 }, "left-paw": { "rotation": 0.08 }, "right-paw": { "rotation": -0.22 } } },
-          { "timeMs": 420, "easing": "inOutSine", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-arm": { "rotation": -0.05 }, "right-arm": { "rotation": 0.08 }, "left-paw": { "rotation": 0 }, "right-paw": { "rotation": 0 } } }
+          { "timeMs": 0, "easing": "inOutSine", "parts": { "body": { "x": 0, "y": -1, "rotation": -0.025, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": -0.02 }, "face-front": { "x": 0, "y": 0, "rotation": 0 }, "left-arm": { "rotation": -0.08 }, "right-arm": { "rotation": 0.14 }, "left-paw": { "rotation": 0.02 }, "right-paw": { "rotation": -0.04 } } },
+          { "timeMs": 140, "easing": "inOutSine", "parts": { "body": { "x": -8, "y": -7, "rotation": -0.12, "scaleX": 0.94, "scaleY": 1.06 }, "shell": { "rotation": -0.07 }, "face-front": { "x": -3, "y": -1, "rotation": -0.035 }, "left-arm": { "rotation": -0.28 }, "right-arm": { "rotation": 0.34 }, "left-paw": { "rotation": -0.09 }, "right-paw": { "rotation": 0.12 } } },
+          { "timeMs": 280, "easing": "inOutSine", "parts": { "body": { "x": 18, "y": 5, "rotation": 0.12, "scaleX": 1.08, "scaleY": 0.92 }, "shell": { "rotation": 0.11 }, "face-front": { "x": 12, "y": 4, "rotation": 0.08 }, "left-arm": { "rotation": 0.17 }, "right-arm": { "rotation": -0.18 }, "left-paw": { "rotation": 0.1 }, "right-paw": { "rotation": -0.14 } } },
+          { "timeMs": 420, "easing": "inOutSine", "parts": { "body": { "x": 0, "y": -1, "rotation": -0.025, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": -0.02 }, "face-front": { "x": 0, "y": 0, "rotation": 0 }, "left-arm": { "rotation": -0.08 }, "right-arm": { "rotation": 0.14 }, "left-paw": { "rotation": 0.02 }, "right-paw": { "rotation": -0.04 } } }
         ]
       },
       "prepare": {
