@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install pinned build dependencies
+        run: npm ci
       - name: Build single HTML and provenance
         run: node scripts/build.mjs
       - name: Build companion combat design preview
