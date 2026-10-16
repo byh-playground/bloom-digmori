@@ -6,7 +6,7 @@
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.10**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.11**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
@@ -118,6 +118,10 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 [공통 개발 규칙](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/development.html) · [프로젝트 관리·검증 정책](https://github.com/byh-playground/bloom-reference/blob/76625d708de290134973758d5a62b3900bc291ba/rules/project-management.html)
 
 게임 원본과 참고 조직 저장소에서 별도 게임 라이선스 부여를 확인하지 못해 임의의 MIT 등 라이선스를 추가하지 않았습니다. 공개 저장소라는 이유만으로 타사 재사용 권한을 부여하지 않습니다. 외부 Rapier 0.21.0 패키지는 [Apache-2.0](https://www.npmjs.com/package/@dimforge/rapier3d-deterministic-compat/v/0.21.0)이며 각 외부 의존성의 권리·고지는 해당 프로젝트를 따릅니다.
+
+## 0.28.11 조약돌 두더지 박치기
+
+거점 채집 때 대상을 향해 몸을 젖힌 뒤 코와 머리로 들이받고 반동하는 반복 동작을 표시합니다. 작업 대상이 바뀌어도 동작이 반복되며 실제 자원 채집 상태와 연결됩니다.
 
 ## 0.28.10 조약돌 두더지 아트
 
