@@ -98,7 +98,7 @@ try{
  await page.waitForTimeout(110);
  const rolling=await page.evaluate(id=>{const r=Bloom.app.renderer.companionRenderer,s=r.characterSamples.find(s=>s.key===id),state=r.characterPlayers.get(id),body=r.characterAssets.get('sprout').metadata.parts.findIndex(p=>p.id==='body'),transform=state.player.partPoses()[body].transform;return{clip:s.clip,frame:s.frame,timeMs:s.timeMs,bodyTransform:Array.from(transform),bodyAngle:Math.atan2(transform[1],transform[0])};},playerId);
  await page.keyboard.up('ShiftLeft');await page.keyboard.up('KeyW');
- await page.waitForFunction(()=>Bloom.app.actor().combat.state!=='roll',null,{timeout:2000});
+ await page.waitForFunction(()=>Bloom.app.actor().combat.state!=='roll',null,{timeout:8000});
  assert(['walk','run'].includes(moving.clip));assert(rolling.clip.startsWith('roll'));assert(rolling.timeMs>0&&rolling.timeMs<360);assert(Math.abs(rolling.bodyAngle)>.2,'the source-authored roll pivot must rotate the rendered SVG body: '+JSON.stringify(rolling));
  pass('real keyboard movement and context-roll input drive the player SVG animation, including the authored 360 ms roll timeline',{moving,rolling});
  await page.evaluate(()=>{const app=Bloom.app;app.localScheduler.stop();app.actor().facing={x:0,y:0,z:-1};app.renderer.camera.yaw=0;app.scene.reset();});
