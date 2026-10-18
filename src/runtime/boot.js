@@ -28,10 +28,12 @@ async function loadGamekit(dependency=DEPENDENCIES.gamekit,onProgress=()=>{}){
 }
 async function loadCompanionVectorAsset(gamekit){
  if(!companionVectorPromise){
-  const definition=DEPENDENCIES.vectorAssets.pebbleMole;
-  companionVectorLoader=gamekit.vectorAssetLoader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:1});
-  const url=new URL(definition.url,location.href);
-  companionVectorPromise=companionVectorLoader.load(url,{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false}).catch(error=>{
+  companionVectorLoader=gamekit.vectorAssetLoader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:8});
+  const definitions=[['pebbleMole',DEPENDENCIES.vectorAssets.pebbleMole],...Object.entries(DEPENDENCIES.vectorAssets.characters)];
+  companionVectorPromise=Promise.all(definitions.map(async([id,definition])=>{
+   const url=new URL(definition.url,location.href),compiled=await companionVectorLoader.load(url,{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});
+   return[id,compiled];
+  })).then(entries=>({pebbleMole:entries[0][1],characters:Object.fromEntries(entries.slice(1))})).catch(error=>{
    companionVectorLoader?.dispose();companionVectorLoader=null;companionVectorPromise=null;throw error;
   });
  }
@@ -73,7 +75,7 @@ async function boot(){
   },attempt);
   window.BloomDiagnostics.setPhase('simulation');
   app=new App(R,gamekit,companionVector);
-  window.Bloom={app,diagnostics:window.BloomDiagnostics,vectorAssetLoader:companionVectorLoader,companionVector,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
+  window.Bloom={app,diagnostics:window.BloomDiagnostics,vectorAssetLoader:companionVectorLoader,companionVector:companionVector.pebbleMole,vectorAssets:companionVector,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
   app.start();window.BloomDiagnostics.setPhase('playing');console.info('Bloom boot: ready');return app;
  }catch(e){console.error(e);window.BloomDiagnostics.report(e,{kind:'boot-error',visibility:'fatal',origin:e.stage||'boot'});$('load-title').textContent='화원을 불러오지 못했어요';$('load-status').textContent=e.message;$('loading').querySelector('.spinner').style.display='none';$('load-retry').hidden=false;$('load-retry').disabled=false;return null;
  }finally{bootPromise=null;}})();return bootPromise;

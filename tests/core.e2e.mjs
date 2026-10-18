@@ -13,6 +13,7 @@ try {
   const route=new URL(req.url,'http://localhost').pathname;
   if(route==='/bloom-digmori/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)));}
   else if(route==='/bloom-digmori/assets/companions/pebble-mole.svg'){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/companions/pebble-mole.svg',import.meta.url)));}
+  else if(/^\/bloom-digmori\/assets\/characters\/(sprout|fungus|bug|flower|bee)\.svg$/.test(route)){const name=route.split('/').pop();res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/characters/'+name,import.meta.url)));}
   else{res.writeHead(404);res.end();}
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));url='http://127.0.0.1:'+server.address().port+'/bloom-digmori/';}
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'chromium'),headless:true});

@@ -42,6 +42,13 @@ assert.deepEqual(source,fs.readFileSync(path.join(dist,'assets/companions/pebble
 const html=fs.readFileSync(path.join(dist,'index.html'),'utf8');
 assert(!html.includes('DIGMORI_VECTOR_RUNTIME'),'the build must not inline a generated vector runtime');
 assert(!html.includes('compile-companion-assets'),'the deployed page must not carry the build-time compiler');
+for(const kind of ['sprout','fungus','bug','flower','bee']){
+ const asset=fs.readFileSync(path.join(root,'src/assets/characters/'+kind+'.svg'));
+ const expected=config.match(new RegExp(kind+":Object\\.freeze\\(\\{url:'[^']+',sourcePath:'[^']+',sha256:'([a-f0-9]{64})'"))?.[1];
+ assert(expected);assert.equal(createHash('sha256').update(asset).digest('hex'),expected);assert.deepEqual(asset,fs.readFileSync(path.join(dist,'assets/characters/'+kind+'.svg')));
+ const source=asset.toString('utf8'),metadata=JSON.parse(source.match(/<metadata id="vector-asset">([\s\S]*?)<\/metadata>/)[1]);
+ assert.equal(metadata.parts.length,14);assert.deepEqual(Object.keys(metadata.expressions),['view0','view1','view2','view3','view4']);assert.equal(metadata.clips.roll.durationMs,360);assert.equal(metadata.clips.roll.keyframes.length,12);
+}
 
 const evidence={browser:null,sourceSha256:expectedSha,sourceBytes:source.byteLength,cacheRequests:0,checks:[],camera:null,animation:null,depthPixels:null,screenshots:[]};
 const pass=(name,data)=>{evidence.checks.push({name,data});console.log('PASS '+name);};
@@ -68,13 +75,41 @@ try{
  const loaded=await page.evaluate(async()=>{
   const b=window.Bloom,d=b.DEPENDENCIES.vectorAssets.pebbleMole;
   const cached=await b.vectorAssetLoader.load(new URL(d.url,location.href),{sourcePath:d.sourcePath,expectedSha256:d.sha256,maxBytes:d.maxBytes,curveSegments:d.curveSegments,includeSourcePaths:false});
-  return{sameObject:cached===b.companionVector,sha256:b.companionVector.sourceSha256,viewBox:b.companionVector.viewBox,vertices:b.companionVector.geometry.vertices.length,parts:b.companionVector.metadata.parts.length,clips:Object.keys(b.companionVector.metadata.clips)};
+  const characters=await Promise.all(Object.entries(b.DEPENDENCIES.vectorAssets.characters).map(async([id,definition])=>{const compiled=b.vectorAssets.characters[id],again=await b.vectorAssetLoader.load(new URL(definition.url,location.href),{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});return{id,sameObject:compiled===again,parts:compiled.metadata.parts.length,views:Object.keys(compiled.metadata.expressions),rollDuration:compiled.metadata.clips.roll.durationMs};}));
+  return{sameObject:cached===b.companionVector,sha256:b.companionVector.sourceSha256,viewBox:b.companionVector.viewBox,vertices:b.companionVector.geometry.vertices.length,parts:b.companionVector.metadata.parts.length,clips:Object.keys(b.companionVector.metadata.clips),characters,rendererCharacterCount:b.app.renderer.companionRenderer.characterAssets.size};
  });
  assert.equal(loaded.sameObject,true,'the startup loader should return its cached compiled result');
  assert.equal(loaded.sha256,expectedSha);assert.deepEqual(loaded.viewBox,[0,0,256,256]);assert(loaded.vertices>0&&loaded.parts===8);
+ assert.deepEqual(loaded.characters.map(c=>c.id).sort(),['bee','bug','flower','fungus','sprout']);assert(loaded.characters.every(c=>c.sameObject&&c.parts===14&&c.views.length===5&&c.rollDuration===360));assert.equal(loaded.rendererCharacterCount,5);
  assert.equal(assetRequests,1,'one startup fetch and a same-key load must produce only one source request');evidence.cacheRequests=assetRequests;
  pass('byte-identical SVG is fetched once, SHA-verified, compiled through the shared startup loader, and cache-reused',loaded);
 
+ const playerId=await page.evaluate(()=>Bloom.app.localId);
+ await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id),playerId,{timeout:10000});
+ const playerIdle=await page.evaluate(id=>{const s=Bloom.app.renderer.companionRenderer.characterSamples.find(s=>s.key===id);return s&&{kind:s.kind,clip:s.clip,view:s.view,flip:s.flip,depthTest:s.depthTest,depthWrite:s.depthWrite,worldMatrixLength:s.worldMatrix.length};},playerId);
+ assert.equal(playerIdle.kind,'sprout');assert.equal(playerIdle.depthTest,true);assert.equal(playerIdle.worldMatrixLength,16);
+ pass('the live player is drawn as an original SVG retained mesh in the existing world pass',playerIdle);
+ const playerShot=path.join(out,'player-svg-live-webgl.png');await page.locator('#world').screenshot({path:playerShot});evidence.screenshots.push(path.relative(root,playerShot));
+ await page.keyboard.down('KeyW');
+ await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&['walk','run'].includes(s.clip)),playerId,{timeout:5000});
+ const moving=await page.evaluate(id=>{const s=Bloom.app.renderer.companionRenderer.characterSamples.find(s=>s.key===id);return{clip:s.clip,frame:s.frame};},playerId);
+ await page.keyboard.down('ShiftLeft');
+ await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&s.clip.startsWith('roll')),playerId,{timeout:5000});
+ await page.waitForTimeout(110);
+ const rolling=await page.evaluate(id=>{const r=Bloom.app.renderer.companionRenderer,s=r.characterSamples.find(s=>s.key===id),state=r.characterPlayers.get(id),body=r.characterAssets.get('sprout').metadata.parts.findIndex(p=>p.id==='body'),transform=state.player.partPoses()[body].transform;return{clip:s.clip,frame:s.frame,timeMs:s.timeMs,bodyTransform:Array.from(transform),bodyAngle:Math.atan2(transform[1],transform[0])};},playerId);
+ await page.keyboard.up('ShiftLeft');await page.keyboard.up('KeyW');
+ await page.waitForFunction(()=>Bloom.app.actor().combat.state!=='roll',null,{timeout:2000});
+ assert(['walk','run'].includes(moving.clip));assert(rolling.clip.startsWith('roll'));assert(rolling.timeMs>0&&rolling.timeMs<360);assert(Math.abs(rolling.bodyAngle)>.2,'the source-authored roll pivot must rotate the rendered SVG body: '+JSON.stringify(rolling));
+ pass('real keyboard movement and context-roll input drive the player SVG animation, including the authored 360 ms roll timeline',{moving,rolling});
+ await page.evaluate(()=>{const app=Bloom.app;app.localScheduler.stop();app.actor().facing={x:0,y:0,z:-1};app.renderer.camera.yaw=0;app.scene.reset();});
+ const variants=[];
+ for(let raw=0;raw<8;raw++){
+  const dir=raw>=5?8-raw:raw,flip=raw>=5;
+  await page.evaluate(raw=>{const app=Bloom.app;app.renderer.camera.yaw=0;app.actor().facing={x:Math.sin(raw*Math.PI/4),y:0,z:Math.cos(raw*Math.PI/4)};app.scene.reset();},raw);
+  await page.waitForFunction(({id,dir,flip})=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&s.view===dir&&s.flip===flip),{id:playerId,dir,flip},{timeout:4000});
+  variants.push(await page.evaluate(id=>{const s=Bloom.app.renderer.companionRenderer.characterSamples.find(s=>s.key===id);return{view:s.view,flip:s.flip};},playerId));
+ } assert.equal(new Set(variants.map(v=>v.view+':'+v.flip)).size,8,'the live player camera mapping should cover all eight directions');
+ pass('camera sampling covers all eight folded SVG direction and mirror variants',variants);
  const fixture=await page.evaluate(()=>{
   const app=Bloom.app,sim=app.sim,p=app.actor(),terrain=sim.terrain;
   const eye={x:p.pos.x,y:p.pos.y+Bloom.CFG.player.eyeHeight,z:p.pos.z};
@@ -95,11 +130,16 @@ try{
    details={id:candidate.id,pos:{...candidate.pos},target,eye,block:{x:bx,y:by,z:bz},distance,dir};break outer;
   }
   if(!candidate)throw Error('Could not find a flat, directly visible fixture site with a clear block cell in the camera ray');
+  const wild=Object.values(sim.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead);if(wild.length>=Bloom.CFG.creatures.maxWild){const removable=wild.filter(a=>a.id!==candidate.id).sort((a,b)=>Math.hypot(b.pos.x-candidate.pos.x,b.pos.z-candidate.pos.z)-Math.hypot(a.pos.x-candidate.pos.x,a.pos.z-candidate.pos.z))[0];if(removable){sim.physics.removeBody(removable);delete sim.actors[removable.id];}}
+  const nx=Math.floor(candidate.pos.x)+4,nz=Math.floor(candidate.pos.z),ny=terrain.height(nx,nz),npc=sim.addCreature('leaf',{x:nx+.5,y:ny+1.1,z:nz+.5});if(!npc)throw Error('Could not create a live leaf NPC SVG fixture');details.npcId=npc.id;
   app.localScheduler.stop();app.scene.reset();app.renderer.camera.first=true;details.cameraYaw=Math.atan2(-details.dir.x,-details.dir.z);details.cameraPitch=-Math.asin(details.dir.y);app.renderer.camera.yaw=details.cameraYaw;app.renderer.camera.pitch=details.cameraPitch;app.renderer.camera.distance=0;
   return details;
  });
  await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.samples.some(s=>s.mode==='svg'&&s.key===id),fixture.id,{timeout:15000});
- const front=await page.evaluate(id=>{
+ await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&s.kind==='fungus'),fixture.npcId,{timeout:10000});
+ const npcSample=await page.evaluate(id=>{const s=Bloom.app.renderer.companionRenderer.characterSamples.find(s=>s.key===id);return s&&{kind:s.kind,clip:s.clip,depthTest:s.depthTest,worldMatrixLength:s.worldMatrix.length};},fixture.npcId);
+ assert.equal(npcSample.kind,'fungus');assert.equal(npcSample.depthTest,true);assert.equal(npcSample.worldMatrixLength,16);
+ pass('a live wild leaf NPC routes through its original fungus SVG mesh in the same 3D world pass',npcSample); const front=await page.evaluate(id=>{
   const app=Bloom.app,r=app.renderer,c=app.sim.actors[id],sample=r.companionRenderer.samples.find(s=>s.mode==='svg'&&s.key===id);
   const state=r.companionRenderer.players.get(id),parts=state.player.partPoses(),metadata=r.companionRenderer.asset.metadata;
   return{sample,frontVisible:parts[metadata.parts.findIndex(p=>p.id==='face-front')].visible,backVisible:parts[metadata.parts.findIndex(p=>p.id==='face-back')].visible,viewProjectionLength:r.vp.length,worldReady:r.worldVisualReady(c.pos,.3)};
@@ -151,6 +191,11 @@ try{
  assert(revealed.changed>40&&revealed.total>3000,'disabling depth in the same live draw should reveal the SVG over the voxel in the actual browser screenshot: '+JSON.stringify({revealed,center,canvas:[beforeImage.width,beforeImage.height]}));
  evidence.depthPixels={center,roi:{width:84,height:84,yOffset:28},depthTestEnabledScreenshotDelta:hidden,depthTestDisabledScreenshotDelta:revealed,block:ray.block,ray:ray.ray};
  pass('the actual WebGL world depth buffer occludes the SVG mesh; the same mesh is visible over the block when depth testing is disabled',evidence.depthPixels);
+ const mobileContext=await browser.newContext({viewport:{width:844,height:390},deviceScaleFactor:1,isMobile:true,hasTouch:true}),mobile=await mobileContext.newPage(),mobileErrors=[];mobile.on('pageerror',error=>mobileErrors.push(error.message));await mobile.goto('http://127.0.0.1:'+server.address().port+'/');
+ await mobile.waitForFunction(()=>window.Bloom?.app?.started&&window.Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===Bloom.app.localId),null,{timeout:60000});const mobileId=await mobile.evaluate(()=>Bloom.app.localId),mobileInitial=await mobile.evaluate(id=>{const r=Bloom.app.renderer,s=r.companionRenderer.characterSamples.find(v=>v.key===id);return{kind:s?.kind,clip:s?.clip,depthTest:s?.depthTest,worldMatrixLength:s?.worldMatrix.length,canvas:[r.canvas.clientWidth,r.canvas.clientHeight]};},mobileId);assert.equal(mobileInitial.kind,'sprout');assert.equal(mobileInitial.depthTest,true);assert.equal(mobileInitial.worldMatrixLength,16);assert(mobileInitial.canvas[0]>mobileInitial.canvas[1]);
+ await mobile.evaluate(()=>Bloom.app.localScheduler.stop());const mobileDirections=[];for(let raw=0;raw<8;raw++){const dir=raw>=5?8-raw:raw,flip=raw>=5;await mobile.evaluate(raw=>{const app=Bloom.app;app.renderer.camera.yaw=0;app.actor().facing={x:Math.sin(raw*Math.PI/4),y:0,z:Math.cos(raw*Math.PI/4)};app.scene.reset();},raw);await mobile.waitForFunction(({id,dir,flip})=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&s.view===dir&&s.flip===flip),{id:mobileId,dir,flip},{timeout:5000});mobileDirections.push([dir,flip]);}assert.equal(new Set(mobileDirections.map(([dir,flip])=>dir+':'+flip)).size,8);await mobile.evaluate(()=>Bloom.app.localScheduler.start());
+ const joystick=await mobile.locator('#joystick').boundingBox();assert(joystick&&joystick.width>0&&joystick.height>0,'landscape mobile joystick must be visible');await mobile.mouse.move(joystick.x+joystick.width/2,joystick.y+joystick.height/2);await mobile.mouse.down();await mobile.mouse.move(joystick.x+joystick.width/2,joystick.y+joystick.height/2-40,{steps:3});await mobile.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&['walk','run'].includes(s.clip)),mobileId,{timeout:8000});await mobile.mouse.up();await mobile.locator('#mobile-roll').tap();await mobile.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&s.clip.startsWith('roll')),mobileId,{timeout:8000});
+ const mobileShot=path.join(out,'player-svg-landscape-mobile-webgl.png');await mobile.locator('#world').screenshot({path:mobileShot});evidence.screenshots.push(path.relative(root,mobileShot));evidence.mobile={initial:mobileInitial,directions:mobileDirections,walkAndRoll:true};pass('landscape touch view draws the SVG player with the live 3D camera, all eight directions, joystick movement, and touch roll',evidence.mobile);assert.deepEqual(mobileErrors,[],'mobile page errors: '+mobileErrors.join('; '));await mobileContext.close();
  assert.deepEqual(errors,[],'page errors: '+errors.join('; '));
  evidence.result='PASS';evidence.elapsedMs=Date.now();
  fs.writeFileSync(path.join(out,'validation.json'),JSON.stringify(evidence,null,2)+'\n');

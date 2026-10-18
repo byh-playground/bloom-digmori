@@ -32,22 +32,40 @@ function createCompanionCombatAtlas(gl){
  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);for(const name of[gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,name,gl.NEAREST);for(const name of[gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,name,gl.CLAMP_TO_EDGE);return{tex,frames,canvas,count:index};
 }
 
-function svgWorldMatrix(viewBox,root,facing,sizeScale){
- const [minX,minY,width,height]=viewBox,size=4*sizeScale/Math.max(width,height),forward=V.norm({x:facing.x,y:0,z:facing.z}),right={x:-forward.z,y:0,z:forward.x};
- const offset=minX+width*.5;
- return new Float32Array([right.x*size,0,right.z*size,0,0,-size,0,0,forward.x,0,forward.z,0,
-  root.x-right.x*offset*size,root.y-1+(minY+height)*size,root.z-right.z*offset*size,1]);
+function svgWorldMatrix(viewBox,root,facing,sizeScale,flipX=false,aspectX=1){
+ const [minX,minY,width,height]=viewBox,size=4*sizeScale/Math.max(width,height),sx=size*aspectX*(flipX?-1:1),forward=V.norm({x:facing.x,y:0,z:facing.z}),right={x:-forward.z,y:0,z:forward.x},offset=minX+width*.5;
+ return new Float32Array([right.x*sx,0,right.z*sx,0,0,-size,0,0,forward.x*size,0,forward.z*size,0,root.x-right.x*offset*sx,root.y-1+(minY+height)*size,root.z-right.z*offset*sx,1]);
 }
 
 class CompanionRenderer {
- constructor(renderer,gamekit,compiledAsset){
-  if(!gamekit?.rendering?.WebGLDevice||!gamekit?.rendering?.MeshRenderer||!gamekit?.vectorAssets?.createVectorAsset||!compiledAsset)throw Error('GameKit SVG world renderer is unavailable');
+ constructor(renderer,gamekit,compiledAssets){
+  if(!gamekit?.rendering?.WebGLDevice||!gamekit?.rendering?.MeshRenderer||!gamekit?.vectorAssets?.createVectorAsset||!compiledAssets?.pebbleMole)throw Error('GameKit SVG world renderer is unavailable');
   this.r=renderer;this.atlas=createCompanionCombatAtlas(renderer.gl);this.device=new gamekit.rendering.WebGLDevice(renderer.canvas,{alpha:false,antialias:true,depth:true,stencil:false});
- this.meshes=new gamekit.rendering.MeshRenderer(this.device);this.asset=gamekit.vectorAssets.createVectorAsset(this.meshes,compiledAsset);this.players=new Map();this.samples=[];this.frameActive=false;
+  this.meshes=new gamekit.rendering.MeshRenderer(this.device);this.asset=gamekit.vectorAssets.createVectorAsset(this.meshes,compiledAssets.pebbleMole);this.characterAssets=new Map(Object.entries(compiledAssets.characters||{}).map(([id,asset])=>[id,gamekit.vectorAssets.createVectorAsset(this.meshes,asset)]));this.characterPlayers=new Map();this.characterWorld=[];this.characterSamples=[];this.players=new Map();this.samples=[];this.frameActive=false;
  }
  beginFrame(clearColor){this.frameActive=this.device.beginFrame({width:this.r.canvas.width,height:this.r.canvas.height,clearColor:[...clearColor,1],clearDepth:1});if(this.frameActive)this.meshes.beginFrame();return this.frameActive;}
- endFrame(){if(!this.frameActive)return;this.meshes.flush('digmoriSvgFrameEnd');this.device.endFrame();this.frameActive=false;for(const [key,state]of this.players)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.players.delete(key);}}
- dispose(){for(const state of this.players.values())state.player.dispose();this.players.clear();this.asset.dispose();this.meshes.dispose();this.device.dispose();this.r.gl.deleteTexture(this.atlas.tex);}
+ endFrame(){if(!this.frameActive)return;this.meshes.flush('digmoriSvgFrameEnd');this.device.endFrame();this.frameActive=false;for(const [key,state]of this.players)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.players.delete(key);}for(const [key,state]of this.characterPlayers)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.characterPlayers.delete(key);}}
+ dispose(){for(const state of this.players.values())state.player.dispose();this.players.clear();for(const state of this.characterPlayers.values())state.player.dispose();this.characterPlayers.clear();for(const asset of this.characterAssets.values())asset.dispose();this.characterAssets.clear();this.asset.dispose();this.meshes.dispose();this.device.dispose();this.r.gl.deleteTexture(this.atlas.tex);}
+ beginCharacterFrame(){this.characterWorld=[];this.characterSamples=[];}
+ hasCharacter(kind){return this.characterAssets.has(kind);}
+ queueCharacter(item){if(this.hasCharacter(item.kind))this.characterWorld.push(item);}
+ characterPlayer(item,clip,expression){const asset=this.characterAssets.get(item.kind);let state=this.characterPlayers.get(item.key);if(!state){state={player:asset.createPlayer({clip,startedAtMs:0}),clip,expression:null,lastSeen:this.r.frame};this.characterPlayers.set(item.key,state);}else if(state.clip!==clip){state.player.play(clip,0);state.clip=clip;}if(state.expression!==expression){state.player.setExpression(expression);state.expression=expression;}state.lastSeen=this.r.frame;return state.player;}
+ drawCharacter(item){
+  if(!this.frameActive)return;const r=this.r,sample=item.sample,asset=this.characterAssets.get(item.kind);if(!asset)return;
+  const isRoll=sample.clip.startsWith('roll'),sourceClip=isRoll?'roll':'idle',p=isRoll?sample.frame/Math.max(1,ANIMATION.rollFrames-1):0,timeMs=isRoll?360*p:0,expression='view'+sample.dir,player=this.characterPlayer(item,sourceClip,expression);
+  player.seek(timeMs);let pose;
+  if(isRoll){const tuck=Math.min(easeMotion(p/.18),easeMotion((1-p)/.18));pose={...clipArtPose('idle',0),roll:true,tuck,armL:[lerp(13,20,tuck),lerp(40,34,tuck)],armR:[lerp(34,27,tuck),lerp(40,34,tuck)],stride:2.4*tuck,knee:4*tuck};player.setBasePose('body',{x:0,y:0,rotation:0,scaleX:1,scaleY:1});}
+  else{pose=clipArtPose(sample.clip,sample.frame);player.setBasePose('body',{x:0,y:-pose.squash*pose.bob,rotation:pose.lean,scaleX:1+(1-pose.squash)*.25,scaleY:pose.squash});}
+  const arm=(shoulder,base,tip)=>{const bx=base[0]-shoulder[0],by=base[1]-shoulder[1],tx=tip[0]-shoulder[0],ty=tip[1]-shoulder[1],baseLength=Math.hypot(bx,by)||1,length=Math.hypot(tx,ty)||1,scale=length/baseLength;return{x:0,y:0,rotation:Math.atan2(ty,tx)-Math.atan2(by,bx),scaleX:scale,scaleY:scale};};
+  player.setBasePose('arm-left',arm([22,43],[21,51],[pose.armL[0]+8,pose.armL[1]+11]));player.setBasePose('arm-right',arm([41,43],[42,51],[pose.armR[0]+8,pose.armR[1]+11]));
+  player.setBasePose('leg-left',{x:pose.stride,y:-Math.max(0,pose.stride)*.28,rotation:pose.knee*.025,scaleX:1,scaleY:1});player.setBasePose('leg-right',{x:-pose.stride,y:-Math.max(0,-pose.stride)*.28,rotation:-pose.knee*.025,scaleX:1,scaleY:1});
+  player.setBasePose('foot-left',{x:pose.stride,y:-Math.max(0,pose.stride)*.28,rotation:0,scaleX:1,scaleY:1});player.setBasePose('foot-right',{x:-pose.stride,y:-Math.max(0,-pose.stride)*.28,rotation:0,scaleX:1,scaleY:1});
+  for(let view=0;view<5;view++)player.setBasePose('view'+view,{x:0,y:0,rotation:item.kind==='sprout'?Math.sin(sample.frame/(ANIMATION.clips[sample.clip]||4)*TAU)*.012:0,scaleX:1,scaleY:1});
+  const forward=V.norm({x:r.forward.x,y:0,z:r.forward.z}),root={x:item.pos.x,y:item.pos.y+1,z:item.pos.z},sizeScale=(32/56)*(item.scale||1),worldMatrix=svgWorldMatrix(asset.viewBox,root,forward,sizeScale,sample.flip,1.65*56/96);
+  player.draw({viewProjection:r.vp,worldMatrix,alpha:item.alpha??1,color:item.tint||[1,1,1,1],whiteFlash:!!item.whiteFlash,depthTest:true,depthWrite:false,depthFunc:'lequal'});this.meshes.flush('digmoriSvgCharacter');
+  this.characterSamples.push({mode:'svg-character',key:item.key,kind:item.kind,clip:sample.clip,frame:sample.frame,view:sample.dir,flip:sample.flip,expression,timeMs,depthTest:true,depthWrite:false,worldMatrix:Array.from(worldMatrix),alpha:item.alpha??1});
+ }
+ drawCharacters(phase){for(const item of this.characterWorld)if(item.phase===phase)this.drawCharacter(item);}
  playerFor(key,clip,expression){let state=this.players.get(key);if(!state){state={player:this.asset.createPlayer({clip,startedAtMs:0}),clip,expression:null,lastSeen:this.r.frame};this.players.set(key,state);}else if(state.clip!==clip){state.player.play(clip,0);state.clip=clip;}
   if(state.expression!==expression){state.player.setExpression(expression);state.expression=expression;}state.lastSeen=this.r.frame;return state.player;}
  world(out,root,mode,clip,frame,dir={x:0,y:0,z:-1},sizeScale=1,key='',front=true,timeMs=null){

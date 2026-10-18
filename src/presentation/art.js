@@ -1,95 +1,6 @@
 /* 0.9.2 승인 스프라우틀링 아트를 유지. world physics와 무관한 생성 아틀라스. */
-function createSpriteAtlas(gl){let c=document.createElement('canvas');c.width=2048;c.height=4096;let ctx=c.getContext('2d',{alpha:true});ctx.imageSmoothingEnabled=false;let textures={},index=0;const cols=32,CW=64,CH=64;const face='#ffe6bd',out='#322b39';
+function createSpriteAtlas(gl){let c=document.createElement('canvas');c.width=2048;c.height=4096;let ctx=c.getContext('2d',{alpha:true});ctx.imageSmoothingEnabled=false;let textures={},index=0;const cols=32,CW=64,CH=64,out='#322b39';
 function fill(col){ctx.fillStyle=col}function poly(points,color,stroke=out,width=2){ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);ctx.closePath();ctx.fillStyle=color;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.lineJoin='round';ctx.stroke()}}function rect(x,y,w,h,c){fill(c);ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}function dotc(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fillStyle=c;ctx.fill()}
-function drawHead(kind,view,action,frame,motion){const back=view===3||view===4;let hood=kind==='sprout'?'#78c74a':kind==='fungus'?'#b38bea':kind==='flower'?'#f1a1b4':kind==='bug'?'#78c3d3':'#e7c34f';let hoodHi=kind==='sprout'?'#a6e96c':kind==='fungus'?'#d9a9eb':kind==='flower'?'#ffd1b7':kind==='bug'?'#b9e9e5':'#f7d770',hoodLo=kind==='sprout'?'#468f49':kind==='fungus'?'#8257a3':kind==='flower'?'#c36c90':kind==='bug'?'#3d8f9b':'#ab873e';
-// head — one simple recognizable shape readable from a distance
-if(kind==='sprout'){
- poly(view===2?[[10,24],[10,17],[14,10],[20,7],[28,8],[34,15],[37,21],[35,28],[26,31],[15,30]]:
-      view===1?[[10,24],[10,17],[13,11],[20,7],[29,8],[36,14],[38,23],[34,29],[15,31]]:
-      view===3?[[9,24],[10,16],[16,9],[25,7],[33,11],[36,19],[35,27],[28,31],[14,29]]:
-      [[11,25],[9,19],[11,12],[15,8],[20,6],[29,8],[36,14],[37,23],[34,30],[15,31]],hood,out,2.5);
- poly(view===2?[[12,14],[20,9],[27,9],[31,12],[26,14],[14,17]]:[[14,12],[20,8],[27,8],[33,12],[29,14],[16,15]],hoodHi,null,0);
- poly([[11,25],[15,29],[32,29],[36,23],[33,25],[30,28],[17,27]],hoodLo,null,0);
- if(!back)poly(view===2?[[27,16],[32,17],[35,20],[36,23],[31,28],[27,27]]:
-                  view===1?[[20,16],[32,17],[34,23],[31,28],[21,27],[17,22]]:
-                  [[15,17],[31,17],[33,25],[29,29],[17,29],[14,25]],face,out,1.8);
- if(view===2){ // protruding side profile; back of hood remains a visible dark silhouette
-   poly([[10,20],[14,27],[26,30],[25,26],[24,16],[19,13]],hoodLo,null);
-   poly([[32,22],[37,24],[32,26]],face,out,1.3);
- }
- // stalk + two leaves with secondary animation
- let wobble=Math.sin(motion*TAU)*1.8;rect(22,3,2,5,'#397a42');poly([[23,5],[18+wobble,3],[16+wobble,-1],[22+wobble,0],[25,3]],'#8dd854','#376b39',1);poly([[24,4],[30-wobble,0],[32-wobble,1],[29-wobble,5]],'#b6ed6c','#376b39',1);
-}else if(kind==='fungus'){
- poly([[15,22],[15,14],[21,10],[30,12],[33,18],[32,29],[17,30]],face,out,2);poly([[6,17],[9,10],[15,6],[25,3],[34,7],[40,15],[41,21],[10,22]],hood,out,2.5);poly([[11,13],[16,8],[29,7],[35,12]],hoodHi,null,0);dotc(18,13,2.2,'#fff1ce');dotc(29,16,2,'#fff1ce');
-}else if(kind==='flower'){
- poly([[12,16],[18,10],[29,11],[35,17],[34,28],[15,29]],face,out,2);for(let a=0;a<5;a++){let ang=a*TAU/5-.9;dotc(24+Math.cos(ang)*11,16+Math.sin(ang)*10,6,hood)}dotc(24,16,8,hoodHi);
-}else{poly([[12,14],[15,8],[32,9],[36,17],[33,29],[15,29]],hood,out,2.4);poly([[16,11],[32,12],[31,17],[16,18]],hoodHi,null,0);if(kind==='bug'){rect(18,3,2,7,out);rect(30,3,2,7,out);dotc(19,3,2,hoodLo);dotc(31,3,2,hoodLo)}else{rect(21,4,3,5,out);dotc(23,4,3,'#ffdb75')} }
- if(!back){
-    let eyeX=view===2?30:view===1?27:20;
-    rect(eyeX,20,view===2?2:3,4,out);
-    if(view===0)rect(28,20,3,4,out);
-    if(action==='hurt')rect(eyeX,20,3,2,out);
-    if(kind==='sprout'){
-       if(view===0){rect(18,26,3,2,'#f4ac9f');rect(30,26,2,2,'#f4ac9f')}
-       if(view===1)rect(20,25,3,2,'#f4ac9f');
-    }
- }
-}
-function make(kind,dir,action,frame){let cx=24,cy=27;let view=dir>=5?8-dir:dir;let side=(view===1||view===2||view===3),back=(view===3||view===4),front=(view===0||view===1);let right=1;
-const art=clipArtPose(action,frame),motion=frame/(ANIMATION.clips[action]||4),walk=action==='walk'||action==='run',stride=art.stride,bob=art.bob;
-ctx.save();ctx.translate(cx,48);ctx.rotate(art.lean);ctx.scale(1+(1-art.squash)*.25,art.squash);ctx.translate(-cx,-48-bob);
-let hood=kind==='sprout'?'#78c74a':kind==='fungus'?'#b38bea':kind==='flower'?'#f1a1b4':kind==='bug'?'#78c3d3':'#e7c34f';let hoodHi=kind==='sprout'?'#a6e96c':kind==='fungus'?'#d9a9eb':kind==='flower'?'#ffd1b7':kind==='bug'?'#b9e9e5':'#f7d770',hoodLo=kind==='sprout'?'#468f49':kind==='fungus'?'#8257a3':kind==='flower'?'#c36c90':kind==='bug'?'#3d8f9b':'#ab873e';
-// small ground-independent body and stepping feet
-poly([[17,29],[31,29],[34,38],[31,45],[17,45],[14,38]],kind==='bug'?'#517d9a':'#e9e7d1',out,2);poly([[15,32],[23,35],[32,31],[30,42],[17,42]],kind==='sprout'?'#a7d874':hoodLo,out,1.5);
-let footY=48;const knee=art.knee;
-function limb(x,y,kx,ky,ex,ey,color,width=4){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(kx,ky);ctx.lineTo(ex,ey);ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle=out;ctx.lineWidth=width+2.5;ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}
-limb(19,39,19+stride*.5,44-knee,18+stride,footY-Math.max(0,stride)*.28,'#564538',4);
-limb(28,39,28-stride*.5,44-knee,28-stride,footY-Math.max(0,-stride)*.28,'#564538',4);
-rect(15+stride,footY-1-Math.max(0,stride)*.28,7,3,'#473849');rect(25-stride,footY-1-Math.max(0,-stride)*.28,7,3,'#473849');
-limb(14,32,(14+art.armL[0])*.5-2,(32+art.armL[1])*.5,art.armL[0],art.armL[1],face,3.4);
-limb(33,32,(33+art.armR[0])*.5+2,(32+art.armR[1])*.5,art.armR[0],art.armR[1],face,3.4);
-if(view===1||view===2){poly([[14,30],[19,27],[19,38],[16,41],[11,36]],'#9d724c',out,2);rect(13,33,2,5,'#d0a45f')}
-drawHead(kind,view,action,frame,motion);
- if(back && kind==='sprout'){
-   // Strap and pack on back, different from side-profile pack.
-   poly(view===4?[[17,29],[31,29],[33,38],[29,41],[19,41],[15,38]]:
-                 [[15,29],[25,29],[28,38],[21,41],[13,39]],'#8d6748',out,2);
-   rect(view===4?22:17,32,7,6,'#cda769');
-   rect(view===4?25:19,33,2,3,'#ffdfa0');
- }
-if(!back&&['light','lightReverse','heavy','heavyReverse','overhead','thrust','thrustReverse','bow','bash','guard','charge'].includes(action)){limb(14,32,(14+art.armL[0])*.5-2,(32+art.armL[1])*.5,art.armL[0],art.armL[1],face,3.4);limb(33,32,(33+art.armR[0])*.5+2,(32+art.armR[1])*.5,art.armR[0],art.armR[1],face,3.4);}
-ctx.restore();}
-function add(kind,dir,action,frame){let key=kind+'/'+dir+'/'+action+'/'+frame;let x=(index%cols)*CW,y=Math.floor(index/cols)*CH;
-ctx.save();ctx.beginPath();ctx.rect(x,y,CW,CH);ctx.clip();ctx.translate(x,y);
-if(action.startsWith('roll'))makeRoll(dir,+action.slice(4),frame);else{ctx.translate(8,11);make(kind,dir,action,frame);}ctx.restore();
-textures[key]={x,y,w:CW,h:CH};index++;}
-// Directional tumble atlas: rotate a tucked joint model around UP x travel, not the billboard.
-// Head art comes from the same approved sprout drawing, with front/back selected after rotation.
-const rollHeads=new Map();
-function headCanvas(view){if(rollHeads.has(view))return rollHeads.get(view);const save=ctx,head=document.createElement('canvas');head.width=48;head.height=36;ctx=head.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.save();if(view>=5){ctx.translate(48,0);ctx.scale(-1,1);}ctx.translate(0,3);drawHead('sprout',view>=5?8-view:view,'idle',0,0);ctx.restore();ctx=save;rollHeads.set(view,head);return head;}
-function makeRoll(view,variant,frame){if(frame===0||frame===ANIMATION.rollFrames-1){ctx.save();ctx.translate(8,11);make('sprout',view,'idle',0);ctx.restore();return;}const p=frame/(ANIMATION.rollFrames-1),f={x:Math.sin(view*Math.PI/4),y:0,z:Math.cos(view*Math.PI/4)},right={x:-f.z,y:0,z:f.x},relative=variant*Math.PI/4;
- const travel=V.add(V.scale(f,Math.cos(relative)),V.scale(right,Math.sin(relative))),axis={x:travel.z,y:0,z:-travel.x};
- const turn=easeMotion((p-.08)/.80)*TAU,tuck=Math.min(easeMotion(p/.18),easeMotion((1-p)/.18)),cs=Math.cos(turn),sn=Math.sin(turn);
- const rot=v=>{const cr={x:axis.y*v.z-axis.z*v.y,y:axis.z*v.x-axis.x*v.z,z:axis.x*v.y-axis.y*v.x},d=V.dot(axis,v);return V.add(V.add(V.scale(v,cs),V.scale(cr,sn)),V.scale(axis,d*(1-cs)));};
- const at=(x,y,z)=>rot(V.add(V.add(V.scale(right,x),{x:0,y,z:0}),V.scale(f,z)));
- const baseY=45-3*tuck,project=v=>({x:32+v.x,y:baseY-v.y+v.z*.20,z:v.z});
- const shapes=[];
- function oval(v,rx,ry,color){shapes.push({z:v.z,draw:()=>{const q=project(v);ctx.beginPath();ctx.ellipse(q.x,q.y,rx,ry,0,0,TAU);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=1.8;ctx.strokeStyle=out;ctx.stroke();}});}
- function bone(a,b,color,width){shapes.push({z:(a.z+b.z)*.5,draw:()=>{const q=project(a),r=project(b);ctx.lineCap='round';ctx.strokeStyle=out;ctx.lineWidth=width+2.4;ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(r.x,r.y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}});}
- // Body curls toward travel while feet fold to the chest. Distinct silhouette at every quarter turn.
- const chest=at(0,2,0),hip=at(0,-5+3*tuck,-1),headPos=at(0,14-8*tuck,2*tuck);
- oval(chest,8.5,8,'#a7d874');oval(at(0,3,-6),6,6,'#9d724c');
- for(const side of [-1,1]){const shoulder=at(side*6,3,0),elbow=at(side*(8-2*tuck),-3+6*tuck,2+3*tuck),hand=at(side*(9-4*tuck),-7+12*tuck,5*tuck),knee=at(side*4,-9+6*tuck,6*tuck),foot=at(side*5,-14+12*tuck,8*tuck);
-  bone(shoulder,elbow,'#dfe2c0',4);bone(elbow,hand,face,3.4);bone(hip,knee,'#645141',4);bone(knee,foot,'#564538',4.8);oval(foot,3.5,2.7,'#473849');}
- const normal=rot(f),headView=(Math.round(Math.atan2(normal.x,normal.z)/(Math.PI/4))+8)%8,headImage=headCanvas(headView),up=rot({x:0,y:1,z:0}),qx=-up.y+up.z*.20,angle=Math.atan2(up.x,-qx);
- shapes.push({z:headPos.z+.5,draw:()=>{const q=project(headPos),scale=1-tuck*.20;ctx.save();ctx.translate(q.x,q.y);ctx.rotate(angle);ctx.scale(scale,scale);ctx.drawImage(headImage,4,0,40,35,-20,-18,40,35);ctx.restore();}});
- shapes.sort((a,b)=>a.z-b.z);for(const s of shapes)s.draw();
-}
-
-for(const kind of ['sprout','fungus','bug'])for(let d=0;d<5;d++)for(const [a,n]of Object.entries(ANIMATION.clips)){if(kind!=='sprout'&&(['run','brake','charge','guard','gather','bash'].includes(a)||a.endsWith('Reverse')))continue;for(let f=0;f<n;f++)add(kind,d,a,f);}
-for(let d=0;d<5;d++)for(let k=0;k<8;k++)for(let f=0;f<ANIMATION.rollFrames;f++)add('sprout',d,'roll'+k,f);
-// Unused decorative species retain their original walk frames for saved NPC kinds.
-for(const kind of ['flower','bee'])for(let d=0;d<5;d++)for(let f=0;f<3;f++)add(kind,d,'walk',f);
 function addEffect(name,draw){let x=(index%cols)*CW,y=Math.floor(index/cols)*CH;ctx.save();ctx.translate(x,y);if(!name.startsWith('slash-'))ctx.translate(8,4);draw();ctx.restore();textures['fx/'+name]={x,y,w:CW,h:CH};index++}
 addEffect('spark',()=>{poly([[24,9],[27,22],[39,15],[32,28],[45,31],[31,36],[28,49],[21,37],[8,42],[17,30],[7,22],[21,24]],'#ffffff',null)});
 addEffect('impact-light',()=>{poly([[24,4],[28,22],[43,12],[34,27],[51,30],[33,35],[38,50],[26,39],[16,55],[18,37],[3,40],[16,29],[5,18],[21,23]],'#ffffff',null);rect(21,26,8,8,'#ffffff')});
@@ -223,7 +134,7 @@ class CombatVisuals {
   if(e.type==='stagger'){this.bursts.push({age:0,duration:350,point:{...e.pos,y:e.pos.y+.55},normal:{x:0,y:1,z:0},style:'break',color:[1,.68,.25],size:1.35,heavy:true,seed:hashStr(e.id)});this.bursts.push({age:0,duration:310,point:{...e.pos,y:e.pos.y+.035},ground:true,color:[1,.69,.32],size:1.5,heavy:true,seed:hashStr(e.id)});}
   if(e.type==='burst')this.bursts.push({age:0,duration:450,point:{...e.pos,y:e.pos.y+.05},ground:true,color:[.90,.42,.65],size:e.radius||4,heavy:true,seed:hashStr(e.id)});
   if(e.type==='evade'&&(e.sourceId===local||e.actorId===local))this.number({...e,damage:null,label:'회피'},position,[.65,.88,.93],false);
-if(e.type==='death'){const scale=target?.scale||1,def=target?.speciesId?SPECIES[target.speciesId].wild:target?.boss?BOSS:null;this.ghosts.push({age:0,duration:380,pos:{...e.pos},scale,kind:def?.kind||'sprout',tint:def?.tint||[1,1,1,1]});const seed=hashStr(e.id);for(let i=0;i<14;i++){const h=hash3(seed,i,9);this.particles.push({kind:'shard',pos:{...e.pos,y:e.pos.y+scale},velocity:{x:((h%31)-15)*.16,y:1.7+(h%6)*.35,z:(((h>>>8)%31)-15)*.16},age:0,duration:320+h%180,size:.065+h%4*.018,color:[.74,.88,.51],gravity:3});}}
+if(e.type==='death'){const scale=target?.scale||1,def=target?.speciesId?SPECIES[target.speciesId].wild:target?.boss?BOSS:null;this.ghosts.push({id:e.id,age:0,duration:380,pos:{...e.pos},scale,kind:def?.kind||'sprout',tint:def?.tint||[1,1,1,1]});const seed=hashStr(e.id);for(let i=0;i<14;i++){const h=hash3(seed,i,9);this.particles.push({kind:'shard',pos:{...e.pos,y:e.pos.y+scale},velocity:{x:((h%31)-15)*.16,y:1.7+(h%6)*.35,z:(((h>>>8)%31)-15)*.16},age:0,duration:320+h%180,size:.065+h%4*.018,color:[.74,.88,.51],gravity:3});}}
   while(this.particles.length>CFG.combat.feedback.particles)this.particles.shift();while(this.bursts.length>CFG.combat.feedback.bursts)this.bursts.shift();}
  runDust(sim){const live=new Set();for(const a of Object.values(sim.actors)){if(a.enemy||a.dead||a.suspended||!a.sprinting||!a.grounded)continue;live.add(a.id);const step=Math.floor((a.motion?.distance||0)/1.05),prev=this.runSteps.get(a.id);if(prev===undefined){this.runSteps.set(a.id,step);continue;}if(step!==prev){this.runSteps.set(a.id,step);const dir=V.norm({x:a.velocity.x,y:0,z:a.velocity.z});this.emitDust({id:'run:'+a.id+':'+step,pos:{...a.pos},direction:V.scale(dir,-.35)},2,.46);}}for(const id of this.runSteps.keys())if(!live.has(id))this.runSteps.delete(id);}
  number(e,point,color,heavy){if(!this.options.numbers)return;const parent=document.getElementById('combat-floats');if(!parent)return;if(this.numbers.length>=CFG.combat.feedback.numbers)this.numbers.shift().node.remove();const node=document.createElement('div');node.className='combat-number'+(heavy?' heavy':'')+(e.blocked?' guarded':'');const label=e.label||(e.guardBreak?'방어 붕괴':e.stagger?'강인도 붕괴':e.lethal?'처치':e.blocked?'방어':'');const main=document.createElement('b');main.textContent=e.damage==null?label:String(e.damage);node.append(main);if(label&&e.damage!=null){const small=document.createElement('small');small.textContent=label;node.append(small);}node.style.color='rgb('+color.map(x=>Math.round(x*255)).join(',')+')';parent.append(node);this.numbers.push({node,age:0,duration:heavy?800:680,point:{...point},lane:(hashStr(e.id)%5-2)*12,heavy});}
@@ -232,7 +143,7 @@ if(e.type==='death'){const scale=target?.scale||1,def=target?.speciesId?SPECIES[
  line(out,a,b,width,color,alpha=1){const dir=V.sub(b,a),eye=V.sub(this.r.eye||{x:0,y:10,z:10},a),side=V.norm({x:dir.y*eye.z-dir.z*eye.y,y:dir.z*eye.x-dir.x*eye.z,z:dir.x*eye.y-dir.y*eye.x}),s=V.scale(side,width*.5),points=[V.add(a,s),V.add(b,s),V.sub(b,s),V.sub(a,s)];for(const i of [0,1,2,0,2,3])out.push(points[i].x,points[i].y,points[i].z,...color,alpha);}
  groundArc(out,pos,radius,start,end,color,alpha,width=.025){const segments=Math.max(4,Math.ceil(Math.abs(end-start)*12));for(let i=0;i<segments;i++){const a=lerp(start,end,i/segments),b=lerp(start,end,(i+1)/segments);this.line(out,{x:pos.x+Math.sin(a)*radius,y:pos.y,z:pos.z+Math.cos(a)*radius},{x:pos.x+Math.sin(b)*radius,y:pos.y,z:pos.z+Math.cos(b)*radius},width,color,alpha);}}
  trails(out,sim){if(!this.options.debugGround)return;for(const a of Object.values(sim.actors)){const c=a.combat,act=c.action;if(a.dead||!a.enemy||c.state!=='attack'||c.elapsed>=act.wind)continue;const rp=a.pos,yaw=Math.atan2(act.dir.x,act.dir.z),arc=act.kind==='burst'?TAU:act.arc||1.5;this.groundArc(out,{...rp,y:rp.y+.035},act.reach,yaw-arc*.5,yaw+arc*.5,[1,.44,.31],.32,.025);}}
- afterimages(sprites,sim){this.afterimageSamples=[];for(const raw of Object.values(sim.actors)){if(raw.dead||raw.suspended||!this.r.entityVisualReady(raw))continue;const a=this.pose(raw),c=a.combat,act=c.action;let strength=0,dir=null;if(c.state==='attack'&&act){if(act.companionId)continue;const timing=actionTiming(act,c.elapsed);if(timing.stage!=='active')continue;strength=.55+.45*Math.sin(clamp(timing.phase,0,1)*Math.PI);dir=V.norm({x:act.dir.x,y:0,z:act.dir.z});}else if(c.state==='roll'&&act){const p=clamp(c.elapsed/act.duration,0,1);if(p<.06||p>.88)continue;strength=Math.sin(p*Math.PI);dir=V.norm(act.dir);}else continue;const sample=actorSpritePose(a,this.r.camera.yaw,this.reactions.get(a.id)),frame=this.r.atlas.frames[sample.kind+'/'+sample.dir+'/'+sample.clip+'/'+sample.frame];if(!frame)continue;const rp=raw.pos,scale=a.scale||1,count=Math.max(1,Math.round(CFG.combat.feedback.afterimages*strength));for(let i=count;i>=1;i--){const d=.07+i*.10+(c.state==='roll'?i*.05:0),pos=V.sub(rp,V.scale(dir,d)),alpha=(.13+.06*(count-i))*strength,tint=a.enemy?[1,.42,.28,alpha]:[.72,.92,1,alpha];this.r.sprite(sprites,pos,1.65*64/48*scale,2*64/56*scale,frame,tint,sample.flip,0);this.afterimageSamples.push({id:a.id,state:c.state,index:i,alpha});}}}
+ afterimages(sprites,sim){this.afterimageSamples=[];for(const raw of Object.values(sim.actors)){if(raw.dead||raw.suspended||!this.r.entityVisualReady(raw))continue;const a=this.pose(raw),c=a.combat,act=c.action;let strength=0,dir=null;if(c.state==='attack'&&act){if(act.companionId)continue;const timing=actionTiming(act,c.elapsed);if(timing.stage!=='active')continue;strength=.55+.45*Math.sin(clamp(timing.phase,0,1)*Math.PI);dir=V.norm({x:act.dir.x,y:0,z:act.dir.z});}else if(c.state==='roll'&&act){const p=clamp(c.elapsed/act.duration,0,1);if(p<.06||p>.88)continue;strength=Math.sin(p*Math.PI);dir=V.norm(act.dir);}else continue;const sample=actorSpritePose(a,this.r.camera.yaw,this.reactions.get(a.id));if(!this.r.companionRenderer.hasCharacter(sample.kind))continue;const rp=raw.pos,scale=a.scale||1,count=Math.max(1,Math.round(CFG.combat.feedback.afterimages*strength));for(let i=count;i>=1;i--){const d=.07+i*.10+(c.state==='roll'?i*.05:0),pos=V.sub(rp,V.scale(dir,d)),alpha=(.13+.06*(count-i))*strength,tint=a.enemy?[1,.42,.28,1]:[.72,.92,1,1];this.r.companionRenderer.queueCharacter({phase:'late',key:'afterimage/'+a.id+'/'+i,kind:sample.kind,sample,pos,scale,tint,alpha,whiteFlash:false});this.afterimageSamples.push({id:a.id,state:c.state,index:i,alpha});}}}
  slashPlane(sprites,center,u,v,key,color,opacity,flip=false){const ghost=this.r.atlas.frames[key.replace(/-(\d+)$/,(_,n)=>'-'+Math.max(0,+n-2))]||this.r.atlas.frames[key],frame=this.r.atlas.frames[key];if(!frame)return;this.r.spritePlane(sprites,center,V.scale(u,1.10),V.scale(v,1.10),ghost,[color[0]*.72,color[1]*.78,color[2],opacity*.20],flip);this.r.spritePlane(sprites,center,u,v,frame,[...color,opacity*.88],flip);this.r.spritePlane(sprites,center,V.scale(u,.76),V.scale(v,.76),frame,[1,1,.94,Math.min(1,opacity*.72)],flip);}
  slashes(sprites,sim){this.slashSamples=[];for(const raw of Object.values(sim.actors)){if(raw.dead||raw.suspended||!this.r.entityVisualReady(raw))continue;const a=this.pose(raw),c=a.combat,act=c.action;if(c.state!=='attack'||!act)continue;if(act.companionId)continue;const elapsed=c.elapsed,ms=elapsed-act.wind,wind=ms<0;if(ms<-ANIMATION.slash.windup||ms>act.active+ANIMATION.slash.tail)continue;const position=raw.pos,preview={...a,pos:position},heavy=['heavy','heavyReverse','overhead'].includes(attackClip(act));if(['arrow','spit','precision','quickshot','burst'].includes(act.kind)){if(wind){const p=V.add(position,{x:0,y:a.offset*1.65,z:0}),size=.26+.12*(1+ms/ANIMATION.slash.windup);this.r.sprite(sprites,{...p,y:p.y-size/2},size,size,this.r.atlas.frames['fx/spark'],[1,.73,.35,.26]);}continue;}const t=clamp(ms/act.active,0,1),pose=wind?weaponVisualPose(preview,act,elapsed):attackPose(preview,act,t),style=pose.overhead?'overhead':pose.thrust?'thrust':heavy?'heavy':'light',tail=1-clamp((ms-act.active)/ANIMATION.slash.tail,0,1),opacity=wind?.10:tail*.98,frame=wind?0:Math.min(ANIMATION.slash.frames-1,Math.floor(clamp(ms/(act.active+ANIMATION.slash.tail),0,.999)*ANIMATION.slash.frames)),color=a.enemy?[1,.49,.30]:heavy?[1,.79,.36]:[.82,.96,1],key='fx/slash-'+style+'-'+frame;
    if(pose.overhead){const flat=V.norm({x:act.dir.x,y:0,z:act.dir.z}),side={x:-flat.z,y:0,z:flat.x},center=V.add(pose.origin,V.scale(pose.dir,pose.reach*.68));this.slashPlane(sprites,center,V.scale(side,Math.min(1.5,act.reach*.43)),{x:flat.x*.28,y:Math.min(2.65,act.reach*.80),z:flat.z*.28},key,color,opacity,false);}
@@ -241,7 +152,7 @@ if(e.type==='death'){const scale=target?.scale||1,def=target?.speciesId?SPECIES[
    this.slashSamples.push({id:a.id,sequence:act.sequence,stage:wind?'wind':ms<act.active?'active':'tail',style,motion:pose.motion,combo:act.combo,sign:pose.sign,frame,origin:pose.origin,tip:pose.tip});}}
  draw(out,sprites,sim){if(!this.options.effects)return;this.runDust(sim);this.trails(out,sim);this.afterimages(sprites,sim);this.slashes(sprites,sim);const right=this.r.right||{x:1,y:0,z:0},up={x:0,y:1,z:0};for(const b of this.bursts){if(!this.r.worldVisualReady(b.point,.08))continue;const t=b.age/b.duration,opacity=Math.pow(1-t,1.55),r=b.size*(.35+t*.65);if(b.ground){this.groundArc(out,b.point,r,0,TAU,b.color,opacity*.72,.045*(1-t)+.015);continue;}const p=V.add(b.point,V.scale(b.normal,.018)),style=b.style||'light',frame=this.r.atlas.frames['fx/impact-'+style]||this.r.atlas.frames['fx/impact-light'],size=r*(style==='break'?1.55:style==='heavy'?1.32:1.08);this.r.sprite(sprites,{...p,y:p.y-size*.5},size,size,frame,[...b.color,opacity]);const rays=style==='guard'?3:style==='break'?6:style==='heavy'?5:3;for(let i=0;i<rays;i++){const angle=(i/rays)*TAU+(b.seed%17)*.09,dir=V.add(V.scale(right,Math.cos(angle)),V.scale(up,Math.sin(angle))),outer=r*(.75+(i%2)*.35);this.line(out,V.add(p,V.scale(dir,r*.12)),V.add(p,V.scale(dir,outer)),(.055*(1-t)+.012),b.color,opacity*.8);}if(b.guard){const g=r*.78;for(let i=0;i<10;i++){const a=i*TAU/10,c=(i+1)*TAU/10;this.line(out,V.add(p,V.add(V.scale(right,Math.cos(a)*g),V.scale(up,Math.sin(a)*g))),V.add(p,V.add(V.scale(right,Math.cos(c)*g),V.scale(up,Math.sin(c)*g))),.022,b.color,opacity*.75);}}}
   for(const p of this.particles){if(!this.r.worldVisualReady(p.pos,.08))continue;const f=1-p.age/p.duration;if(p.kind==='dust'){const frame=Math.min(3,Math.floor((p.age/p.duration)*4)),size=p.size*(.72+(1-f)*.85);this.r.spritePlane(sprites,{...p.pos,y:p.pos.y+.012},{x:size,y:0,z:0},{x:0,y:0,z:size*.58},this.r.atlas.frames['fx/dust-'+frame],[...p.color,f*.34]);}else if(p.kind==='shard'){const size=p.size*(.65+f*.8);this.r.sprite(sprites,{...p.pos,y:p.pos.y-size*.5},size*2.2,size,this.r.atlas.frames['fx/shard'],[...p.color,Math.min(1,f*2)]);}else{const tail=V.sub(p.pos,V.scale(p.velocity,.025));this.line(out,tail,p.pos,p.size*f,p.color,Math.min(1,f*2));}}
-  for(const g of this.ghosts){if(!this.r.worldVisualReady(g.pos,.12))continue;const t=g.age/g.duration,frame=this.r.atlas.frames[g.kind+'/0/dead/'+Math.min(4,Math.floor(t*5))];if(frame)this.r.sprite(sprites,{...g.pos,y:g.pos.y+.15*t},1.65*64/48*g.scale*(1-t*.25),2*64/56*g.scale*(1-t*.25),frame,[...g.tint.slice(0,3),Math.pow(1-t,1.5)],false,0);}}
+  for(const g of this.ghosts){if(!this.r.worldVisualReady(g.pos,.12)||!this.r.companionRenderer.hasCharacter(g.kind))continue;const t=g.age/g.duration,sample={clip:'dead',frame:Math.min(4,Math.floor(t*5)),kind:g.kind,dir:0,flip:false};this.r.companionRenderer.queueCharacter({phase:'late',key:'ghost/'+g.id,kind:g.kind,sample,pos:{...g.pos,y:g.pos.y+.15*t},scale:g.scale*(1-t*.25),tint:[...g.tint.slice(0,3),1],alpha:Math.pow(1-t,1.5),whiteFlash:false});}}
 }
 
 function createBlockIcons(atlas,iconCanvases){
