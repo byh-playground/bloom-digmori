@@ -78,7 +78,7 @@ dist/             자동 생성; Git에 넣지 않음
 | 구성 | 고정 기준 |
 | --- | --- |
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
-| Bloom GameKit | v0.10.4 · dist `95d8676e3eaaa9f80aeed2e3361e258381511c77` |
+| Bloom GameKit | v0.14.3 · dist `418e17c455db56d6ed073d82d115191d9dd8bf04` |
 | Pebble Mole vector art | `src/assets/companions/pebble-mole.svg` is copied byte-for-byte to Pages and SHA-256 checked; the startup loader fetches, compiles once, and caches it as an in-memory retained mesh |
 | GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio, rendering, vector-assets, vector-assets-loader |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
@@ -100,7 +100,7 @@ The sprout player and remaining wild species now render from original SVG meshes
 
 ### 0.28.13 원본 SVG 직접 렌더링
 
-배포는 제작 원본 SVG만 그대로 포함합니다. 시작 시 GameKit 0.10.4의 고정된 벡터 로더가 URL, SHA-256, 바이트 상한, 곡선 품질을 확인해 한 번 컴파일하며, 제한된 캐시에 보관합니다. 조약돌 두더지는 같은 WebGL 컨텍스트에서 유지 메시로 직접 그리므로 카메라·월드 깊이·SVG의 파츠 애니메이션을 사용합니다. `dist/index.html` 안으로 빌드 결과를 생성하거나 픽셀 아틀라스로 굽지 않습니다.
+배포는 제작 원본 SVG만 그대로 포함합니다. 시작 시 GameKit 0.14.3의 고정된 벡터 로더가 URL, SHA-256, 바이트 상한, 곡선 품질을 확인해 한 번 컴파일하며, 제한된 캐시에 보관합니다. 조약돌 두더지는 같은 WebGL 컨텍스트에서 유지 메시로 직접 그리므로 카메라·월드 깊이·SVG의 파츠 애니메이션을 사용합니다. `dist/index.html` 안으로 빌드 결과를 생성하거나 픽셀 아틀라스로 굽지 않습니다.
 
 이전 0.28.10–0.28.12 구현은 빌드 시 SVG를 컴파일하고 여러 애니메이션 프레임을 캔버스/텍스처 아틀라스로 구워 단일 HTML에 넣었습니다. 이 방식은 원본과 파생 에셋을 둘로 늘리고, 아트 변경 때마다 배포 빌드에 벡터 컴파일러를 끌어들이며, SVG를 실제 월드 메시로 렌더하지 않는 나쁜 사례입니다. 앞으로는 이 경로를 되살리지 말고 `AGENTS.md`의 규칙을 따릅니다.
 

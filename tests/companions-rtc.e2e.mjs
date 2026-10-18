@@ -43,6 +43,25 @@ try{
 
  await join.locator('#network-btn').click();await join.locator('#reconnect-room').click();await join.waitForFunction(id=>Bloom.app.net.session?.players.length===2&&Bloom.app.actor()?.id===id&&Bloom.app.net.phase==='running',ids[1],{timeout:45000});
  for(const p of pages)await p.waitForFunction(({id,owner})=>Bloom.app.sim.companions.data.units[id]?.owner===owner,{id:unitId,owner:ids[0]},{timeout:12000});states=await Promise.all(pages.map(placementState));assert.deepEqual(normalize(states[0].units),normalize(states[1].units));pass('reconnect preserves room identity and companion slot ownership',{players:ids,unitId});
- assert.deepEqual(errors,[]);report.status='PASS';report.limit='Two local Edge clients through the live public signaling/RTC path; external NAT combinations not covered.';
+ const leaveSetup=await join.evaluate(()=>{
+  const s=Bloom.app.net.session;
+  if(!s||typeof s.clock!=='function'||typeof s._send!=='function'||!Number.isFinite(s.membership?.transitionTimeoutMs))throw Error('RoomSession leave regression hooks unavailable');
+  s._startedAt=s.clock()-s.membership.transitionTimeoutMs-1;
+  window.__leaveCommitAcks=0;
+  const send=s._send.bind(s);
+  s._send=(to,op,detail={})=>{send(to,op,detail);if(op==='committed'&&window.__leaveCommitAcks===0){window.__leaveCommitAcks++;send(to,op,detail);}};
+  return{startedAt:s._startedAt,transitionTimeoutMs:s.membership.transitionTimeoutMs,backupId:Bloom.app.net.backup?.id};
+ });
+ await join.locator('#network-btn').click();await join.locator('#leave-room').click();
+ await join.waitForFunction(()=>!Bloom.app.net.session&&!Bloom.app.net.busy,null,{timeout:20000});
+ const left=await join.evaluate(()=>({session:!!Bloom.app.net.session,busy:Bloom.app.net.busy,localId:Bloom.app.localId,duplicateAcks:window.__leaveCommitAcks,status:Bloom.app.net.status}));
+ assert.equal(left.session,false);assert.equal(left.duplicateAcks,1);assert.equal(left.localId,leaveSetup.backupId,'leave restores the guest’s local world');
+ await host.waitForFunction(()=>Bloom.app.net.session?.players.length===1&&Object.values(Bloom.app.sim.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length===1,null,{timeout:20000});
+ pass('graceful leave completes after an expired join deadline and duplicate commit ACK, restoring the guest’s solo world',{leaveSetup,left,hostPlayers:await host.evaluate(()=>Bloom.app.net.session.players.length)});
+ await join.locator('#room-code').fill(room);await join.locator('#join-room').click();
+ for(const p of pages)await p.waitForFunction(()=>Bloom.app.net.session?.players.length===2&&Object.values(Bloom.app.sim.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length===2,null,{timeout:45000});
+ const reentered=await Promise.all(pages.map(p=>p.evaluate(()=>Bloom.app.localId)));
+ assert.equal(reentered[0],ids[0]);assert.notEqual(reentered[1],ids[1],'same-room re-entry uses a fresh guest identity');
+ pass('guest rejoins the same RTC room after graceful leave',{room,previousPlayers:ids,reenteredPlayers:reentered}); assert.deepEqual(errors,[]);report.status='PASS';report.limit='Two local Edge clients through the live public signaling/RTC path; external NAT combinations not covered.';
 }catch(error){report.status='FAIL';report.error=error.stack;console.error(error);process.exitCode=1;}
 finally{report.elapsedMs=Date.now()-began;report.errors=errors;fs.writeFileSync(new URL('rtc-result.json',out),JSON.stringify(report,null,2));clearTimeout(timeout);await browser?.close();server?.close();}
