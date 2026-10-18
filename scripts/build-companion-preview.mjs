@@ -9,7 +9,7 @@ const preview=readFileSync('previews/companion-combat/preview.js','utf8');
 const historical=readFileSync('previews/companion-combat/attachment-art.js','utf8');
 const gamekit=engine.match(/gamekit:\{repository:'[^']+',sourceCommit:'([a-f0-9]{40})',distCommit:'([a-f0-9]{40})'/);
 const rendering=engine.match(/rendering:Object\.freeze\(\{file:'([^']+)'/),vectorAssets=engine.match(/vectorAssets:Object\.freeze\(\{file:'([^']+)'/),loader=engine.match(/vectorAssetLoader:Object\.freeze\(\{file:'([^']+)'/);
-const vector=engine.match(/vectorAssets:Object\.freeze\(\{pebbleMole:Object\.freeze\(\{url:'([^']+)',sourcePath:'([^']+)',sha256:'([a-f0-9]{64})',maxBytes:(\d+),curveSegments:(\d+)\}\)\}\)/);
+const vector=engine.match(/vectorAssets:Object\.freeze\(\{pebbleMole:Object\.freeze\(\{url:'([^']+)',sourcePath:'([^']+)',sha256:'([a-f0-9]{64})',maxBytes:(\d+),curveSegments:(\d+)\}\)/);
 if(!gamekit||!rendering||!vectorAssets||!loader||!vector)throw Error('Pinned GameKit SVG preview dependencies are missing');
 const [assetUrl,sourcePath,sha256,maxBytes,curveSegments]=vector.slice(1);
 const previewBootstrap=`const __gamekitBase='https://cdn.jsdelivr.net/gh/byh-playground/bloom-gamekit@${gamekit[2]}/';
