@@ -25,6 +25,8 @@ jobs:
         run: mkdir -p artifacts && timeout 180s sh -c 'npm test && npm run test:companion-svg'
         env:
           TEST_REPORT: artifacts/core-e2e.json
+          TEST_SCREENSHOT: artifacts/no-build-game.png
+          TEST_PREVIEW_SCREENSHOT: artifacts/no-build-preview.png
       - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
