@@ -45,6 +45,8 @@ npx playwright install --with-deps chromium
 npm test
 ```
 
+`npm test`의 엄격 core 시나리오는 유지합니다. 배포 CI는 `E2E_SCOPE=deployment npm test`로 이동·채굴·회수·설치·저장/복원·모바일 메뉴·프리뷰 전환을 검증합니다. 중간 보간 프레임 관측과 동굴 탐험은 전체 core에서 별도로 검증하며 배포 scope 통과가 전체 core 통과를 뜻하지 않습니다.
+
 `BROWSER_CHANNEL`로 실행 브라우저를 지정하고 `TEST_URL`로 공개 사이트에 같은 E2E를 실행할 수 있습니다. `TEST_REPORT`는 JSON 기록 목적지입니다. 전체 검증 상한은 180초입니다.
 
 ## 소스·빌드 구성

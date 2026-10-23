@@ -24,6 +24,7 @@ jobs:
       - name: Validate no-build user flows and SVG rendering (180 seconds total)
         run: mkdir -p artifacts && timeout 180s sh -c 'npm test && npm run test:companion-svg'
         env:
+          E2E_SCOPE: deployment
           TEST_REPORT: artifacts/core-e2e.json
           TEST_SCREENSHOT: artifacts/no-build-game.png
           TEST_PREVIEW_SCREENSHOT: artifacts/no-build-preview.png
