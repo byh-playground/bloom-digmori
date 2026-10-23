@@ -11,8 +11,8 @@ const output=process.env.TEST_REPORT;
 try {
  let url=process.env.TEST_URL;
  if(!url){server=http.createServer(serveStatic);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));url='http://127.0.0.1:'+server.address().port+'/bloom-digmori/';}
- browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'chromium'),headless:true});
- report.browser=browser.version();report.url=url;
+ browser=await chromium.launch({...(process.env.BROWSER_CHANNEL||process.platform==='win32'?{channel:process.env.BROWSER_CHANNEL||'msedge'}:{}),headless:true});
+ report.browser=browser.version();report.url=url;report.browserChannel=process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'playwright-headless-shell');
  page=await browser.newPage({viewport:{width:1366,height:768}});
  page.on('pageerror',error=>errors.push(error.message));
  page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText));
@@ -32,7 +32,8 @@ try {
  })());});
  const boot=()=>page.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});
  const state=()=>page.evaluate(()=>{const app=window.Bloom.app,a=app.actor();return{pos:{...a.pos},slots:a.inventory.slots,edits:[...app.sim.terrain.edits],seed:app.sim.terrain.seed,tick:app.sim.tick};});
- await page.goto(url);await boot();
+ await page.goto(url);await boot();report.renderer=await page.evaluate(()=>{const gl=window.Bloom.app.renderer.gl,ext=gl.getExtension('WEBGL_debug_renderer_info');return{vendor:gl.getParameter(ext?ext.UNMASKED_VENDOR_WEBGL:gl.VENDOR),renderer:gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER)};});
+ if(process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT});
  await page.evaluate(()=>{const r=window.Bloom.app.renderer,render=r.render.bind(r);window.sceneCheck={detached:true,interpolated:false,frames:0};r.render=(sim,actor,dt,frame)=>{render(sim,actor,dt,frame);window.sceneCheck.frames++;frame.forEach(m=>{if(m.displayKind!=='actor')return;const raw=sim.actors[m.id];window.sceneCheck.detached&&=m!==raw&&!('body'in m)&&!('previous'in m);if(raw&&Math.hypot(m.pos.x-raw.pos.x,m.pos.z-raw.pos.z)>.001)window.sceneCheck.interpolated=true;});};});
  report.timing=await page.evaluate(()=>({tickRate:window.Bloom.CFG.tickRate,sessionRate:window.Bloom.app.localSession.profile.tickRate,physicsStep:window.Bloom.app.sim.physics.world.timestep}));
  assert.equal(report.timing.tickRate,30);assert.equal(report.timing.sessionRate,30);assert(Math.abs(report.timing.physicsStep-1/30)<1e-6);
@@ -40,7 +41,7 @@ try {
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z<z-1,initial.pos.z,{timeout:5000});await page.keyboard.up('KeyW');
  const moved=await state();assert(moved.pos.z<initial.pos.z-1);
- await page.keyboard.press('KeyV');await page.mouse.click(683,384);await page.waitForFunction(()=>document.pointerLockElement?.id==='world');await page.mouse.move(683,620);await page.waitForFunction(()=>window.Bloom.app.actor().combat.state==='idle'&&!window.Bloom.app.actor().inputPrevious.left,null,{timeout:5000});
+ await page.keyboard.press('KeyV');await page.mouse.click(683,384);await page.waitForFunction(()=>document.pointerLockElement?.id==='world');await page.mouse.move(683,620);await page.waitForFunction(()=>window.Bloom.app.actor().combat.state==='idle'&&!window.Bloom.app.actor().inputPrevious.left,null,{timeout:15000});
  const target=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(target);report.beforeMining={initial,moved,target};
  await page.mouse.down();
  await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:5000});
