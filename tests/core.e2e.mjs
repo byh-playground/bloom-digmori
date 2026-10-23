@@ -16,7 +16,7 @@ try {
  report.browser=browser.version();report.url=url;report.browserChannel=process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'playwright-headless-shell');
  page=await browser.newPage({viewport:{width:1366,height:768},hasTouch:true});
  page.on('pageerror',error=>errors.push(error.message));
- page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText));
+ page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText+' at '+(Date.now()-started)+'ms'));
  const config=fs.readFileSync(new URL('../src/core/config.js',import.meta.url),'utf8');
  const expectedVersion=config.match(/const VERSION='([^']+)'/)[1];
  const expectedSnapshotVersion=config.match(/SNAPSHOT_VERSION='([^']+)'/)[1];
@@ -69,7 +69,7 @@ try {
  // E opens the actual inventory and exits pointer lock; synthetic Escape is browser-reserved.
  await page.keyboard.press('KeyE');await page.click('#inventory-close');await page.click('#menu-btn');
  await page.click('#save-world');await page.waitForFunction(()=>document.querySelector('#save-status').textContent.includes('저장됨'));
- const saved=await state();report.flow={initial,moved,target,mined,collected,placed,saved};report.presentation=await page.evaluate(()=>window.sceneCheck);if(!deploymentScope)assert(report.presentation.detached&&report.presentation.interpolated&&report.presentation.frames>0);else report.presentationObservation={...report.presentation,status:report.presentation.interpolated?'observed':'intermediate frame not observed; strict interpolation check not included in deployment scope'};await page.reload();await boot();
+ const saved=await state();report.flow={initial,moved,target,mined,collected,placed,saved};report.presentation=await page.evaluate(()=>window.sceneCheck);if(!deploymentScope)assert(report.presentation.detached&&report.presentation.interpolated&&report.presentation.frames>0);else report.presentationObservation={...report.presentation,status:report.presentation.interpolated?'observed':'intermediate frame not observed; strict interpolation check not included in deployment scope'};await page.waitForLoadState('networkidle');await page.reload();await boot();
  assert.equal((await state()).edits.length,0);
  await page.click('#menu-btn');await page.click('#load-world');
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('복원했어요'));
@@ -92,12 +92,14 @@ try {
  if(process.env.CAVE_INTERIOR_SCREENSHOT)await page.screenshot({path:process.env.CAVE_INTERIOR_SCREENSHOT});
  report.exploration={entrance,cave,input:'WASD walk from fresh spawn to underground gallery; no teleport'};
  }else report.exploration={status:'not run in deployment scope; unchanged full-core scenario retained'};
+ await page.waitForLoadState('networkidle');await Promise.all(pending);assert.deepEqual(errors,[]);await page.close();page=null;
  const mobile=await browser.newPage({viewport:{width:844,height:390},isMobile:true,hasTouch:true});
  mobile.on('pageerror',error=>errors.push(error.message));await mobile.goto(url);
  await mobile.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});
  await mobile.tap('#journal-btn');
  const mobileUI=await mobile.evaluate(()=>{const el=document.querySelector('#journal .panel'),r=el.getBoundingClientRect();return{visible:!document.querySelector('#journal').hidden,left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};});
  assert(mobileUI.visible&&mobileUI.left>=0&&mobileUI.top>=0&&mobileUI.right<=mobileUI.width+1&&mobileUI.bottom<=mobileUI.height+1);
+ await mobile.waitForLoadState('networkidle');await mobile.close();
  const preview=await browser.newPage({viewport:{width:1280,height:800}});
  preview.on('pageerror',error=>errors.push(error.message));
  await preview.goto(new URL('previews/companion-combat/',url).href);
