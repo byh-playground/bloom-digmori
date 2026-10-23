@@ -73,7 +73,7 @@ try {
  assert.equal((await state()).edits.length,0);
  await page.click('#menu-btn');await page.click('#load-world');
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('복원했어요'));
- const restored=await state();assert.deepEqual(restored.edits,saved.edits);assert.deepEqual(restored.slots,saved.slots);assert(Math.hypot(restored.pos.x-saved.pos.x,restored.pos.z-saved.pos.z)<0.05);
+ const restored=await state();report.flow.restored=restored;assert.deepEqual(restored.edits,saved.edits);assert.deepEqual(restored.slots,saved.slots);assert(Math.hypot(restored.pos.x-saved.pos.x,restored.pos.z-saved.pos.z)<0.05);
  const diagnostic=await page.evaluate(()=>JSON.parse(window.BloomDiagnostics.format()));
  assert.equal(diagnostic.gamekitDist,sdkSHA);assert.equal(diagnostic.version,expectedVersion);assert.equal(diagnostic.snapshotVersion,expectedSnapshotVersion);assert.equal(diagnostic.diagnostics.total,0);
  if(process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT});
@@ -97,7 +97,10 @@ try {
  const preview=await browser.newPage({viewport:{width:1280,height:800}});
  preview.on('pageerror',error=>errors.push(error.message));
  await preview.goto(new URL('previews/companion-combat/',url).href);
- await preview.waitForFunction(()=>window.symbioticPreview?.frames>1,null,{timeout:30000});
+ await preview.waitForFunction(()=>window.symbioticPreview?.frames>1||document.getElementById('error').textContent,null,{timeout:30000});
+ report.previewStartup=await preview.evaluate(()=>({state:document.getElementById('state').textContent,error:document.getElementById('error').textContent,frames:window.symbioticPreview?.frames||0}));
+ if(process.env.TEST_PREVIEW_SCREENSHOT)await preview.screenshot({path:process.env.TEST_PREVIEW_SCREENSHOT});
+ assert.equal(report.previewStartup.error,'',JSON.stringify(report.previewStartup));
  await preview.click('#b');
  await preview.waitForFunction(()=>window.symbioticPreview?.combatMode==='sword');
  await preview.click('#a');
