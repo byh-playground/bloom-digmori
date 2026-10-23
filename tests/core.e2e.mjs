@@ -38,7 +38,7 @@ try {
  assert.equal(report.timing.tickRate,30);assert.equal(report.timing.sessionRate,30);assert(Math.abs(report.timing.physicsStep-1/30)<1e-6);
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
- await page.keyboard.down('KeyW');await page.waitForTimeout(500);await page.keyboard.up('KeyW');
+ await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z<z-1,initial.pos.z,{timeout:5000});await page.keyboard.up('KeyW');
  const moved=await state();assert(moved.pos.z<initial.pos.z-1);
  await page.keyboard.press('KeyV');await page.mouse.click(683,384);await page.mouse.move(683,620);await page.waitForTimeout(1300);
  const target=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(target);
@@ -81,6 +81,16 @@ try {
  await mobile.tap('#journal-btn');
  const mobileUI=await mobile.evaluate(()=>{const el=document.querySelector('#journal .panel'),r=el.getBoundingClientRect();return{visible:!document.querySelector('#journal').hidden,left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};});
  assert(mobileUI.visible&&mobileUI.left>=0&&mobileUI.top>=0&&mobileUI.right<=mobileUI.width+1&&mobileUI.bottom<=mobileUI.height+1);
+ const preview=await browser.newPage({viewport:{width:1280,height:800}});
+ preview.on('pageerror',error=>errors.push(error.message));
+ await preview.goto(new URL('previews/companion-combat/',url).href);
+ await preview.waitForFunction(()=>window.symbioticPreview?.frames>1,null,{timeout:30000});
+ await preview.click('#b');
+ await preview.waitForFunction(()=>window.symbioticPreview?.combatMode==='sword');
+ await preview.click('#a');
+ await preview.waitForFunction(()=>window.symbioticPreview?.combatMode==='ball');
+ report.preview=await preview.evaluate(()=>({frames:window.symbioticPreview.frames,glError:window.symbioticPreview.glError,mode:window.symbioticPreview.combatMode,error:document.getElementById('error').textContent}));
+ assert.equal(report.preview.glError,0);assert.equal(report.preview.error,'');
  await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,9);assert.deepEqual(errors,[]);
  Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/mouse/touch; read-only state observations; no mocked SDK or game-state fixture'});
  console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:9,errors:0}));
