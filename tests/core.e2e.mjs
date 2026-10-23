@@ -76,6 +76,10 @@ try {
  const restored=await state();report.flow.restored=restored;assert.deepEqual(restored.edits,saved.edits);assert.deepEqual(restored.slots,saved.slots);assert(Math.hypot(restored.pos.x-saved.pos.x,restored.pos.z-saved.pos.z)<0.05);
  const diagnostic=await page.evaluate(()=>JSON.parse(window.BloomDiagnostics.format()));
  assert.equal(diagnostic.gamekitDist,sdkSHA);assert.equal(diagnostic.version,expectedVersion);assert.equal(diagnostic.snapshotVersion,expectedSnapshotVersion);assert.equal(diagnostic.diagnostics.total,0);
+ const meshState=()=>page.evaluate(()=>{const r=window.Bloom.app.renderer,b=r.meshBuilder;return{complete:r.streamComplete,visible:r.visibleChunks.size,ready:r.readyChunks.size,pending:b.pending.size,queued:b.jobs.length,completed:b.ready.length,uploadReady:r.uploadReady?.length||0,stats:{...b.stats}};});
+ report.meshBeforeCapture=await meshState();
+ await page.waitForFunction(()=>{const r=window.Bloom.app.renderer;return r.streamComplete&&r.visibleChunks.size>0&&r.readyChunks.size===r.visibleChunks.size;},null,{timeout:30000});
+ report.meshAfterCapture=await meshState();assert.equal(report.meshAfterCapture.stats.failed,0);
  if(process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT});
  if(!deploymentScope){
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');

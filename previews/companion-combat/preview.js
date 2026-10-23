@@ -98,7 +98,7 @@ function drawFrame(t){
  r.companionRenderer.endFrame();
  window.symbioticPreview={revision:4,combatMode,beat,previewOnly:true,pixelContract:{...PIXEL_CONTRACT,dpr,cssSize:[cssWidth,cssHeight],equipment:ATTACHMENT_ART.map((a,i)=>({id:a.id,pixels:r.companions.frames[combatMode+'/'+i+'/0'].pixels,worldPerPixelX:PIXEL_CONTRACT.worldPerPixelX,worldPerPixelY:PIXEL_CONTRACT.worldPerPixelY}))},layout,action,sample,positions,deploy,sockets:contract.sockets,hand:contract.hand,elbow:contract.elbow,camera:{...r.camera},renderSize:[width,height],glError:gl.getError(),frames:(window.symbioticPreview?.frames||0)+1};
 }
-try{renderer=new Renderer(previewUI.preview,previewGamekit,previewVector);renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
+try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector});renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
 function showError(e){previewUI.error.style.display='block';previewUI.error.textContent='미리보기를 렌더하지 못했습니다: '+e.message+' · WebGL을 사용할 수 있는 브라우저에서 열어 주세요.';previewUI.state.textContent='렌더 실패';console.error(e);}
 
 // Deterministic browser review entry point; same live fixture, no alternative rendering path.
