@@ -1,3 +1,4 @@
+import {serveStatic} from '../scripts/static-server.mjs';
 import {chromium} from 'playwright';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -14,7 +15,7 @@ const placementState=p=>p.evaluate(()=>({id:Bloom.app.localId,tick:Bloom.app.sim
 const normalize=units=>Object.values(units).map(({id,owner,kind,location,slot,pending,cargo})=>({id,owner,kind,location,slot,pending,cargo})).sort((a,b)=>a.id.localeCompare(b.id));
 
 try{
- server=http.createServer((req,res)=>{const route=new URL(req.url,'http://localhost').pathname;if(route==='/assets/companions/pebble-mole.svg'){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/companions/pebble-mole.svg',import.meta.url)));return;}const character=route.match(/^\/assets\/characters\/(sprout|fungus|bug|flower|bee)\.svg$/);if(character){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/characters/'+character[1]+'.svg',import.meta.url)));return;}res.setHeader('Content-Type','text/html;charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ server=http.createServer(serveStatic);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
  const contexts=[await browser.newContext({viewport:{width:1100,height:800}}),await browser.newContext({viewport:{width:1100,height:800}})],pages=[];
  for(const context of contexts){const p=await context.newPage();p.setDefaultTimeout(10000);p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:'+server.address().port+'/');await p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});pages.push(p);}
@@ -65,3 +66,4 @@ try{
  pass('guest rejoins the same RTC room after graceful leave',{room,previousPlayers:ids,reenteredPlayers:reentered}); assert.deepEqual(errors,[]);report.status='PASS';report.limit='Two local Edge clients through the live public signaling/RTC path; external NAT combinations not covered.';
 }catch(error){report.status='FAIL';report.error=error.stack;console.error(error);process.exitCode=1;}
 finally{report.elapsedMs=Date.now()-began;report.errors=errors;fs.writeFileSync(new URL('rtc-result.json',out),JSON.stringify(report,null,2));clearTimeout(timeout);await browser?.close();server?.close();}
+

@@ -1,3 +1,4 @@
+'use strict';
 /* Authoritative attack trajectory: both renderer and Rapier consume the same pose. */
 // Action descriptors are immutable launch-time facts shared by hit casts, art and VFX.
 const BASIC_CHAIN=Object.freeze([
@@ -202,5 +203,6 @@ class Combat {
  }
 
 }
+
 
 

@@ -1,3 +1,4 @@
+'use strict';
 /* Inventory: 슬롯/커서/제작 상태만 소유한다. UI는 명령을 제출한다. */
 class Inventory {
  static empty(){return{slots:Array(36).fill(null),grid:Array(9).fill(null),cursor:null,armor:{helmet:null,chest:null,legs:null,boots:null},selected:0,station:null};}
@@ -116,5 +117,6 @@ class Inventory {
   for(const s of Object.values(i.armor)){if(!s)continue;const a=ITEMS[s.id];load+=a.weight;defense+=a.defense;poise+=a.poise;}
   return{item,weapon:item?.weapon?WEAPONS[item.weapon]:null,material:item?.material?MATERIALS[item.material]:null,load,loadRatio:load/CFG.player.load,weightClass:load/CFG.player.load<.3?0:load/CFG.player.load<.7?1:2,defense,poise};}
 }
+
 
 

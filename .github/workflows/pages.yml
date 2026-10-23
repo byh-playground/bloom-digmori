@@ -1,4 +1,4 @@
-name: Build and deploy static Pages
+name: Validate and deploy source Pages
 on:
   pull_request:
   push:
@@ -10,35 +10,46 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned build dependencies
+      - name: Install pinned test dependencies
         run: npm ci
-      - name: Build single HTML and provenance
-        run: node scripts/build.mjs
-      - name: Build companion combat design preview
-        run: node scripts/build-companion-preview.mjs
-      - name: Install Chromium for the real SVG/WebGL scenario
+      - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Validate source SVG loading, camera, animation, and world depth
-        run: npm run test:companion-svg
-      - name: Save actual browser screenshots and validation report
+      - name: Validate no-build user flows and SVG rendering (180 seconds total)
+        run: mkdir -p artifacts && timeout 180s sh -c 'npm test && npm run test:companion-svg'
+        env:
+          E2E_SCOPE: deployment
+          TEST_REPORT: artifacts/core-e2e.json
+          TEST_SCREENSHOT: artifacts/no-build-game.png
+          TEST_PREVIEW_SCREENSHOT: artifacts/no-build-preview.png
+      - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: digmori-companion-svg-browser-evidence
-          path: artifacts/companion-svg/
+          name: digmori-browser-evidence
+          path: artifacts/
+      - name: Package unchanged source files for Pages
+        run: |
+          mkdir _site
+          cp index.html .nojekyll _site/
+          cp -R src previews _site/
+          find _site -type f -exec sha256sum {} + | sort > artifacts/pages-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digmori-pages-source-hashes
+          path: artifacts/pages-sha256.txt
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
+          path: _site
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: build
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -47,8 +58,35 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/configure-pages@v5
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
+      - name: Verify public Pages files match this commit byte-for-byte
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          node --input-type=module <<'JS'
+          import {readdirSync, readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):[dir+'/'+e.name]);
+          const files=['index.html',...walk('src'),...walk('previews')];
+          const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+          const base=process.env.PAGES_URL,deadline=Date.now()+180000;
+          let pending=files;
+          while(pending.length){
+            const failed=[];
+            for(const file of pending){
+              const url=new URL(file,base);url.searchParams.set('revision',process.env.GITHUB_SHA);
+              try{const response=await fetch(url,{signal:AbortSignal.timeout(15000)});const actual=hash(Buffer.from(await response.arrayBuffer())),expected=hash(readFileSync(file));
+                if(!response.ok||actual!==expected)throw Error(response.status+' '+actual);
+                console.log('MATCH '+expected+' '+file);
+              }catch(error){failed.push(file);console.log('WAIT '+file+' '+error.message);}
+            }
+            if(!failed.length)break;
+            if(Date.now()>=deadline)throw Error('Public Pages byte verification failed: '+failed.join(', '));
+            pending=failed;await new Promise(resolve=>setTimeout(resolve,5000));
+          }
+          console.log('Verified '+files.length+' deployed source files at '+process.env.GITHUB_SHA);
+          JS

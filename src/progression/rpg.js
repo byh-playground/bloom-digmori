@@ -1,3 +1,4 @@
+'use strict';
 class RPG {
  static create(){return{level:1,xp:0,points:0,skills:{vitality:0,might:0,endurance:0}};}
  static next(level){return 45+level*35;}
@@ -15,3 +16,4 @@ class RPG {
   sim.emit('skill-up',actor,{skill,level:r.skills[skill]});return true;
  }
 }
+

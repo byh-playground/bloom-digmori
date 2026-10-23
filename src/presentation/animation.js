@@ -1,3 +1,4 @@
+'use strict';
 /* A single simulation clock selects poses. Animation never creates hits or moves a body. */
 const ANIMATION=Object.freeze({cell:{width:64,height:64},stride:2.1,runStride:2.8,land:175,brake:150,
  clips:{idle:4,walk:8,run:8,swim:8,brake:3,charge:4,light:8,lightReverse:8,heavy:8,heavyReverse:8,overhead:8,thrust:8,thrustReverse:8,guard:4,hurt:4,hurtHeavy:4,stun:4,rise:2,fall:2,land:4,dead:5,gather:4,bow:8,bash:8},rollFrames:12,
@@ -82,4 +83,5 @@ function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(rever
  if(clip==='gather'){const k=Math.sin(cycle);lean=.08*k;armR=[33+5*k,29-12*k];}
  return{lean,squash,bob,stride,armL,armR,knee,head};
 }
+
 

@@ -1,3 +1,4 @@
+'use strict';
 const DUNGEON_THEMES=Object.freeze([
  Object.freeze({name:'잊힌 석실',wall:'cobble',trim:'obsidian',species:['shell','leaf']}),
  Object.freeze({name:'균사 성소',wall:'cobble',trim:'stem',species:['shell','leaf']}),
@@ -434,5 +435,6 @@ class VoxelWorld {
  static restore(seed,edits){const w=new VoxelWorld(seed);if(!Array.isArray(edits)||edits.length>200000)throw Error('지형 변경 기록 한도');for(const [key,id]of edits){const xyz=key.split(',').map(Number);if(xyz.length!==3||!xyz.every(Number.isInteger)||!BLOCKS[id]||xyz[1]<=CFG.bottom||xyz[1]>=CFG.top)throw Error('잘못된 블록');w.indexEdit(key,xyz[0],xyz[1],xyz[2],id);}return w;}
  prune(positions,renderKeys){if(this.chunks.size<550)return;const keep=renderKeys||new Set();for(const key of this.chunks.keys()){const [cx,cy,cz]=key.split(':').map(Number);if(keep.has(key)||positions.some(p=>Math.abs(cx-Math.floor(p.x/16))<=4&&Math.abs(cz-Math.floor(p.z/16))<=4&&Math.abs(cy-Math.floor(p.y/16))<=3))continue;this.chunks.delete(key);this.meshes.delete(key);}if(this.heights.size>90000)this.heights.clear();}
 }
+
 
 

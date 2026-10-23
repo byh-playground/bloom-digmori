@@ -1,3 +1,4 @@
+'use strict';
 // One species definition drives wild appearance/AI and owned capabilities.
 const SPECIES=Object.freeze({
  shell:Object.freeze({name:'조약돌 두더지',icon:'◆',art:'ball',wild:Object.freeze({kind:'pebbleMole',hp:100,poise:50,speed:2.6,damage:15,poiseDamage:10,reach:1.9,wind:700,active:125,recovery:900,tint:[.94,.7,.57,1],size:1}),capabilities:{gather:{blocks:['grass','dirt','leaves','cap','stem'],speed:2},carry:{capacity:1},attack:{mode:'ball',damage:20,poise:15,cost:10,charge:[550,1100],reach:12,cooldown:1600,groundHoldMs:300,projectile:{speed:18,lift:8,gravity:1,radius:.29}}}}),
@@ -8,3 +9,4 @@ const SPECIES=Object.freeze({
 const LEGACY_SPECIES=Object.freeze({beetle:'shell',spore:'leaf',guardian:'shell',crystalWisp:'leaf',cryptKnight:'shell'});
 const BOSS=Object.freeze({...SPECIES.warden.wild,name:SPECIES.warden.name,loot:[['heart',1],['diamond',3]]});
 const COMPANION_SLOTS=3;
+

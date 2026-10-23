@@ -1,3 +1,4 @@
+'use strict';
 class Renderer {
  constructor(canvas,gamekit,companionVector){this.canvas=canvas;this.gl=canvas.getContext('webgl',{alpha:false,antialias:true,depth:true});if(!this.gl)throw Error('WebGL이 필요한 게임입니다.');const gl=this.gl;this.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.viewRadius=matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;this.atlas=createSpriteAtlas(gl);this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.stats={drawCalls:0,vertices:0};
   this.blockAtlas=createBlockAtlas(gl);this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(gl,this.iconCanvases);this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
@@ -313,5 +314,6 @@ class Renderer {
  }
  free(){const gl=this.gl;this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);for(const b of [this.dynamic,this.spriteBuffer,this.skyBuffer,this.vfxBuffer,this.vfxSprites])gl.deleteBuffer(b);for(const p of [this.meshProgram,this.spriteProgram,this.skyProgram,this.terrainProgram,this.vfxProgram])gl.deleteProgram(p);this.companionRenderer.dispose();gl.deleteTexture(this.blockAtlas.tex);gl.deleteTexture(this.dropAtlas.tex);this.clearWaterMeshes();gl.deleteProgram(this.waterProgram);this.combatFx.reset();this.healthHud.reset();}
 }
+
 
 

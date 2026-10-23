@@ -1,3 +1,4 @@
+'use strict';
 function withTimeout(promise,ms,label){let timer;return Promise.race([promise,new Promise((_,reject)=>timer=setTimeout(()=>reject(Error(label+' 시간 초과')),ms))]).finally(()=>clearTimeout(timer));}
 function db(){return new Promise((resolve,reject)=>{const r=indexedDB.open('Bloom-Sandbox-0100',1);r.onupgradeneeded=()=>r.result.createObjectStore('world');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function storeSave(bytes){const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction('world','readwrite');tx.objectStore('world').put(bytes,'solo');tx.oncomplete=()=>{d.close();resolve()};tx.onerror=()=>{d.close();reject(tx.error)};});}
@@ -82,5 +83,6 @@ async function boot(){
 }
 $('load-retry').onclick=()=>boot();
 
-await boot();
+void boot();
+
 

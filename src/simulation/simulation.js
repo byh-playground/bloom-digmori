@@ -1,3 +1,4 @@
+'use strict';
 class Simulation {
  constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
  createActor(id,pos,speciesId=null,boss=false){const d=boss?BOSS:speciesId?SPECIES[speciesId]?.wild:null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),maxPoise:d?.poise||CFG.player.poise,scale:d?.size||1,enemy:false,kind:speciesId|| (boss?'boss':null),speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
@@ -236,5 +237,6 @@ function encodeInputObject(i){const b=new Uint8Array(CFG.net.inputSize),v=new Da
 function decodeInput(b){if(!b||b.length!==CFG.net.inputSize)return neutralInput();const v=new DataView(b.buffer,b.byteOffset,b.byteLength),f=v.getUint16(0,true);return{enabled:!!(f&1),left:!!(f&2),right:!!(f&4),roll:!!(f&8),jump:!!(f&16),sprint:!!(f&32),mine:!!(f&64),attackOnly:!!(f&128),swimRise:!!(f&256),swimDive:!!(f&512),x:v.getInt8(2)/127,z:v.getInt8(3)/127,yaw:v.getInt16(4,true)/32767*TAU,pitch:v.getInt16(6,true)/32767*1.5,selected:clamp(b[8],0,8)};}
 const encodeCommand=c=>new TextEncoder().encode(JSON.stringify(c));
 function decodeCommand(b){if(b.byteLength>2048)throw Error('명령 크기');return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(b));}
+
 
 

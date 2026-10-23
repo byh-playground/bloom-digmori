@@ -26,17 +26,15 @@
 
 ## 로컬 실행·개발
 
-Node.js 22 이상. `npm ci`로 고정된 테스트 의존성을 설치한 뒤 빌드합니다. 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
+빌드 없이 루트 `index.html`이 원본 JS·CSS·SVG를 직접 읽습니다. 정적 HTTP 서버만 있으면 실행됩니다. 아래 개발 서버는 Node.js 22 이상이며, `npm ci`는 E2E 테스트에만 필요합니다. 실제 게임은 고정 SDK를 CDN에서 로드하므로 인터넷 연결이 필요합니다.
 
 ```sh
 git clone https://github.com/byh-playground/bloom-digmori.git
 cd bloom-digmori
-npm ci
-npm run build
 npm run dev
 ```
 
-브라우저에서 http://127.0.0.1:8000/bloom-digmori/ 를 엽니다. 배포 산출물은 게임 HTML과 원본 SVG 한 파일이며, 게임 CSS·로직은 HTML에 포함됩니다. 외부 SDK까지 내장한 오프라인 HTML은 아닙니다. `file://` 직접 실행은 이번 검증 범위가 아닙니다.
+브라우저에서 http://127.0.0.1:8000/bloom-digmori/ 를 엽니다. 저장소의 `index.html`, `src/`, `previews/` 파일을 그대로 제공합니다. 게임 JS와 CSS는 개별 원본 파일이며 번들·생성 HTML·빌드 단계가 없습니다. 외부 SDK를 CDN에서 읽으므로 오프라인 실행은 지원하지 않습니다. `file://` 직접 실행은 검증 범위가 아닙니다.
 
 ```sh
 npm ci
@@ -46,6 +44,8 @@ npm test
 npx playwright install --with-deps chromium
 npm test
 ```
+
+`npm test`의 엄격 core 시나리오는 유지합니다. 배포 CI는 `E2E_SCOPE=deployment npm test`로 이동·채굴·회수·설치·저장/복원·모바일 메뉴·프리뷰 전환을 검증합니다. 중간 보간 프레임 관측과 동굴 탐험은 전체 core에서 별도로 검증하며 배포 scope 통과가 전체 core 통과를 뜻하지 않습니다.
 
 `BROWSER_CHANNEL`로 실행 브라우저를 지정하고 `TEST_URL`로 공개 사이트에 같은 E2E를 실행할 수 있습니다. `TEST_REPORT`는 JSON 기록 목적지입니다. 전체 검증 상한은 180초입니다.
 
@@ -62,16 +62,15 @@ src/
   presentation/   애니메이션·아트·렌더
   input/          PC·터치 입력
   runtime/        세션·앱·저장·SDK 부팅
-  ui/             HTML 틀·CSS·HUD
-  order.json      단일 모듈 조립 순서
-scripts/          빌드·로컬 정적 서버
+  ui/             CSS·HUD
+index.html        직접 실행·배포되는 진입점과 script 순서
+scripts/          로컬 정적 서버
 tests/            고정 사용자 흐름 E2E
-dist/             자동 생성; Git에 넣지 않음
 ```
 
-**소스 SSOT는 src/**입니다. 원본 HTML의 기능 경계를 따라 나눈 소스 조각을 `order.json` 순서로 하나의 ESM 스코프에 합칩니다. 파일 사이에 별도 런타임 래퍼나 호환 계층을 추가하지 않았습니다. 생성 HTML을 직접 수정하지 않습니다. 원본의 심볼·저장 키는 불필요하게 바꾸지 않습니다.
+**루트 `index.html`과 `src/`가 실행 원본**입니다. HTML이 CSS를 link로 읽고 기존 의존성 순서의 JS를 `defer` classic script로 실행합니다. 각 JS는 strict mode를 유지하며 공유 lexical scope를 사용합니다. SDK는 기존 고정 ESM dynamic import를 유지합니다. 런타임 코드 합치기, Blob 번들, 생성 파일이 없습니다.
 
-빌드는 조립된 모듈의 구문 검사 후 HTML과 `build.json`을 만듭니다. CI는 PR에서 빌드하고, main 변경 시 같은 정적 artifact를 GitHub Actions Pages로 배포합니다. [배포 정보](https://byh-playground.github.io/bloom-digmori/build.json)는 Git SHA·HTML SHA-256·버전·GameKit SHA·UTC 빌드 시각을 기록합니다.
+CI는 빌드 없이 저장소 원본으로 사용자 흐름과 SVG 렌더를 검증합니다. main 병합 뒤 같은 `index.html`·`src/`·`previews/`를 바이트 변경 없이 GitHub Actions Pages artifact에 담아 기존 주소에 배포합니다. `_site/`는 업로드용 임시 복사이며 컴파일·치환·번들링하지 않습니다. Actions run의 커밋과 `digmori-pages-source-hashes` artifact를 공개 파일에 대조합니다. 이전 `dist/`·`build.json` 생성 경로는 제거되었습니다. 제품 동작·저장 계약이 동일한 내부 배포 구조 변경이므로 버전은 **0.28.14**를 유지하며 새 태그를 만들지 않습니다.
 
 ## 기술 구성
 
@@ -100,7 +99,7 @@ The sprout player and remaining wild species now render from original SVG meshes
 
 ### 0.28.13 원본 SVG 직접 렌더링
 
-배포는 제작 원본 SVG만 그대로 포함합니다. 시작 시 GameKit 0.14.3의 고정된 벡터 로더가 URL, SHA-256, 바이트 상한, 곡선 품질을 확인해 한 번 컴파일하며, 제한된 캐시에 보관합니다. 조약돌 두더지는 같은 WebGL 컨텍스트에서 유지 메시로 직접 그리므로 카메라·월드 깊이·SVG의 파츠 애니메이션을 사용합니다. `dist/index.html` 안으로 빌드 결과를 생성하거나 픽셀 아틀라스로 굽지 않습니다.
+배포는 제작 원본 SVG만 그대로 포함합니다. 시작 시 GameKit 0.14.3의 고정된 벡터 로더가 URL, SHA-256, 바이트 상한, 곡선 품질을 확인해 한 번 컴파일하며, 제한된 캐시에 보관합니다. 조약돌 두더지는 같은 WebGL 컨텍스트에서 유지 메시로 직접 그리므로 카메라·월드 깊이·SVG의 파츠 애니메이션을 사용합니다. HTML 안으로 파생 벡터 메시를 생성하거나 픽셀 아틀라스로 굽지 않습니다.
 
 이전 0.28.10–0.28.12 구현은 빌드 시 SVG를 컴파일하고 여러 애니메이션 프레임을 캔버스/텍스처 아틀라스로 구워 단일 HTML에 넣었습니다. 이 방식은 원본과 파생 에셋을 둘로 늘리고, 아트 변경 때마다 배포 빌드에 벡터 컴파일러를 끌어들이며, SVG를 실제 월드 메시로 렌더하지 않는 나쁜 사례입니다. 앞으로는 이 경로를 되살리지 말고 `AGENTS.md`의 규칙을 따릅니다.
 
@@ -142,3 +141,4 @@ The sprout player and remaining wild species now render from original SVG meshes
 기존 적대 몹 종류와 야간 적대 스폰을 제거했습니다. snapshotVersion 0.26.0 저장에 남은 레거시 야생 개체는 포획 가능한 shell/leaf 종으로 한 번 변환하며, 사망한 레거시 몹은 제거합니다. 월드 시드·지형 편집·보유 동료와 인벤토리는 유지합니다. 제단 보스는 포획 가능한 warden 종으로 취급하면서 처치/포획 보상은 유지합니다. 이동은 기존 축 정렬 상자 충돌을 유지하고, 벽에 막힌 축 성분을 제거해 비껴 이동하도록 했습니다.
 
 동료 외형은 `src/assets/companions/pebble-mole.svg`를 단일 제작 원본으로 사용합니다. 0.28.10–0.28.12의 캔버스/텍스처 아틀라스 생성 방식은 나쁜 사례로 보존하며 재도입하지 않습니다. 0.28.13 이후에는 빌드가 원본 SVG만 바이트 그대로 배포하고, 실행 시작 때 고정된 GameKit 로더가 검증·컴파일해 WebGL 월드 메시로 직접 그립니다. 이 외형 변경은 동료의 종 ID·능력·전투 수치·저장 형식을 바꾸지 않습니다. 나무꾼의 기존 절차적 클로 아트는 별도 경로로 유지합니다.
+

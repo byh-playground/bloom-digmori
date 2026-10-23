@@ -1,3 +1,4 @@
+'use strict';
 /* Render jobs own a separate world/cache. They never write a Rapier World or simulation tick.
  * Native Worker and cooperative fallback execute the exact same generator. */
 class MeshBuilder {
@@ -32,4 +33,5 @@ if(m.type==='mesh'){const start=performance.now(),it=world.meshSteps(...m.key.sp
  freeWorker(){if(this.worker)this.worker.terminate();this.worker=null;}
  free(){this.freeWorker();this.pending.clear();this.ready.length=0;this.jobs.length=0;this.local=null;this.current=null;this.world=null;}
 }
+
 
