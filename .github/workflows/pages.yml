@@ -21,12 +21,10 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Validate input, play, save and restore without a build
-        run: mkdir -p artifacts && timeout 180s npm test
+      - name: Validate no-build user flows and SVG rendering (180 seconds total)
+        run: mkdir -p artifacts && timeout 180s sh -c 'npm test && npm run test:companion-svg'
         env:
           TEST_REPORT: artifacts/core-e2e.json
-      - name: Validate source SVG loading, camera, animation, and world depth
-        run: timeout 180s npm run test:companion-svg
       - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,7 +55,35 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/configure-pages@v5
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify public Pages files match this commit byte-for-byte
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          node --input-type=module <<'JS'
+          import {readdirSync, readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):[dir+'/'+e.name]);
+          const files=['index.html',...walk('src'),...walk('previews')];
+          const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+          const base=process.env.PAGES_URL,deadline=Date.now()+180000;
+          let pending=files;
+          while(pending.length){
+            const failed=[];
+            for(const file of pending){
+              const url=new URL(file,base);url.searchParams.set('revision',process.env.GITHUB_SHA);
+              try{const response=await fetch(url,{signal:AbortSignal.timeout(15000)});const actual=hash(Buffer.from(await response.arrayBuffer())),expected=hash(readFileSync(file));
+                if(!response.ok||actual!==expected)throw Error(response.status+' '+actual);
+                console.log('MATCH '+expected+' '+file);
+              }catch(error){failed.push(file);console.log('WAIT '+file+' '+error.message);}
+            }
+            if(!failed.length)break;
+            if(Date.now()>=deadline)throw Error('Public Pages byte verification failed: '+failed.join(', '));
+            pending=failed;await new Promise(resolve=>setTimeout(resolve,5000));
+          }
+          console.log('Verified '+files.length+' deployed source files at '+process.env.GITHUB_SHA);
+          JS
