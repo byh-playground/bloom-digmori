@@ -4,8 +4,10 @@ const dependency=DEPENDENCIES.gamekit,base=`https://cdn.jsdelivr.net/gh/${depend
 const [rendering,vectorAssets,loader]=await Promise.all(['rendering','vectorAssets','vectorAssetLoader'].map(name=>import(base+dependency.modules[name].file)));
 const previewGamekit={rendering,vectorAssets};
 const definition=DEPENDENCIES.vectorAssets.pebbleMole;
-const previewLoader=loader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:1});
+const previewLoader=loader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:2});
 const previewVector=await previewLoader.load(new URL('../../'+definition.url,location.href),{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});
+const characterDefinition=DEPENDENCIES.vectorAssets.characters.sprout;
+const previewCharacter=await previewLoader.load(new URL('../../'+characterDefinition.url,location.href),{sourcePath:characterDefinition.sourcePath,expectedSha256:characterDefinition.sha256,maxBytes:characterDefinition.maxBytes,curveSegments:characterDefinition.curveSegments,includeSourcePaths:false});
 const ATTACHMENT_ART=COMPANION_ART;
 const attachmentPose=companionAttachmentPose;
 const PIXEL_CONTRACT=COMPANION_PIXELS;
@@ -62,8 +64,7 @@ function drawFrame(t){
  r.box(scene,{x:actor.pos.x+actor.facing.x*reach,y:0,z:actor.pos.z+actor.facing.z*reach},{x:1,y:action==='combat'&&beat.phase==='impact'?.24:.35,z:1},action==='combat'&&beat.phase==='impact'?[.78,.68,.39]:[.47,.53,.53]);r.box(scene,{x:-3,y:0,z:-3},{x:1,y:2,z:3},[.41,.47,.43]);
  if(previewUI.wall.checked)r.box(scene,{x:0,y:0,z:2.6},{x:8,y:4,z:1},[.45,.49,.43]);
  r.box(scene,{...actor.pos,y:.002},{x:.7,y:.012,z:.43},[.24,.32,.22]);drawGeometry(r,scene);
- const player=[];const frame=r.atlas.frames[`sprout/${sample.dir}/${sample.clip}/${sample.frame}`];if(!frame)throw Error('Missing production pose '+JSON.stringify(sample));
- r.sprite(player,actor.pos,64*PIXEL_CONTRACT.worldPerPixelX,64*PIXEL_CONTRACT.worldPerPixelY,frame,[1,1,1,1],sample.flip,0);
+ // Reuse the current product's SVG character path instead of removed sprite frames.
  const contract=attachmentPose(sample),positions=contract.sockets.map(p=>atlasPointWorld(r,actor,p,p.layer));
  const behind=[],front=[];
  if(previewUI.gear.checked)for(let i=0;i<3;i++){
@@ -87,7 +88,7 @@ function drawFrame(t){
   (socket.layer==='back'?behind:front).push(verts);
  }
  for(const verts of behind)drawSprites(r,verts,r.companions.tex);
- drawSprites(r,player,r.atlas.tex);
+ r.companionRenderer.drawCharacter({key:'preview-player',kind:'sprout',sample,pos:actor.pos,scale:1,tint:[1,1,1,1],alpha:1});
  if(previewUI.gear.checked){const cuffs=[];connectorGeometry(r,cuffs,actor,contract);drawGeometry(r,cuffs);}
  for(const verts of front)drawSprites(r,verts,r.companions.tex);
  gl.disable(gl.BLEND);
@@ -98,7 +99,7 @@ function drawFrame(t){
  r.companionRenderer.endFrame();
  window.symbioticPreview={revision:4,combatMode,beat,previewOnly:true,pixelContract:{...PIXEL_CONTRACT,dpr,cssSize:[cssWidth,cssHeight],equipment:ATTACHMENT_ART.map((a,i)=>({id:a.id,pixels:r.companions.frames[combatMode+'/'+i+'/0'].pixels,worldPerPixelX:PIXEL_CONTRACT.worldPerPixelX,worldPerPixelY:PIXEL_CONTRACT.worldPerPixelY}))},layout,action,sample,positions,deploy,sockets:contract.sockets,hand:contract.hand,elbow:contract.elbow,camera:{...r.camera},renderSize:[width,height],glError:gl.getError(),frames:(window.symbioticPreview?.frames||0)+1};
 }
-try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector});renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
+try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector,characters:{sprout:previewCharacter}});renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
 function showError(e){previewUI.error.style.display='block';previewUI.error.textContent='미리보기를 렌더하지 못했습니다: '+e.message+' · WebGL을 사용할 수 있는 브라우저에서 열어 주세요.';previewUI.state.textContent='렌더 실패';console.error(e);}
 
 // Deterministic browser review entry point; same live fixture, no alternative rendering path.
