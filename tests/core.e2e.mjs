@@ -13,7 +13,7 @@ try {
  if(!url){server=http.createServer(serveStatic);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));url='http://127.0.0.1:'+server.address().port+'/bloom-digmori/';}
  browser=await chromium.launch({...(process.env.BROWSER_CHANNEL||process.platform==='win32'?{channel:process.env.BROWSER_CHANNEL||'msedge'}:{}),headless:true});
  report.browser=browser.version();report.url=url;report.browserChannel=process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'playwright-headless-shell');
- page=await browser.newPage({viewport:{width:1366,height:768}});
+ page=await browser.newPage({viewport:{width:1366,height:768},hasTouch:true});
  page.on('pageerror',error=>errors.push(error.message));
  page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText));
  const config=fs.readFileSync(new URL('../src/core/config.js',import.meta.url),'utf8');
@@ -41,17 +41,16 @@ try {
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z<z-1,initial.pos.z,{timeout:5000});await page.keyboard.up('KeyW');
  const moved=await state();assert(moved.pos.z<initial.pos.z-1);
- await page.keyboard.press('KeyV');await page.mouse.click(683,384);await page.waitForFunction(()=>document.pointerLockElement?.id==='world');await page.mouse.move(683,620);
- // Pointer-lock entry may warp the browser cursor. Calibrate with real mouse
- // movement and read-only camera observations, never assign camera/game state.
- let mouseX=683,mouseY=620;report.cameraInput=[];
- for(let attempt=0;attempt<4;attempt++){
-  const camera=await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}));
-  report.cameraInput.push(camera);if(Math.abs(camera.yaw)<.005&&Math.abs(camera.pitch-.86)<.005)break;
-  mouseX+=camera.yaw/.0028;mouseY+=(.86-camera.pitch)/.0028;
-  await page.mouse.move(mouseX,mouseY);await page.waitForTimeout(100);
- }
- await page.waitForFunction(()=>window.Bloom.app.actor().combat.state==='idle'&&!window.Bloom.app.actor().inputPrevious.left,null,{timeout:15000});
+ await page.keyboard.press('KeyV');await page.mouse.move(683,384);
+ // Exercise the supported touch-drag camera input without pointer-lock cursor warps.
+ // CDP delivers browser touch events; no camera or game state is assigned.
+ const touch=await page.context().newCDPSession(page);
+ const beforeLook=await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}));
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:683,y:384,id:1}]});
+ await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:683+beforeLook.yaw/.005,y:384+(.86-beforeLook.pitch)/.005,id:1}]});
+ await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await page.waitForFunction(()=>Math.abs(window.Bloom.app.actor().pitch-.86)<.02,null,{timeout:5000});
+ report.cameraInput={method:'browser touch drag',before:beforeLook,after:await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}))};
  const target=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(target);report.beforeMining={initial,moved,target};
  await page.mouse.down();
  await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:5000});
@@ -63,7 +62,7 @@ try {
  await page.keyboard.down('KeyS');await page.waitForTimeout(200);await page.keyboard.up('KeyS');await page.waitForTimeout(300);
  const placeAim=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(placeAim);
  const placedKey=[placeAim.x+placeAim.normal.x,placeAim.y+placeAim.normal.y,placeAim.z+placeAim.normal.z].join(',');
- await page.mouse.click(683,620,{button:'right'});
+ await page.mouse.down({button:'right'});await page.mouse.up({button:'right'});
  await page.waitForFunction(()=>!window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
  const placed=await state();report.placement={aim:placeAim,expected:placedKey,edits:placed.edits};assert(placed.edits.some(([key,value])=>key===placedKey&&value!==0));
  // E opens the actual inventory and exits pointer lock; synthetic Escape is browser-reserved.
@@ -104,7 +103,7 @@ try {
  assert.equal(report.preview.glError,0);assert.equal(report.preview.error,'');
  if(process.env.TEST_PREVIEW_SCREENSHOT)await preview.screenshot({path:process.env.TEST_PREVIEW_SCREENSHOT});
  await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,9);assert.deepEqual(errors,[]);
- Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/mouse/touch; read-only state observations; no mocked SDK or game-state fixture'});
+ Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/mouse and CDP browser touch-drag camera; read-only state observations; no mocked SDK or game-state fixture'});
  console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:9,errors:0}));
 } catch(error){if(page)report.failureState=await page.evaluate(()=>{const b=window.Bloom,a=b?.app;return{diagnostics:window.BloomDiagnostics?.format(),pos:a?.actor()?.pos,aim:a?.sim.aim(a.actor()),buttons:a?.controls.buttons,tick:a?.sim.tick,inputPrevious:a?.actor()?.inputPrevious,combat:a?.actor()?.combat,mine:a?.actor()?.mine,enemy:a?.sim.physics.aimEnemy(a.actor(),b.Combat.weapon(a.actor(),a.sim).reach),camera:a?.renderer.camera,pointerLock:document.pointerLockElement?.id,active:document.activeElement?.id,modal:a?.modal()};}).catch(()=>null);console.error(JSON.stringify(report.failureState));Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
