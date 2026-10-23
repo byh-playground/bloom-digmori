@@ -1,3 +1,4 @@
+'use strict';
 class Companions {
  constructor(sim,data={units:{},bases:{},sequence:0}){this.sim=sim;this.data=structuredClone(data);}
  all(){return Object.values(this.data.units).sort((a,b)=>cmp(a.id,b.id));}
@@ -106,3 +107,4 @@ class Companions {
   for(const a of actors){if(a.speciesId!==undefined&&a.speciesId!==null&&(!SPECIES[a.speciesId]||!['neutral','retaliating'].includes(a.wildState)||!a.homePos||!['x','y','z'].every(k=>Number.isFinite(a.homePos[k]))||a.targetId!==null&&typeof a.targetId!=='string'||a.enemy!==(a.wildState==='retaliating')))fail();if(a.companionSlot!==undefined&&(!Number.isInteger(a.companionSlot)||a.companionSlot< -1||a.companionSlot>=COMPANION_SLOTS))fail();const id=a.combat?.action?.companionId;if(id&&(!data.units[id]||data.units[id].owner!==a.id||data.units[id].location!=='combat'))fail();}
  }
 }
+

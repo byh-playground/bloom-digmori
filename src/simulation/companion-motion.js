@@ -1,3 +1,4 @@
+'use strict';
 /* Local articulated attack points. The authored atlas and Rapier sweeps share these poses. */
 const companionEase=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
 function clawPose(action,elapsed){
@@ -15,3 +16,4 @@ function clawWorldPose(actor,action,elapsed){const local=clawPose(action,elapsed
  return{root,origin:point({x:0,y:.65,z:.1}),tips:local.arms.flatMap(a=>a.tips.map(point)),local};
 }
 function isClawAction(action){return !!action?.companionId&&SPECIES[action.companionKind]?.capabilities.attack.mode==='claw';}
+

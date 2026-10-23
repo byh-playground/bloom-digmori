@@ -1,3 +1,4 @@
+'use strict';
 /* The pebble mole stays as authored SVG and retained GameKit mesh geometry. */
 const COMPANION_SPRITE=Object.freeze({cell:128,pixelsPerMeter:32,size:2048});
 const VECTOR_FRAME_COUNTS=Object.freeze({idle:4,walk:4,work:4,return:4,prepare:8,flight:3,ground:3});
@@ -123,3 +124,4 @@ class CompanionRenderer {
   const r=this.r,gl=r.gl,p=r.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,r.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),r.ambient??1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,r.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);r.attrib(p,'p',3,36,0);r.attrib(p,'uv',2,36,12);r.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,vertices.length/9);
  }
 }
+

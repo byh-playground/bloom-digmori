@@ -1,3 +1,4 @@
+'use strict';
 class CompanionPanel {
  constructor(app){
   this.app=app;this.tab='companions';this.selectedSlot=null;this.key='';this.lastFocus='tab-companions';this.request=null;
@@ -51,3 +52,4 @@ class CompanionPanel {
   $('companion-quick-collect').disabled=!!this.request||!near; $('companion-quick-collect').textContent='\uac70\uc810 \uc790\uc6d0 \ud68c\uc218';$('companion-base-note').textContent=!base?'\uac1c\uccb4\ub97c \ucc98\uc74c \ub9cc\ub098\uba74 \uac70\uc810\uc774 \uc0dd\uae41\ub2c8\ub2e4.':near?'\uac70\uc810 \uadfc\ucc98 · \uc804\ud22c\uc640 \uc791\uc5c5 \ubc30\uce58 \uac00\ub2a5':'\uac70\uc810\uc5d0\uc11c '+Math.ceil(V.len(V.sub(a.pos,base.pos)))+'m';if(focused)this.focus(focused);
  }
 }
+

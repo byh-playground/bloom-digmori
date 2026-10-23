@@ -1,10 +1,10 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><link rel="icon" href="data:,"><title>디그모리 · Digmori __GAME_VERSION__</title><style><!-- DIGMORI_STYLE:ui/style-1.css --></style><style id="landscape-ux"><!-- DIGMORI_STYLE:ui/style-2.css --></style><style id="bloom-input-fix-style"><!-- DIGMORI_STYLE:ui/style-3.css --></style>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><link rel="icon" href="data:,"><title>디그모리 · Digmori 0.28.14</title><link rel="stylesheet" href="src/ui/style-1.css"><link rel="stylesheet" href="src/ui/style-2.css"><link rel="stylesheet" href="src/ui/style-3.css">
 
 
-<style id="block-interaction-vfx"><!-- DIGMORI_STYLE:ui/style-4.css --></style>
-<style id="minecraft-ux-v2"><!-- DIGMORI_STYLE:ui/style-5.css --></style><style id="mobile-inventory-fit"><!-- DIGMORI_STYLE:ui/style-6.css --></style><style id="cdn-retry-contrast"><!-- DIGMORI_STYLE:ui/style-7.css --></style><style id="combat-pixel-style"><!-- DIGMORI_STYLE:ui/style-8.css --></style><style id="enemy-health-hud"><!-- DIGMORI_STYLE:ui/style-9.css --></style>
-<style id="diagnostics-ui"><!-- DIGMORI_STYLE:ui/style-10.css --></style>
-<style id="bloom-rpg-ui"><!-- DIGMORI_STYLE:ui/style-11.css --></style></head><body>
+<link rel="stylesheet" href="src/ui/style-4.css">
+<link rel="stylesheet" href="src/ui/style-5.css"><link rel="stylesheet" href="src/ui/style-6.css"><link rel="stylesheet" href="src/ui/style-7.css"><link rel="stylesheet" href="src/ui/style-8.css"><link rel="stylesheet" href="src/ui/style-9.css">
+<link rel="stylesheet" href="src/ui/style-10.css">
+<link rel="stylesheet" href="src/ui/style-11.css"></head><body>
 <canvas id="world" tabindex="0"></canvas>
 <div id="topbar"><div><div class="brand">Digmori<small>디그모리</small></div><div id="location" class="caption"></div></div><div class="toolbar"><button id="companions-btn">동료 K</button><button id="journal-btn">모험 J</button><button id="menu-btn">세계</button><button id="inventory-btn">가방 E</button><button id="view-btn">3인칭 V</button><button id="network-btn">협동</button><button id="error-launch" type="button" hidden>오류 로그</button></div></div>
 <div id="rpg-inline" aria-label="레벨 경험치"></div><div id="guide"></div><div id="resource-guide"></div><div id="bossbar" hidden><span id="boss-name"></span><div class="meter"><div id="boss-fill"></div></div></div><div id="enemy-labels"></div>
@@ -31,7 +31,7 @@
  </div>
 </div>
 <div id="cursor-display" hidden></div><div id="tooltip" hidden></div>
-<div id="menu" class="shade" hidden><div class="panel"><small style="color:var(--gold)">DIGMORI · __GAME_VERSION__</small><h1>작은 생명, 넓은 세계.</h1><p>빈 가방으로 출발해 도구를 만들고, 지하 광맥을 찾아보세요. 화원의 제단에서 수호자를 깨울 수 있어요.</p><label>새 월드 시드 <input id="seed-input" type="number" value="190725"></label><button id="new-world" class="big-button">새 서바이벌 시작</button><div class="row"><button id="save-world">월드 저장</button><button id="load-world">저장 불러오기</button></div><div class="row"><button id="export-world">파일 내보내기</button><button id="import-world">파일 가져오기</button><input id="file-input" type="file" accept=".bloom,application/octet-stream" hidden></div><div class="row"><button id="resume" class="big-button">게임으로 돌아가기</button></div><p id="save-status" class="hint-text">__SNAPSHOT_VERSION__ 동굴·던전·성장 데이터를 Rapier 물리 상태와 함께 저장합니다. 0.26.0 저장은 계속 사용할 수 있습니다. 0.25.0 이하 저장은 새 월드가 필요합니다.</p><details class="feedback-settings"><summary>타격 연출 · 화면 설정</summary><div class="feedback-options"><label><input type="checkbox" id="option-textures" checked>블록 도트 텍스처</label><label><input type="checkbox" id="option-sound" checked>효과음</label><label><input type="checkbox" id="option-shake" checked>가벼운 화면 흔들림</label><label><input type="checkbox" id="option-numbers" checked>피해 수치 표시</label><label><input type="checkbox" id="option-effects" checked>입자·잔상·타격 효과</label></div><p class="hint-text">연출만 조절합니다. 타격 판정·물리 속도에는 영향을 주지 않아요.</p></details><details open><summary>자원 · 지하 탐험 안내</summary><p id="resource-bands"></p></details><details><summary>조작 · 범위</summary><p>왼쪽 버튼을 길게 누르고 놓으면 단계형 차지 공격, 오른쪽 버튼을 유지하면 무기별 보조 행동입니다. 패링 키는 없으며 강인도 붕괴로 공격을 끊습니다.<br>철 → 다이아몬드가 초기 장비 진행의 상한입니다. 보스 처치 후에도 같은 세계에서 건축·재도전을 계속할 수 있습니다.</p></details></div></div>
+<div id="menu" class="shade" hidden><div class="panel"><small style="color:var(--gold)">DIGMORI · 0.28.14</small><h1>작은 생명, 넓은 세계.</h1><p>빈 가방으로 출발해 도구를 만들고, 지하 광맥을 찾아보세요. 화원의 제단에서 수호자를 깨울 수 있어요.</p><label>새 월드 시드 <input id="seed-input" type="number" value="190725"></label><button id="new-world" class="big-button">새 서바이벌 시작</button><div class="row"><button id="save-world">월드 저장</button><button id="load-world">저장 불러오기</button></div><div class="row"><button id="export-world">파일 내보내기</button><button id="import-world">파일 가져오기</button><input id="file-input" type="file" accept=".bloom,application/octet-stream" hidden></div><div class="row"><button id="resume" class="big-button">게임으로 돌아가기</button></div><p id="save-status" class="hint-text">0.26.0 동굴·던전·성장 데이터를 Rapier 물리 상태와 함께 저장합니다. 0.26.0 저장은 계속 사용할 수 있습니다. 0.25.0 이하 저장은 새 월드가 필요합니다.</p><details class="feedback-settings"><summary>타격 연출 · 화면 설정</summary><div class="feedback-options"><label><input type="checkbox" id="option-textures" checked>블록 도트 텍스처</label><label><input type="checkbox" id="option-sound" checked>효과음</label><label><input type="checkbox" id="option-shake" checked>가벼운 화면 흔들림</label><label><input type="checkbox" id="option-numbers" checked>피해 수치 표시</label><label><input type="checkbox" id="option-effects" checked>입자·잔상·타격 효과</label></div><p class="hint-text">연출만 조절합니다. 타격 판정·물리 속도에는 영향을 주지 않아요.</p></details><details open><summary>자원 · 지하 탐험 안내</summary><p id="resource-bands"></p></details><details><summary>조작 · 범위</summary><p>왼쪽 버튼을 길게 누르고 놓으면 단계형 차지 공격, 오른쪽 버튼을 유지하면 무기별 보조 행동입니다. 패링 키는 없으며 강인도 붕괴로 공격을 끊습니다.<br>철 → 다이아몬드가 초기 장비 진행의 상한입니다. 보스 처치 후에도 같은 세계에서 건축·재도전을 계속할 수 있습니다.</p></details></div></div>
 <div id="network" class="shade" hidden><div class="panel"><div class="panel-head"><h2>4인 협동 월드</h2><button id="network-close">닫기</button></div><p>Bloom Gamekit의 Nostr / WebRTC 방을 사용합니다. 협동 시드는 방 코드에서 결정되며 개인 월드는 별도로 보존됩니다.</p><input id="room-code" inputmode="numeric" maxlength="4" placeholder="4자리 방 코드"><div class="row"><button id="host-room">방 만들기</button><button id="join-room">참가</button><button id="reconnect-room">다시 연결</button><button id="leave-room" class="danger">나가기</button></div><div id="network-status">혼자 플레이 중 · Rapier 외부 로딩</div><p class="hint-text">초기 물리 엔진 다운로드와 온라인 시그널링 접속에는 인터넷이 필요합니다. 일시중단된 참가자는 Gamekit 가용성 정책에 따라 동기화에서 분리·복귀합니다. 네트워크 분할 후 재결합 시 선택되지 않은 분기의 진행은 사라질 수 있습니다.</p></div></div>
 <div id="death" class="shade" hidden><div class="panel"><h1>잠시 시들었어요.</h1><p>가방의 아이템은 쓰러진 자리에 남습니다.<br>동료는 보관 상태로 안전하게 회수됩니다.<br>시작 지점에서 다시 자라납니다.</p></div></div><div id="ending" class="shade" hidden><div class="panel"><small>첫 번째 여정의 끝</small><h1>화원이 다시 숨을 쉬어요.</h1><p>수호자가 화원의 심장을 남겼습니다.<br>안내서에서 수호의 증표를 만들거나,<br>소환 문양을 준비해 강화된 수호자에게 재도전할 수 있어요.</p><button id="continue-end" class="big-button">세계에 계속 머물기</button></div></div>
 <div id="debugbar" hidden>디버그 전용 · 일반 플레이에는 지급 없음<div class="row"><button id="debug-kit">검증 장비</button><button id="debug-enemy">야생 후보 소환</button><button id="debug-boss">보스 검증</button></div></div>
@@ -51,9 +51,9 @@
  const launch=document.getElementById('error-launch');
  let ring=null,api=null,phase='bootstrap',early=[],lastError='',lastKind='',total=0;
  const str=x=>typeof x==='string'?x:(x&&typeof x.message==='string'?x.message:String(x));
- const info=()=>({product:'Digmori',version:'__GAME_VERSION__',snapshotVersion:'__SNAPSHOT_VERSION__',phase,
+ const info=()=>({product:'Digmori',version:'0.28.14',snapshotVersion:'0.26.0',phase,
    environment:{protocol:location.protocol,secureContext:isSecureContext,userAgent:navigator.userAgent,
-     viewport:innerWidth+'x'+innerHeight},gamekitDist:'__GAMEKIT_DIST__',rapier:'0.21.0'});
+     viewport:innerWidth+'x'+innerHeight},gamekitDist:'418e17c455db56d6ed073d82d115191d9dd8bf04',rapier:'0.21.0'});
  function format(){const payload={...info(),diagnostics:ring?ring.snapshot():{
    format:'초기화 단계 임시 진단',total,errors:early.map(e=>({kind:e.kind,visibility:e.visibility,message:e.message,stack:e.stack}))}};
    return JSON.stringify(payload,null,2);}
@@ -71,7 +71,7 @@
  const onEarlyRejection=event=>report(event.reason,{kind:'unhandled-rejection',origin:'bootstrap'});
  addEventListener('error',onEarlyError);addEventListener('unhandledrejection',onEarlyRejection);
  function install(module){if(api)return;api=module;
-   ring=new module.DiagnosticRing({capacity:24,release:'digmori-__GAME_VERSION__'});
+   ring=new module.DiagnosticRing({capacity:24,release:'digmori-0.28.14'});
    for(const item of early)ring.report({message:item.message,stack:item.stack},{kind:item.kind,visibility:item.visibility,origin:'bootstrap'});
    early=[];removeEventListener('error',onEarlyError);removeEventListener('unhandledrejection',onEarlyRejection);
    ring.installGlobal(window,{onReport:record=>{if(!record)return;lastError=record.message;lastKind=record.kind;redraw(true);}});
@@ -91,6 +91,27 @@
 })();
 </script>
 <div id="loading" class="shade"><div class="panel"><div class="brand">Digmori</div><div class="spinner"></div><h2 id="load-title">화원을 준비하고 있어요</h2><p id="load-status">필수 물리 엔진을 CDN에서 불러옵니다.</p><button id="load-retry" type="button" class="big-button" hidden>다시 시도</button><p class="hint-text">인터넷 연결이 필요합니다. 별도 엔진 파일은 필요하지 않습니다.</p></div></div>
-<script type="module">
-<!-- DIGMORI_GAME -->
-</script></body></html>
+<script defer src="src/core/config.js"></script>
+<script defer src="src/data/content.js"></script>
+<script defer src="src/data/companions.js"></script>
+<script defer src="src/progression/rpg.js"></script>
+<script defer src="src/inventory/inventory.js"></script>
+<script defer src="src/world/world.js"></script>
+<script defer src="src/world/meshing.js"></script>
+<script defer src="src/simulation/physics.js"></script>
+<script defer src="src/simulation/companion-motion.js"></script>
+<script defer src="src/simulation/combat.js"></script>
+<script defer src="src/simulation/companions.js"></script>
+<script defer src="src/simulation/simulation.js"></script>
+<script defer src="src/presentation/animation.js"></script>
+<script defer src="src/presentation/art.js"></script>
+<script defer src="src/presentation/companion-art.js"></script>
+<script defer src="src/presentation/renderer.js"></script>
+<script defer src="src/ui/hud.js"></script>
+<script defer src="src/ui/companions.js"></script>
+<script defer src="src/input/controls.js"></script>
+<script defer src="src/presentation/scene.js"></script>
+<script defer src="src/runtime/session.js"></script>
+<script defer src="src/runtime/app.js"></script>
+<script defer src="src/runtime/boot.js"></script></body></html>
+

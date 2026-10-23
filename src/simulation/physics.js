@@ -1,3 +1,4 @@
+'use strict';
 /* Rapier is mandatory and owns all collision, gravity and dynamic integration. */
 class Physics {
  constructor(R,terrain){this.R=R;this.terrain=terrain;this.world=new R.World({x:0,y:-CFG.player.gravity,z:0});this.world.timestep=CFG.stepMs/1000;this.events=new R.EventQueue(true);this.loaded=new Map();this.tags=new Map();this.bodyCount=0;this.lastPrefetchTick=-1;this.stats={built:0,updated:0,combined:0,relinked:0};}
@@ -199,5 +200,6 @@ class Physics {
 
  free(){this.events.free();this.world.free();}
 }
+
 
 

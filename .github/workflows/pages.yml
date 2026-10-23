@@ -1,4 +1,4 @@
-name: Build and deploy static Pages
+name: Validate and deploy source Pages
 on:
   pull_request:
   push:
@@ -10,35 +10,45 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned build dependencies
+      - name: Install pinned test dependencies
         run: npm ci
-      - name: Build single HTML and provenance
-        run: node scripts/build.mjs
-      - name: Build companion combat design preview
-        run: node scripts/build-companion-preview.mjs
-      - name: Install Chromium for the real SVG/WebGL scenario
+      - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Validate input, play, save and restore without a build
+        run: mkdir -p artifacts && timeout 180s npm test
+        env:
+          TEST_REPORT: artifacts/core-e2e.json
       - name: Validate source SVG loading, camera, animation, and world depth
-        run: npm run test:companion-svg
-      - name: Save actual browser screenshots and validation report
+        run: timeout 180s npm run test:companion-svg
+      - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: digmori-companion-svg-browser-evidence
-          path: artifacts/companion-svg/
+          name: digmori-browser-evidence
+          path: artifacts/
+      - name: Package unchanged source files for Pages
+        run: |
+          mkdir _site
+          cp index.html .nojekyll _site/
+          cp -R src previews _site/
+          find _site -type f -exec sha256sum {} + | sort > artifacts/pages-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digmori-pages-source-hashes
+          path: artifacts/pages-sha256.txt
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
+          path: _site
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: build
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -51,4 +61,3 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

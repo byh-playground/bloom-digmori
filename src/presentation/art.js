@@ -1,3 +1,4 @@
+'use strict';
 /* 0.9.2 승인 스프라우틀링 아트를 유지. world physics와 무관한 생성 아틀라스. */
 function createSpriteAtlas(gl){let c=document.createElement('canvas');c.width=2048;c.height=4096;let ctx=c.getContext('2d',{alpha:true});ctx.imageSmoothingEnabled=false;let textures={},index=0;const cols=32,CW=64,CH=64,out='#322b39';
 function fill(col){ctx.fillStyle=col}function poly(points,color,stroke=out,width=2){ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);ctx.closePath();ctx.fillStyle=color;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.lineJoin='round';ctx.stroke()}}function rect(x,y,w,h,c){fill(c);ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}function dotc(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fillStyle=c;ctx.fill()}
@@ -172,4 +173,5 @@ function createDropAtlas(gl,iconCanvases){
  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return{tex,frames};
 }
+
 

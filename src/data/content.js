@@ -1,3 +1,4 @@
+'use strict';
 const BIOMES=Object.freeze({
  meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-.13,.10]},maxSlope:1,maxExposure:2.5},vegetation:{density:18,canopy:'leaves'},resources:{ore:'coalOre',bonus:0,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[-.13,.10]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-.13,.10]}}},wildlife:['shell','leaf']},
  forest:{name:'포자 수림',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,16],climate:{heat:[-.15,.15],wet:[.10,1]},maxSlope:1,maxExposure:2},vegetation:{density:82,canopy:'leaves'},resources:{ore:'coalOre',bonus:.025,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[.10,1]}},decorations:{caveBloom:{chance:.055,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[.10,1]}}},wildlife:['shell','leaf']},
@@ -104,3 +105,4 @@ const QUESTS=Object.freeze([
  Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 적대 생물을 모두 쓰러뜨리세요.'}),
  Object.freeze({id:'boss',title:'잠든 화원의 수호자',hint:'꽃 제단에서 수호자 보스에 도전하세요.'})
 ]);
+

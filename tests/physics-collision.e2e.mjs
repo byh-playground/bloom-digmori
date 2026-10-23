@@ -1,3 +1,4 @@
+import {serveStatic} from '../scripts/static-server.mjs';
 import {chromium} from 'playwright';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -15,7 +16,7 @@ const box=(page,center,half,rotation={x:0,y:0,z:0,w:1})=>page.evaluate(({center,
 const remove=(page,handles)=>page.evaluate(handles=>{for(const h of handles){const c=Bloom.app.sim.physics.world.getCollider(h);if(c)Bloom.app.sim.physics.world.removeCollider(c,true);}},handles);
 
 try{
- server=http.createServer((req,res)=>{const route=new URL(req.url,'http://localhost').pathname;if(route==='/assets/companions/pebble-mole.svg'){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/companions/pebble-mole.svg',import.meta.url)));return;}const character=route.match(/^\/assets\/characters\/(sprout|fungus|bug|flower|bee)\.svg$/);if(character){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/characters/'+character[1]+'.svg',import.meta.url)));return;}res.setHeader('Content-Type','text/html;charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)));});
+ server=http.createServer(serveStatic);
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true,args:['--disable-gpu','--disable-crashpad','--disable-breakpad','--disable-edge-dual-engine']});
  context=await browser.newContext({viewport:{width:1366,height:900}});const page=await context.newPage();page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
@@ -60,3 +61,4 @@ try{
  assert.deepEqual(errors,[]);report.browser=browser.version();report.status='PASS';
 }catch(error){report.status='FAIL';report.error=error.stack;console.error(error);process.exitCode=1;}
 finally{report.elapsedMs=Date.now()-began;report.errors=errors;fs.mkdirSync(new URL('../artifacts/physics/',import.meta.url),{recursive:true});fs.writeFileSync(new URL('../artifacts/physics/result.json',import.meta.url),JSON.stringify(report,null,2));clearTimeout(timeout);await context?.close();await browser?.close();server?.close();}
+

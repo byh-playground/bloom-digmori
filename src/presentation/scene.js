@@ -1,3 +1,4 @@
+'use strict';
 /* Detached display models only. Physics handles, terrain and input are never captured. */
 class ScenePresentation {
  constructor(sdk){const R=sdk.RenderObject;
@@ -33,3 +34,4 @@ class ScenePresentation {
  }
  frame(sim){this.publish(sim);return this.runtime.frame(performance.now());}
 }
+

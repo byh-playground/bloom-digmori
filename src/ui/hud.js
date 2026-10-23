@@ -1,3 +1,4 @@
+'use strict';
 const $=id=>document.getElementById(id);
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* Client-only world HUD. HP comes directly from actors; animation never feeds back into it. */
@@ -59,4 +60,5 @@ class EnemyHealthHUD {
   }
  }
 }
+
 

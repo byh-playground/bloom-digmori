@@ -1,3 +1,11 @@
+'use strict';
+(async()=>{
+const dependency=DEPENDENCIES.gamekit,base=`https://cdn.jsdelivr.net/gh/${dependency.repository}@${dependency.distCommit}/`;
+const [rendering,vectorAssets,loader]=await Promise.all(['rendering','vectorAssets','vectorAssetLoader'].map(name=>import(base+dependency.modules[name].file)));
+const previewGamekit={rendering,vectorAssets};
+const definition=DEPENDENCIES.vectorAssets.pebbleMole;
+const previewLoader=loader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:1});
+const previewVector=await previewLoader.load(new URL('../../'+definition.url,location.href),{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});
 const ATTACHMENT_ART=COMPANION_ART;
 const attachmentPose=companionAttachmentPose;
 const PIXEL_CONTRACT=COMPANION_PIXELS;
@@ -96,3 +104,6 @@ function showError(e){previewUI.error.style.display='block';previewUI.error.text
 // Deterministic browser review entry point; same live fixture, no alternative rendering path.
 window.symbioticReview={setTime(t){playing=false;clock=t;drawFrame(clock);},resume(){playing=true;},attachmentPose};
 
+
+
+})().catch(error=>{const panel=document.getElementById('error');panel.style.display='block';panel.textContent='미리보기를 불러오지 못했습니다: '+error.message;console.error(error);});

@@ -1,3 +1,4 @@
+import {serveStatic} from '../scripts/static-server.mjs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
@@ -31,21 +32,20 @@ function roiDelta(a,b,x,y,radiusX,radiusY){
  return{total,changed};
 }
 
-const root=fileURLToPath(new URL('../',import.meta.url)),dist=path.join(root,'dist'),out=path.join(root,'artifacts/companion-svg');
+const root=fileURLToPath(new URL('../',import.meta.url)),dist=root,out=path.join(root,'artifacts/companion-svg');
 fs.mkdirSync(out,{recursive:true});
 const config=fs.readFileSync(path.join(root,'src/core/config.js'),'utf8');
 const expectedSha=config.match(/pebbleMole:Object\.freeze\(\{url:'[^']+',sourcePath:'[^']+',sha256:'([a-f0-9]{64})'/)?.[1];
 assert(expectedSha,'The pinned pebble-mole source digest is missing');
 const source=fs.readFileSync(path.join(root,'src/assets/companions/pebble-mole.svg'));
 assert.equal(createHash('sha256').update(source).digest('hex'),expectedSha,'the authored SVG must match its pinned digest');
-assert.deepEqual(source,fs.readFileSync(path.join(dist,'assets/companions/pebble-mole.svg')),'the deployable SVG must be byte-for-byte identical to the authored source');
 const html=fs.readFileSync(path.join(dist,'index.html'),'utf8');
 assert(!html.includes('DIGMORI_VECTOR_RUNTIME'),'the build must not inline a generated vector runtime');
 assert(!html.includes('compile-companion-assets'),'the deployed page must not carry the build-time compiler');
 for(const kind of ['sprout','fungus','bug','flower','bee']){
  const asset=fs.readFileSync(path.join(root,'src/assets/characters/'+kind+'.svg'));
  const expected=config.match(new RegExp(kind+":Object\\.freeze\\(\\{url:'[^']+',sourcePath:'[^']+',sha256:'([a-f0-9]{64})'"))?.[1];
- assert(expected);assert.equal(createHash('sha256').update(asset).digest('hex'),expected);assert.deepEqual(asset,fs.readFileSync(path.join(dist,'assets/characters/'+kind+'.svg')));
+ assert(expected);assert.equal(createHash('sha256').update(asset).digest('hex'),expected);
  const source=asset.toString('utf8'),metadata=JSON.parse(source.match(/<metadata id="vector-asset">([\s\S]*?)<\/metadata>/)[1]);
  assert.equal(metadata.parts.length,14);assert.deepEqual(Object.keys(metadata.expressions),['view0','view1','view2','view3','view4']);assert.equal(metadata.clips.roll.durationMs,360);assert.equal(metadata.clips.roll.keyframes.length,12);
 }
@@ -54,17 +54,7 @@ const evidence={browser:null,sourceSha256:expectedSha,sourceBytes:source.byteLen
 const pass=(name,data)=>{evidence.checks.push({name,data});console.log('PASS '+name);};
 let server,browser,assetRequests=0;
 try{
- server=http.createServer((req,res)=>{
-  const url=new URL(req.url,'http://127.0.0.1');
-  const filename=url.pathname==='/'
-   ?path.join(dist,'index.html')
-   :path.resolve(dist,'.'+decodeURIComponent(url.pathname));
-  if(!filename.startsWith(dist+path.sep)&&filename!==path.join(dist,'index.html')){res.writeHead(403);res.end();return;}
-  if(!fs.existsSync(filename)||!fs.statSync(filename).isFile()){res.writeHead(404);res.end();return;}
-  if(url.pathname==='/assets/companions/pebble-mole.svg')assetRequests++;
-  const type=filename.endsWith('.svg')?'image/svg+xml':filename.endsWith('.json')?'application/json':'text/html; charset=utf-8';
-  res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-store'});res.end(fs.readFileSync(filename));
- });
+ server=http.createServer((req,res)=>{if(new URL(req.url,'http://localhost').pathname==='/src/assets/companions/pebble-mole.svg')assetRequests++;serveStatic(req,res);});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({headless:true});evidence.browser=browser.version();
  const page=await browser.newPage({viewport:{width:1280,height:800},deviceScaleFactor:1});
@@ -202,3 +192,4 @@ try{
  console.log(JSON.stringify({result:evidence.result,browser:evidence.browser,sourceSha256:expectedSha,checks:evidence.checks.length,screenshots:evidence.screenshots}));
 }catch(error){evidence.result='FAIL';evidence.error=error.stack||String(error);fs.writeFileSync(path.join(out,'validation.json'),JSON.stringify(evidence,null,2)+'\n');console.error(error);process.exitCode=1;}
 finally{await browser?.close();await new Promise(resolve=>server?.close(resolve));}
+

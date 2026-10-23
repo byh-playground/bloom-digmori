@@ -1,3 +1,4 @@
+import {serveStatic} from '../scripts/static-server.mjs';
 import {chromium} from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -9,13 +10,7 @@ let browser,server;
 const output=process.env.TEST_REPORT;
 try {
  let url=process.env.TEST_URL;
- if(!url){server=http.createServer((req,res)=>{
-  const route=new URL(req.url,'http://localhost').pathname;
-  if(route==='/bloom-digmori/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(new URL('../dist/index.html',import.meta.url)));}
-  else if(route==='/bloom-digmori/assets/companions/pebble-mole.svg'){res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/companions/pebble-mole.svg',import.meta.url)));}
-  else if(/^\/bloom-digmori\/assets\/characters\/(sprout|fungus|bug|flower|bee)\.svg$/.test(route)){const name=route.split('/').pop();res.setHeader('Content-Type','image/svg+xml');res.end(fs.readFileSync(new URL('../dist/assets/characters/'+name,import.meta.url)));}
-  else{res.writeHead(404);res.end();}
- });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));url='http://127.0.0.1:'+server.address().port+'/bloom-digmori/';}
+ if(!url){server=http.createServer(serveStatic);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));url='http://127.0.0.1:'+server.address().port+'/bloom-digmori/';}
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'chromium'),headless:true});
  report.browser=browser.version();report.url=url;
  const page=await browser.newPage({viewport:{width:1366,height:768}});
@@ -91,4 +86,5 @@ try {
  console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:9,errors:0}));
 } catch(error){Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
+
 

@@ -1,3 +1,4 @@
+'use strict';
 class LocalSimulationSession {
  constructor(app){this.app=app;this.profile={tickRate:CFG.tickRate,maxCatchupSteps:CFG.timing.maxCatchUp};this.pending=[];this.commandSequence=0;this.closed=false;this.resimulating=false;this.pace=1;}
  get tick(){return this.app.sim?.tick||0;}get epoch(){return this.app.sim?.epoch||0;}get inputSize(){return CFG.net.inputSize;}
@@ -27,3 +28,4 @@ function createAudioConfig(){return {volume:CFG.combat.feedback.volume,headroom:
  mine:{category:'world',priority:1,layers:[{kind:'tone',hz:285,end:100,ms:130,gain:.20,type:'triangle'}]},
  place:{category:'world',priority:1,layers:[{kind:'tone',hz:180,end:75,ms:130,gain:.18,type:'sine'}]}
  }};}
+

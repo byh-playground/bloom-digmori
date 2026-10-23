@@ -12,13 +12,12 @@
 ## 실행
 
 ```sh
-node scripts/build-companion-preview.mjs
-python -m http.server 8001 --directory dist
+python -m http.server 8001
 ```
 
-`http://localhost:8001/previews/companion-combat/`를 연다. Python은 편의 예시이며 다른 정적 HTTP 서버도 가능하다. 별도 프리뷰 빌드는 제품 `dist/index.html`을 생성하거나 변경하지 않는다. 일반 Pages 워크플로는 제품과 함께 이 하위 경로도 빌드한다.
+`http://localhost:8001/previews/companion-combat/`를 연다. Python은 편의 예시이며 다른 정적 HTTP 서버도 가능하다. 별도 빌드 없이 이 폴더의 index.html이 원본 JS를 직접 읽는다. Pages는 같은 파일을 그대로 배포한다.
 
-`src/order.json`의 원본 코드를 읽되 게임 부트스트랩을 제외한다. 몸체 아트·애니메이션·Renderer를 복제해 프리뷰의 별도 기준본으로 관리하지 않는다. 동료 아트와 시간에 따른 연출, 기존 몸체 클립의 관절 좌표 계산만 이 폴더가 소유한다. 고정된 비교용 시간선이며 실제 피해·타깃 AI·노동 시스템·통신·저장을 실행하지 않는다.
+index.html의 defer script 목록이 원본 코드를 읽되 게임 부트스트랩을 제외한다. 몸체 아트·애니메이션·Renderer를 복제해 프리뷰의 별도 기준본으로 관리하지 않는다. 동료 아트와 시간에 따른 연출, 기존 몸체 클립의 관절 좌표 계산만 이 폴더가 소유한다. 고정된 비교용 시간선이며 실제 피해·타깃 AI·노동 시스템·통신·저장을 실행하지 않는다.
 
 몸체는 기존 64px 아트와 월드 크기를 유지한다. 동료의 한 텍셀은 몸체의 한 픽셀과 같은 월드 크기(x: 2.2/64m, y: 2/56m)다. NEAREST 텍스처와 CSS pixelated 샘플링, CSS 표시 크기×DPR(최대 2)의 캔버스 크기를 사용한다. 비행 중 공과 명중 압축은 이 공통 밀도를 기준으로 연출 변형한다. 뒤쪽 동료 → 몸체 → 연결부 → 앞쪽 동료의 순서를 유지한다.
 
@@ -27,3 +26,4 @@ python -m http.server 8001 --directory dist
 Edge 155에서 PC 1440×1000 및 모바일 390×844로 두 안의 대기·준비·공격·명중·복귀·회복 24개 화면을 확인했다. 정면·뒷면·반대 옆면, 회피, 카메라·동료 표시 전환도 확인했다. JS/WebGL 오류·가로 넘침·localStorage/sessionStorage 쓰기가 없었다. 제품 `npm run build`와 기존 `npm test`도 별도로 실행한다.
 
 실물 휴대폰·모든 동작 프레임·제품 전투 판정과 밸런스는 검증 범위가 아니다. 원본 게임 소스·버전·저장 형식은 변경하지 않는다. 실제 실행 결과와 커밋은 PR에 기록한다.
+
