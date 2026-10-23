@@ -56,10 +56,10 @@ try {
  await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:10000});
  await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(400);
  const mined=await state();assert(mined.edits.some(([key,value])=>key===target.x+','+target.y+','+target.z&&value===0));
- await page.keyboard.down('KeyW');await page.waitForTimeout(200);await page.keyboard.up('KeyW');
- await page.waitForFunction(()=>window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
+ await page.locator('#world').focus();await page.keyboard.down('KeyW');
+ await page.waitForFunction(()=>window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:10000});await page.keyboard.up('KeyW');
  const collected=await state();
- await page.keyboard.down('KeyS');await page.waitForTimeout(200);await page.keyboard.up('KeyS');await page.waitForTimeout(300);
+ await page.keyboard.down('KeyS');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z>z+.5,collected.pos.z,{timeout:10000});await page.keyboard.up('KeyS');await page.waitForTimeout(300);
  const placeAim=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(placeAim);
  const placedKey=[placeAim.x+placeAim.normal.x,placeAim.y+placeAim.normal.y,placeAim.z+placeAim.normal.z].join(',');
  await page.touchscreen.tap(683,384);
@@ -77,7 +77,7 @@ try {
  assert.equal(diagnostic.gamekitDist,sdkSHA);assert.equal(diagnostic.version,expectedVersion);assert.equal(diagnostic.snapshotVersion,expectedSnapshotVersion);assert.equal(diagnostic.diagnostics.total,0);
  if(process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT});
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
- await page.keyboard.down('KeyW');await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-14,null,{timeout:12000});await page.keyboard.up('KeyW');await page.waitForTimeout(300);
+ await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-14,null,{timeout:12000});await page.keyboard.up('KeyW');await page.waitForTimeout(300);
  const entrance=await state();if(process.env.CAVE_SCREENSHOT)await page.screenshot({path:process.env.CAVE_SCREENSHOT});
  await page.keyboard.press('KeyV');await page.keyboard.down('KeyW');
  await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-52,null,{timeout:20000});await page.keyboard.up('KeyW');await page.waitForTimeout(500);
