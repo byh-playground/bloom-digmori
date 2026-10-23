@@ -41,7 +41,17 @@ try {
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z<z-1,initial.pos.z,{timeout:5000});await page.keyboard.up('KeyW');
  const moved=await state();assert(moved.pos.z<initial.pos.z-1);
- await page.keyboard.press('KeyV');await page.mouse.click(683,384);await page.waitForFunction(()=>document.pointerLockElement?.id==='world');await page.mouse.move(683,620);await page.waitForFunction(()=>window.Bloom.app.actor().combat.state==='idle'&&!window.Bloom.app.actor().inputPrevious.left,null,{timeout:15000});
+ await page.keyboard.press('KeyV');await page.mouse.click(683,384);await page.waitForFunction(()=>document.pointerLockElement?.id==='world');await page.mouse.move(683,620);
+ // Pointer-lock entry may warp the browser cursor. Calibrate with real mouse
+ // movement and read-only camera observations, never assign camera/game state.
+ let mouseX=683,mouseY=620;report.cameraInput=[];
+ for(let attempt=0;attempt<4;attempt++){
+  const camera=await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}));
+  report.cameraInput.push(camera);if(Math.abs(camera.yaw)<.005&&Math.abs(camera.pitch-.86)<.005)break;
+  mouseX+=camera.yaw/.0028;mouseY+=(.86-camera.pitch)/.0028;
+  await page.mouse.move(mouseX,mouseY);await page.waitForTimeout(100);
+ }
+ await page.waitForFunction(()=>window.Bloom.app.actor().combat.state==='idle'&&!window.Bloom.app.actor().inputPrevious.left,null,{timeout:15000});
  const target=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(target);report.beforeMining={initial,moved,target};
  await page.mouse.down();
  await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:5000});
