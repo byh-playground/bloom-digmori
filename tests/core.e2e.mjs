@@ -52,9 +52,9 @@ try {
  await page.waitForFunction(()=>Math.abs(window.Bloom.app.actor().pitch-.86)<.02,null,{timeout:5000});
  report.cameraInput={method:'browser touch drag',before:beforeLook,after:await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}))};
  const target=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(target);report.beforeMining={initial,moved,target};
- await page.mouse.down();
- await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:5000});
- await page.mouse.up();await page.waitForTimeout(400);
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:683,y:384,id:1}]});
+ await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:10000});
+ await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(400);
  const mined=await state();assert(mined.edits.some(([key,value])=>key===target.x+','+target.y+','+target.z&&value===0));
  await page.keyboard.down('KeyW');await page.waitForTimeout(200);await page.keyboard.up('KeyW');
  await page.waitForFunction(()=>window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
@@ -62,7 +62,7 @@ try {
  await page.keyboard.down('KeyS');await page.waitForTimeout(200);await page.keyboard.up('KeyS');await page.waitForTimeout(300);
  const placeAim=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(placeAim);
  const placedKey=[placeAim.x+placeAim.normal.x,placeAim.y+placeAim.normal.y,placeAim.z+placeAim.normal.z].join(',');
- await page.mouse.down({button:'right'});await page.mouse.up({button:'right'});
+ await page.touchscreen.tap(683,384);
  await page.waitForFunction(()=>!window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
  const placed=await state();report.placement={aim:placeAim,expected:placedKey,edits:placed.edits};assert(placed.edits.some(([key,value])=>key===placedKey&&value!==0));
  // E opens the actual inventory and exits pointer lock; synthetic Escape is browser-reserved.
@@ -103,7 +103,7 @@ try {
  assert.equal(report.preview.glError,0);assert.equal(report.preview.error,'');
  if(process.env.TEST_PREVIEW_SCREENSHOT)await preview.screenshot({path:process.env.TEST_PREVIEW_SCREENSHOT});
  await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,9);assert.deepEqual(errors,[]);
- Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/mouse and CDP browser touch-drag camera; read-only state observations; no mocked SDK or game-state fixture'});
+ Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:['No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/buttons and browser touch-drag, long-press mining, tap placement; read-only state observations; no mocked SDK or game-state fixture'});
  console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:9,errors:0}));
 } catch(error){if(page)report.failureState=await page.evaluate(()=>{const b=window.Bloom,a=b?.app;return{diagnostics:window.BloomDiagnostics?.format(),pos:a?.actor()?.pos,aim:a?.sim.aim(a.actor()),buttons:a?.controls.buttons,tick:a?.sim.tick,inputPrevious:a?.actor()?.inputPrevious,combat:a?.actor()?.combat,mine:a?.actor()?.mine,enemy:a?.sim.physics.aimEnemy(a.actor(),b.Combat.weapon(a.actor(),a.sim).reach),camera:a?.renderer.camera,pointerLock:document.pointerLockElement?.id,active:document.activeElement?.id,modal:a?.modal()};}).catch(()=>null);console.error(JSON.stringify(report.failureState));Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
