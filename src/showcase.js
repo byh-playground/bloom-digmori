@@ -4,8 +4,15 @@ const SHOWCASE = installShowcase({
     launcher:'#new-world',
     playSelector:'#resume',
     durationMs:27000,
-    readyTimeoutMs:70000,
-    ready:win=>win.document.getElementById('loading')?.hidden===true,
+    readyTimeoutMs:210000,
+    ready:win=>{
+      const app=win.Bloom?.app;
+      if(!app?.started || !app?.sim)return false;
+      // The disposable intro owns this world's first presentation, not the normal load curtain.
+      const loading=win.document.getElementById('loading');
+      if(loading)loading.hidden=true;
+      return true;
+    },
     timeline:[
   {
     "atMs": 0,
