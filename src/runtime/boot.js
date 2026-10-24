@@ -83,6 +83,12 @@ async function boot(){
 }
 $('load-retry').onclick=()=>boot();
 
-void boot();
+// Deep-linked introductions own a disposable game iframe. Do not initialize a second
+// Rapier world behind it; boot the playable world after returning from the showcase.
+if (window.__BLOOM_SHOWCASE_DEEPLINK) {
+ window.addEventListener('bloom-showcase-closed',()=>{void boot();},{once:true});
+} else {
+ void boot();
+}
 
 
