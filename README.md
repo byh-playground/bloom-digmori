@@ -45,7 +45,7 @@ npx playwright install --with-deps chromium
 npm test
 ```
 
-`npm test`의 엄격 core 시나리오는 유지합니다. 배포 CI는 `E2E_SCOPE=deployment npm test`로 이동·채굴·회수·설치·저장/복원·모바일 메뉴·프리뷰 전환을 검증합니다. 중간 보간 프레임 관측과 동굴 탐험은 전체 core에서 별도로 검증하며 배포 scope 통과가 전체 core 통과를 뜻하지 않습니다.
+`npm test`의 엄격 core 시나리오는 유지하지만 Pages CI의 필수 실행 경로에서는 제외합니다. 배포는 원본 JS 문법·필수 파일만 빠르게 확인하고 바이트 변경 없이 게시합니다. 실제 이동·채굴·저장·모바일·SVG 렌더 E2E는 기능 변경 시 별도 실행하며, Stable 승격 때 완료한 실제 검증 범위를 기록합니다.
 
 `BROWSER_CHANNEL`로 실행 브라우저를 지정하고 `TEST_URL`로 공개 사이트에 같은 E2E를 실행할 수 있습니다. `TEST_REPORT`는 JSON 기록 목적지입니다. 전체 검증 상한은 180초입니다.
 
@@ -70,7 +70,7 @@ tests/            고정 사용자 흐름 E2E
 
 **루트 `index.html`과 `src/`가 실행 원본**입니다. HTML이 CSS를 link로 읽고 기존 의존성 순서의 JS를 `defer` classic script로 실행합니다. 각 JS는 strict mode를 유지하며 공유 lexical scope를 사용합니다. SDK는 기존 고정 ESM dynamic import를 유지합니다. 런타임 코드 합치기, Blob 번들, 생성 파일이 없습니다.
 
-CI는 빌드 없이 저장소 원본으로 사용자 흐름과 SVG 렌더를 검증합니다. main 병합 뒤 같은 `index.html`·`src/`·`previews/`를 바이트 변경 없이 GitHub Actions Pages artifact에 담아 기존 주소에 배포합니다. `_site/`는 업로드용 임시 복사이며 컴파일·치환·번들링하지 않습니다. Actions run의 커밋과 `digmori-pages-source-hashes` artifact를 공개 파일에 대조합니다. 이전 `dist/`·`build.json` 생성 경로는 제거되었습니다. 제품 동작·저장 계약이 동일한 내부 배포 구조 변경이므로 버전은 **0.28.14**를 유지하며 새 태그를 만들지 않습니다.
+CI는 빌드 없이 원본 JS 문법과 필수 파일 존재만 확인합니다. 게임 흐름·SVG 렌더 검증은 별도 수행합니다. main 병합 뒤 같은 `index.html`·`src/`·`previews/`를 바이트 변경 없이 GitHub Actions Pages artifact에 담아 기존 주소에 배포합니다. `_site/`는 업로드용 임시 복사이며 컴파일·치환·번들링하지 않습니다. Actions run의 커밋과 `digmori-pages-source-hashes` artifact를 공개 파일에 대조합니다. 이전 `dist/`·`build.json` 생성 경로는 제거되었습니다. 제품 동작·저장 계약이 동일한 내부 배포 구조 변경이므로 버전은 **0.28.14**를 유지하며 새 태그를 만들지 않습니다.
 
 ## 기술 구성
 
