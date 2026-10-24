@@ -4,7 +4,21 @@
 <link rel="stylesheet" href="src/ui/style-4.css">
 <link rel="stylesheet" href="src/ui/style-5.css"><link rel="stylesheet" href="src/ui/style-6.css"><link rel="stylesheet" href="src/ui/style-7.css"><link rel="stylesheet" href="src/ui/style-8.css"><link rel="stylesheet" href="src/ui/style-9.css">
 <link rel="stylesheet" href="src/ui/style-10.css">
-<link rel="stylesheet" href="src/ui/style-11.css"></head><body>
+<link rel="stylesheet" href="src/ui/style-11.css"><script>
+// An intro iframe is a disposable real game run, never a saved player session.
+if (new URLSearchParams(location.search).get('showcaseDemo') === '1') {
+  const stores = new WeakMap();
+  const getStore = storage => {
+    if (!stores.has(storage)) stores.set(storage, new Map());
+    return stores.get(storage);
+  };
+  Storage.prototype.getItem = function (key) { return getStore(this).get(String(key)) ?? null; };
+  Storage.prototype.setItem = function (key, value) { getStore(this).set(String(key), String(value)); };
+  Storage.prototype.removeItem = function (key) { getStore(this).delete(String(key)); };
+  Storage.prototype.clear = function () { getStore(this).clear(); };
+}
+</script>
+</head><body>
 <canvas id="world" tabindex="0"></canvas>
 <div id="topbar"><div><div class="brand">Digmori<small>디그모리</small></div><div id="location" class="caption"></div></div><div class="toolbar"><button id="companions-btn">동료 K</button><button id="journal-btn">모험 J</button><button id="menu-btn">세계</button><button id="inventory-btn">가방 E</button><button id="view-btn">3인칭 V</button><button id="network-btn">협동</button><button id="error-launch" type="button" hidden>오류 로그</button></div></div>
 <div id="rpg-inline" aria-label="레벨 경험치"></div><div id="guide"></div><div id="resource-guide"></div><div id="bossbar" hidden><span id="boss-name"></span><div class="meter"><div id="boss-fill"></div></div></div><div id="enemy-labels"></div>
@@ -113,5 +127,6 @@
 <script defer src="src/presentation/scene.js"></script>
 <script defer src="src/runtime/session.js"></script>
 <script defer src="src/runtime/app.js"></script>
-<script defer src="src/runtime/boot.js"></script></body></html>
+<script defer src="src/runtime/boot.js"></script><script type="module" src="./src/showcase.js"></script>
+</body></html>
 
