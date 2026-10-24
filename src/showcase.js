@@ -22,16 +22,6 @@ const SHOWCASE = installShowcase({
     "caption": "바이옴과 동굴이 이어지는 2.5D 샌드박스를 탐험합니다."
   },
   {
-    "atMs": 300,
-    "action": "click",
-    "selector": "#menu-btn"
-  },
-  {
-    "atMs": 850,
-    "action": "click",
-    "selector": "#new-world"
-  },
-  {
     "atMs": 1500,
     "action": "key",
     "code": "KeyW",
