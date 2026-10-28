@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digmori · 캐릭터 시트</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101c20;color:#e4e9da;font:14px/1.6 system-ui,'Malgun Gothic',sans-serif}
+header,main,footer{max-width:1480px;margin:auto;padding:18px 24px}
+header{border-bottom:1px solid #34453f}
+.eyebrow{color:#e7c47a;letter-spacing:2px;font-size:11px}
+h1{font-size:22px;margin:5px 0}
+h2{font-size:15px;margin:0 0 10px;color:#e7c47a}
+p{color:#a9beb3;margin:6px 0}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px}
+select,button{border:1px solid #52665c;background:#24382f;color:#e7ecd9;border-radius:6px;padding:9px 12px;font:inherit}
+button{cursor:pointer;min-height:44px}
+button.primary{background:#d7e8ae;color:#20352b;border-color:#d7e8ae}
+select{min-height:44px}
+section{margin-bottom:22px}
+.card{padding:14px;background:#1c2e28;border:1px solid #344b3d;border-radius:8px}
+.sheet{background:#f1eee2;border-radius:8px;overflow:hidden}
+.sheet svg{display:block;width:100%;height:auto}
+textarea{width:100%;min-height:310px;background:#0f1a17;color:#dfe8d3;border:1px solid #344b3d;border-radius:6px;padding:12px;font:13px/1.65 ui-monospace,Consolas,monospace;resize:vertical}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #2f433a}
+th{color:#e7c47a;font-weight:600}
+td code,.chip{font-family:ui-monospace,Consolas,monospace}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:3px 9px;border:1px solid #46594d;border-radius:30px;background:#16251f;font-size:12px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #0006;vertical-align:-1px;margin-right:6px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+.row h2{margin:0}
+.error{padding:20px;color:#5c1920;background:#ffdfc4;border-radius:8px}
+footer{font-size:12px;color:#97aba0}
+@media(max-width:700px){header,main,footer{padding:14px}th,td{padding:6px 6px}}
+</style>
+<header>
+  <div class="eyebrow">DIGMORI / CHARACTER SHEET</div>
+  <h1>캐릭터 시트</h1>
+  <p>원본 SVG의 시점·팔레트·부품을 읽어 한 장으로 그립니다. 저장한 PNG를 이미지 생성 AI에 참조 이미지로 첨부하고, 아래 프롬프트의 빈칸만 바꿔 요청하세요.</p>
+  <div class="controls">
+    <label>캐릭터 <select id="asset"></select></label>
+    <button id="png" class="primary">시트 PNG 저장</button>
+  </div>
+</header>
+<main id="host"></main>
+<footer>색·시점·부품은 원본 SVG에서 매번 계산하며 이 파일에 복사해 두지 않습니다. 원본: src/assets/characters/*.svg, src/assets/companions/pebble-mole.svg</footer>
+<script>
+'use strict';
+// ───────── 설정: 캐릭터 목록과 시점 이름의 단일 출처 ─────────
+const RAW = 'https://raw.githubusercontent.com/byh-playground/bloom-digmori/main/';
+const ASSETS = [
+  { id: 'sprout',      path: 'src/assets/characters/sprout.svg',      role: '플레이어' },
+  { id: 'bee',         path: 'src/assets/characters/bee.svg',         role: '야생 종' },
+  { id: 'bug',         path: 'src/assets/characters/bug.svg',         role: '야생 종' },
+  { id: 'flower',      path: 'src/assets/characters/flower.svg',      role: '야생 종' },
+  { id: 'fungus',      path: 'src/assets/characters/fungus.svg',      role: '야생 종' },
+  { id: 'pebble-mole', path: 'src/assets/companions/pebble-mole.svg', role: '동료' }
+];
+const VIEW_LABELS = { view0: '정면', view1: '앞 3/4', view2: '측면', view3: '뒤 3/4', view4: '후면', front: '정면', back: '후면' };
+const L = { cell: 256, gap: 16, margin: 32, titleH: 72, labelH: 30, swW: 96, swH: 44, pitchX: 112, pitchY: 88, bg: '#f1eee2', ink: '#2b2530', sub: '#5b5560' };
+
+// ───────── 작은 DOM 헬퍼 ─────────
+const SVGNS = 'http://www.w3.org/2000/svg';
+const h = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) e[k] = v; e.append(...kids); return e; };
+const s = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.append(...kids); return e; };
+const label = (expr) => VIEW_LABELS[expr] || expr;
+
+// ───────── VectorAsset: 원본 SVG 1개 (is-a 데이터 원본) ─────────
+class VectorAsset {
+  constructor(entry, text) {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    if (doc.querySelector('parsererror')) throw new Error(entry.id + ': SVG 구문 오류');
+    const meta = doc.getElementsByTagName('metadata')[0];
+    if (!meta) throw new Error(entry.id + ': vector-asset metadata 없음');
+    this.entry = entry;
+    this.root = doc.documentElement;
+    this.meta = JSON.parse(meta.textContent);
+    [, , this.width, this.height] = this.root.getAttribute('viewBox').trim().split(/\s+/).map(Number);
+  }
+  static async load(entry) {
+    // 같은 출처(로컬·Pages)를 먼저, htmlpreview 같은 다른 출처에서는 raw 주소를 사용한다.
+    for (const url of ['../../' + entry.path, RAW + entry.path]) {
+      try { const r = await fetch(url); if (r.ok) return new VectorAsset(entry, await r.text()); } catch (e) { /* 다음 주소 */ }
+    }
+    throw new Error(entry.id + ' SVG를 읽지 못했습니다');
+  }
+  get expressions() { return Object.keys(this.meta.expressions); }
+  view(expr) {
+    const el = this.root.cloneNode(true);
+    el.getElementsByTagName('metadata')[0].remove();
+    for (const id of this.meta.expressions[expr].hide) el.querySelector('[id="' + id + '"]')?.setAttribute('display', 'none');
+    el.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+    return document.importNode(el, true);
+  }
+  palette() {
+    const map = new Map();
+    for (const n of this.root.querySelectorAll('[fill],[stroke]')) {
+      const group = n.closest('g[id]')?.getAttribute('id') || '(루트)';
+      for (const kind of ['fill', 'stroke']) {
+        const v = (n.getAttribute(kind) || '').toLowerCase();
+        if (!/^#[0-9a-f]{6}$/.test(v)) continue;
+        const c = map.get(v) || { hex: v, fill: 0, stroke: 0, groups: new Set() };
+        c[kind]++; c.groups.add(group); map.set(v, c);
+      }
+    }
+    return [...map.values()].sort((a, b) => (b.fill + b.stroke) - (a.fill + a.stroke));
+  }
+  get outlineHex() { return this.palette().reduce((a, b) => (b.stroke > a.stroke ? b : a)).hex; }
+}
+
+// ───────── 믹스인: 할 수 있는 일 (can be) ─────────
+const CanCopy = Base => class extends Base {
+  copyButton(getText) {
+    const b = h('button', {}, '복사');
+    b.onclick = async () => {
+      try { await navigator.clipboard.writeText(getText()); b.textContent = '복사됨'; } catch (e) { b.textContent = '복사 실패 · 직접 선택'; }
+      setTimeout(() => { b.textContent = '복사'; }, 1600);
+    };
+    return b;
+  }
+};
+const CanExportPng = Base => class extends Base {
+  async exportPng(asset) {
+    const svg = this.svg, w = +svg.getAttribute('width'), hgt = +svg.getAttribute('height');
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await img.decode();
+    const canvas = h('canvas', { width: w, height: hgt });
+    canvas.getContext('2d').drawImage(img, 0, 0, w, hgt);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const a = h('a', { href: URL.createObjectURL(blob), download: asset.meta.id + '-sheet.png' });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+};
+
+// ───────── Panel: 화면 구획 (is-a). 각 구획은 asset 하나만 받아 그린다 ─────────
+class Panel { render(asset) { throw new Error('구현 필요'); } }
+
+class SheetPanel extends CanExportPng(Panel) {
+  render(asset) {
+    const views = asset.expressions, n = views.length, cols = Math.max(n, 5);
+    const W = 2 * L.margin + cols * L.cell + (cols - 1) * L.gap;
+    const x0 = L.margin + (cols - n) * (L.cell + L.gap) / 2;
+    const pal = asset.palette(), perRow = Math.floor((W - 2 * L.margin + (L.pitchX - L.swW)) / L.pitchX);
+    const viewsTop = L.margin + L.titleH, palTop = viewsTop + L.labelH + L.cell + 32;
+    const H = palTop + 30 + Math.ceil(pal.length / perRow) * L.pitchY + L.margin;
+    const txt = (x, y, size, fill, str, extra = {}) => s('text', { x, y, 'font-size': size, fill, 'font-family': "system-ui,'Malgun Gothic',sans-serif", ...extra }, str);
+
+    const svg = s('svg', { xmlns: SVGNS, width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': asset.meta.id + ' 캐릭터 시트' },
+      s('rect', { width: W, height: H, fill: L.bg }),
+      txt(L.margin, L.margin + 28, 26, L.ink, asset.meta.id + ' · 캐릭터 시트', { 'font-weight': 700 }),
+      txt(L.margin, L.margin + 54, 14, L.sub, `${asset.entry.role} · 캔버스 ${asset.width}×${asset.height} · 윤곽선 ${asset.outlineHex} · 평면 단색 채움`));
+    views.forEach((expr, i) => {
+      const x = x0 + i * (L.cell + L.gap), y = viewsTop + L.labelH;
+      const v = asset.view(expr);
+      for (const [k, val] of Object.entries({ x, y, width: L.cell, height: L.cell })) v.setAttribute(k, val);
+      svg.append(
+        txt(x + L.cell / 2, viewsTop + 20, 16, L.ink, label(expr), { 'text-anchor': 'middle', 'font-weight': 600 }),
+        s('rect', { x, y, width: L.cell, height: L.cell, rx: 8, fill: '#fbfaf4', stroke: '#2b253022' }), v);
+    });
+    svg.append(txt(L.margin, palTop + 16, 15, L.ink, `팔레트 ${pal.length}색 (HEX)`, { 'font-weight': 600 }));
+    pal.forEach((c, i) => {
+      const x = L.margin + (i % perRow) * L.pitchX, y = palTop + 30 + Math.floor(i / perRow) * L.pitchY;
+      const kind = c.fill === 0 ? '선' : c.stroke === 0 ? '채움' : '채움·선';
+      svg.append(
+        s('rect', { x, y, width: L.swW, height: L.swH, rx: 6, fill: c.hex, stroke: '#2b253044' }),
+        txt(x, y + L.swH + 17, 14, L.ink, c.hex, { 'font-family': 'ui-monospace,Consolas,monospace' }),
+        txt(x, y + L.swH + 33, 12, L.sub, kind));
+    });
+    this.svg = svg;
+    return h('section', {}, h('div', { className: 'sheet' }, svg));
+  }
+}
+
+class PromptPanel extends CanCopy(Panel) {
+  text(asset) {
+    const pal = asset.palette(), out = asset.outlineHex;
+    const fills = pal.filter(c => c.fill > 0).map(c => c.hex).join(', ');
+    const views = asset.expressions.map(label).join(', ');
+    return [
+      `첨부한 캐릭터 시트의 캐릭터 "${asset.meta.id}"와 같은 캐릭터를 그린다.`,
+      '',
+      '[고정: 시트와 같게 유지]',
+      `- 외형: 시트의 ${views} 각 칸과 일치`,
+      `- 채움 색: ${fills} 만 사용`,
+      `- 윤곽선: ${out} 단색, 시트와 같은 굵기`,
+      '- 면은 평면 단색. 그라데이션·질감·광택 없음',
+      '- 머리·몸·팔다리의 크기 비율',
+      '',
+      '[변경: 이번 요청에서만 바꾸는 것]',
+      '- 포즈: {포즈}',
+      '- 시점: {시점}',
+      '- 배경: {배경}',
+      '',
+      '[금지]',
+      '- 시트에 없는 장식·무늬·소품 추가',
+      '- 위 HEX 밖의 색 사용',
+      '- 외형 묘사를 새로 쓰기 (시트가 외형의 유일한 기준)'
+    ].join('\n');
+  }
+  render(asset) {
+    const ta = h('textarea', { value: this.text(asset), readOnly: true, spellcheck: false });
+    return h('section', { className: 'card' }, h('div', { className: 'row' }, h('h2', {}, '이미지 생성 프롬프트 (참조 이미지 + 빈칸 3개)'), this.copyButton(() => ta.value)), ta);
+  }
+}
+
+class PartsPanel extends Panel {
+  render(asset) {
+    const m = asset.meta, pal = asset.palette();
+    const table = (head, rows) => h('table', {}, h('thead', {}, h('tr', {}, ...head.map(t => h('th', {}, t)))), h('tbody', {}, ...rows.map(r => h('tr', {}, ...r.map(c => h('td', {}, c))))));
+    const sock = Object.entries(m.sockets || {});
+    return h('section', { className: 'card' },
+      h('h2', {}, '색 사용처 (그룹 id)'),
+      table(['HEX', '채움', '선', '사용 그룹'], pal.map(c => [h('span', {}, h('span', { className: 'sw', style: 'background:' + c.hex }), h('code', {}, c.hex)), String(c.fill), String(c.stroke), [...c.groups].join(', ')])),
+      h('h2', { style: 'margin-top:18px' }, `부품 ${m.parts.length}개 (id · 부모 · 피벗)`),
+      table(['id', '부모', '피벗 x, y'], m.parts.map(p => [p.id, p.parent ?? '—', p.pivot.join(', ')])),
+      ...(sock.length ? [h('h2', { style: 'margin-top:18px' }, '소켓'), table(['id', '부품', '좌표'], sock.map(([id, v]) => [id, v.part, v.point.join(', ')]))] : []),
+      h('h2', { style: 'margin-top:18px' }, `동작 ${Object.keys(m.clips || {}).length}개 (이름 · 길이)`),
+      h('div', { className: 'chips' }, ...Object.entries(m.clips || {}).map(([k, v]) => h('span', { className: 'chip' }, `${k} ${v.durationMs}ms`))));
+  }
+}
+
+// ───────── App: 패널 조합 (has-a) ─────────
+class App {
+  constructor(host, select, pngBtn) {
+    this.host = host; this.sheet = new SheetPanel(); this.panels = [this.sheet, new PromptPanel(), new PartsPanel()]; this.asset = null;
+    ASSETS.forEach(a => select.append(h('option', { value: a.id }, `${a.id} · ${a.role}`)));
+    select.onchange = () => this.show(select.value);
+    pngBtn.onclick = () => this.asset && this.sheet.exportPng(this.asset);
+    const q = new URLSearchParams(location.search).get('c');
+    select.value = ASSETS.some(a => a.id === q) ? q : ASSETS[0].id;
+    this.show(select.value);
+  }
+  async show(id) {
+    try {
+      try { history.replaceState(null, '', '?c=' + id); } catch (e) { /* 미리보기 중계 주소에서는 생략 */ }
+      this.asset = await VectorAsset.load(ASSETS.find(a => a.id === id));
+      this.host.replaceChildren(...this.panels.map(p => p.render(this.asset)));
+    } catch (e) { this.host.replaceChildren(h('div', { className: 'error' }, e.message)); }
+  }
+}
+new App(document.getElementById('host'), document.getElementById('asset'), document.getElementById('png'));
+</script>
