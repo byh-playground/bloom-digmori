@@ -37,6 +37,12 @@ jobs:
         with:
           name: digmori-pages-source-hashes
           path: artifacts/pages-sha256.txt
+      - name: Publish bloom-game.json with the Nightly tag name
+        run: |
+          curl -fsS https://raw.githubusercontent.com/byh-playground/bloom-world/main/playground/bloom-game.schema.json -o "$RUNNER_TEMP/schema.json"
+          STAMP=$(date -u -d "@$(git show -s --format=%ct "$GITHUB_SHA")" +%Y%m%dT%H%M%SZ)
+          jq --arg t "nightly-$STAMP-${GITHUB_SHA:0:12}" '. + {nightly:$t}' bloom-game.json > _site/bloom-game.json
+          npx --yes ajv-cli@5 validate --spec=draft2020 -s "$RUNNER_TEMP/schema.json" -d _site/bloom-game.json
       - uses: actions/upload-pages-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
