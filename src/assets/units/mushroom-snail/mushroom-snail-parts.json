@@ -35,7 +35,7 @@
   "hat_front": {"group": "hat","size": [188,120],"anchor": [94,118]},
   "hat_side": {"group": "hat","size": [167,129],"anchor": [83,127]},
   "egg": {"group": "egg","size": [92,129],"anchor": [46.5,126]},
-  "hat_back": {"group": "hat","size": [201,129],"anchor": [101,126]},
+  "hat_back": {"group": "hat","size": [201,141],"anchor": [100.5,138]},
   "shrooms_side_g4": {"group": "shrooms","size": [125,118],"anchor": [62,104]},
   "shrooms_back_g4": {"group": "shrooms","size": [162,123],"anchor": [81,108]}
  },

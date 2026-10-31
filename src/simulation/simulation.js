@@ -1,21 +1,34 @@
 'use strict';
 class Simulation {
- constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.eggs={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
+ constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.chests={};this.regrow={};this.eggs={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
  createActor(id,pos,speciesId=null,boss=false){const d=speciesId?(boss?SPECIES[speciesId]?.boss:SPECIES[speciesId]?.wild):null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
- addPlayer(id){if(this.actors[id])return;const count=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length,p={x:.5+count*1.7,y:5.1,z:.5};const a=this.createActor(id,p);this.actors[id]=a;this.physics.syncTerrain(Object.values(this.actors),[...Object.values(this.drops),...this.companions.bodies()],Object.values(this.projectiles),this.tick);this.physics.addActor(a);return a;}
+ addPlayer(id){if(this.actors[id])return;const count=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length,p={x:.5+count*1.7,y:5.1,z:.5};const a=this.createActor(id,p);this.actors[id]=a;this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick);this.physics.addActor(a);return a;}
  addCreature(speciesId,pos,structureKey=null){if(!SPECIES[speciesId]||!structureKey&&Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey).length>=CFG.creatures.maxWild)return null;const id='creature:'+ ++this.sequence,a=this.createActor(id,pos,speciesId);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=0;this.actors[id]=a;this.physics.addActor(a);return a;}
  // A structure boss is the species body x3 with its hat (rig stage 'boss'); one live boss per structure, at most four at once.
  addBoss(speciesId,pos,structureKey=null){const live=Object.values(this.actors).filter(a=>a.boss&&!a.dead);if(!SPECIES[speciesId]?.boss||live.length>=4||structureKey&&live.some(a=>a.structureKey===structureKey))return null;const id='boss:'+ ++this.sequence,a=this.createActor(id,pos,speciesId,true);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=600;this.actors[id]=a;this.physics.addActor(a);return a;}
+ // Enclosure queries over the current terrain (a load or new world swaps the terrain, and with it the cache).
+ get ranch(){if(this.ranchCache?.terrain!==this.terrain)this.ranchCache=new Ranch(this.terrain);return this.ranchCache;}
  emit(type,actor,data={}){if(this.silent)return;if(this.effects.length>=CFG.presentation.maxBuffered)throw Error('표현 이벤트 버퍼 초과');const sequence=this.presentationSequence++;this.effects.push({id:this.epoch+':'+this.tick+':'+sequence,tick:this.tick,sequence,type,pos:{...actor.pos},actorId:actor.id,enemy:actor.enemy,...data});}
  drainEffects(){const events=this.effects;this.effects=[];return events;}
  markItem(id){this.progress[id]=true;}
- spawnDrop(item,count,pos){if(!ITEMS[item]||count<=0||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id='drop:'+ ++this.sequence,h=hash3(this.sequence,0,this.tick,this.terrain.seed),drop={id,type:'drop',item,count,pos:{x:pos.x,y:pos.y+.35,z:pos.z},age:0};this.drops[id]=drop;
-  this.physics.addBall(drop,.16,{x:((h%99)/99-.5)*1.5,y:2.5,z:(((h>>>8)%99)/99-.5)*1.5});return true;}
+ // A thrown drop (Q, D-105 feeding) flies along `toss` and nobody picks it up for 1.5 s, so it lands where it was thrown.
+ spawnDrop(item,count,pos,toss=null){if(!ITEMS[item]||count<=0||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id='drop:'+ ++this.sequence,h=hash3(this.sequence,0,this.tick,this.terrain.seed),drop={id,type:'drop',item,count,pos:{x:pos.x,y:pos.y+.35,z:pos.z},age:0,...(toss?{pickupMs:1500}:{})};this.drops[id]=drop;
+  this.physics.addBall(drop,.16,toss?{x:toss.x*4.5,y:2.2+toss.y*3,z:toss.z*4.5}:{x:((h%99)/99-.5)*1.5,y:2.5,z:(((h>>>8)%99)/99-.5)*1.5});return true;}
   fire(actor,action){if(Object.keys(this.projectiles).length>=64)return;const dir=V.norm(action.dir),eye=V.add(actor.pos,{x:0,y:actor.offset*1.65,z:0}),origin=action.companionId?V.add(companionRoot(actor,dir),{x:0,y:.9,z:0}):action.origin?{...action.origin}:V.add(eye,V.scale(dir,.65*(actor.scale||1)));
   if(!this.physics.sight(eye,origin,actor)){this.emit('wall',actor);return;}const projectile=action.projectile||(action.companionId?SPECIES[action.companionKind]?.capabilities.attack.projectile:null)||{speed:actor.enemy?13:26,lift:0,gravity:.2,radius:.11},velocity=V.add(V.scale(dir,projectile.speed),{x:0,y:projectile.lift,z:0});const id='shot:'+ ++this.sequence,shot={id,type:'shot',source:actor.id,companionId:action.companionId||null,companionKind:action.companionKind||null,lifetime:action.companionId?action.reach/projectile.speed*1000:5000,enemy:actor.enemy,damage:action.damage,heavy:!!action.heavy,impulse:action.impulse,weapon:action.weapon,sequence:action.sequence,dir:{...dir},pos:origin,age:0,...(action.companionId?{spent:false,throwPhase:'flight',groundMs:0,supportTicks:0}:{})};this.projectiles[id]=shot;
   // One native CCD sphere: initial velocity plus the same world gravity as actors. Rendering reads its integrated position.
   this.physics.addBall(shot,projectile.radius,velocity,projectile.gravity);this.companions.launched(shot);this.emit('shot',actor);}
+ // D-104: the merge potion is thrown like a splash potion (one physics ball) and bursts on its first contact.
+ throwPotion(actor){const i=actor.inventory,s=Inventory.selected(i),P=RANCH_RULES.potion;if(s?.id!=='mergePotion'||Object.keys(this.projectiles).length>=64)return false;
+  const dir=V.norm(actor.facing),eye=V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),origin=V.add(eye,V.scale(dir,.55));if(!this.physics.sight(eye,origin,actor)){this.emit('wall',actor);return false;}
+  const id='shot:'+ ++this.sequence,shot={id,type:'shot',source:actor.id,potion:true,item:'mergePotion',companionId:null,companionKind:null,lifetime:P.lifetime,enemy:false,dir:{...dir},pos:origin,age:0};this.projectiles[id]=shot;
+  this.physics.addBall(shot,P.ballRadius,V.add(V.scale(dir,P.speed),{x:0,y:P.lift,z:0}),P.gravity);if(--s.count===0)i.slots[i.selected]=null;this.emit('potion-throw',actor,{point:{...origin}});return true;}
+ splashPotion(shot){const owner=this.actors[shot.source],point={...shot.pos},P=RANCH_RULES.potion;this.physics.removeBody(shot);delete this.projectiles[shot.id];if(!owner)return;
+  const hit=this.companions.owned(owner.id).filter(u=>V.len(V.sub(u.pos,point))<=P.radius),merged=this.companions.merge(owner,hit);
+  this.emit('potion-splash',owner,{point,radius:P.radius,hit:hit.length,merged:merged.length});
+  for(const m of merged){this.progress.merged=true;this.emit('unit-merge',owner,{...m,pos:m.pos,name:SPECIES[m.species].name});}}
  projectileContact(id,tag){const shot=this.projectiles[id];if(!shot||!tag||tag.type==='drop'||tag.type==='companion'||tag.type==='shot'||tag.id===shot.source)return;
+  if(shot.potion){this.splashPotion(shot);return;}
   if(shot.companionId){if(shot.spent)return;shot.spent=true;}
    let contact=null,accepted=false;
   if(tag.type==='actor'){const target=this.actors[tag.id],col=target&&this.physics.world.getCollider(target.collider),other=this.physics.world.getCollider(shot.collider),pair=col&&other?col.contactCollider(other,.20):null;
@@ -28,9 +41,14 @@ class Simulation {
  }
  stationInReach(actor,key,kind){if(!actor||!key)return false;const xyz=key.split(',').map(Number);if(xyz.length!==3||!xyz.every(Number.isFinite))return false;const id=this.terrain.get(...xyz);return BLOCKS[id]?.station===kind&&V.len(V.sub({x:xyz[0]+.5,y:xyz[1],z:xyz[2]+.5},actor.pos))<=CFG.reach+1;}
  aim(actor){return this.terrain.ray(V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),actor.facing,CFG.reach);}
-  interact(actor){const hit=this.aim(actor);if(!hit)return this.useConsumable(actor);const block=BLOCKS[hit.id];if(!block.station)return this.useConsumable(actor);const key=blockKey(hit.x,hit.y,hit.z);
+  interact(actor){const hit=this.aim(actor);if(!hit)return this.useConsumable(actor);const block=BLOCKS[hit.id];if(block.gate)return this.toggleGate(actor,hit);if(!block.station)return this.useConsumable(actor);const key=blockKey(hit.x,hit.y,hit.z);
    if(block.station==='loot')return this.openChest(actor,hit);
+   if(block.station==='chest'&&!this.chests[key])return false;
   actor.inventory.station=key;if(block.station==='furnace'&&!this.furnaces[key])this.furnaces[key]={slots:[null,null,null],burn:0,burnTotal:0,progress:0,recipe:null};this.emit('open-station',actor,{station:block.station,key});return true;}
+  // A gate opens and closes in place (right-click or F). It does not close on a player or a unit standing in it.
+  toggleGate(actor,hit){const open=BLOCKS[hit.id].gate==='open',pos={x:hit.x+.5,y:hit.y+.5,z:hit.z+.5};
+   if(open&&(this.physics.overlapActors(pos,.49).length||this.companions.all().some(u=>u.location==='ranch'&&[u.cell,u.next].some(c=>c&&c.x===hit.x&&c.y===hit.y&&c.z===hit.z)))){this.emit('place-blocked',actor,{reason:'gate',pos});return false;}
+   if(this.terrain.set(hit.x,hit.y,hit.z,BID[open?'fenceGate':'fenceGateOpen'])===false)return false;this.emit('gate',actor,{pos,open:!open});return true;}
   useConsumable(actor){const i=actor.inventory,s=Inventory.selected(i);if(!s||actor.hp>=actor.maxHp||!['food','healingSalve'].includes(s.id))return false;
    actor.hp=Math.min(actor.maxHp,actor.hp+(s.id==='healingSalve'?50:25));if(--s.count===0)i.slots[i.selected]=null;this.emit('heal',actor,{item:s.id});return true;
   }
@@ -57,7 +75,7 @@ class Simulation {
   if(this.terrain.get(x,y,z)||!egg&&this.physics.overlapActors({x:x+.5,y:y+.5,z:z+.5},.49).length){this.emit('place-blocked',actor,{pos:{x:x+.5,y:y+.5,z:z+.5}});return false;}
   if(this.terrain.set(x,y,z,def.block)===false)return false;if(--stack.count===0)inv.slots[inv.selected]=null;
   if(egg){const key=blockKey(x,y,z);this.eggs[key]={key,x,y,z,species:egg,owner:actor.id,placedTick:this.tick,hatchTick:this.tick+ticksForMs(EGG_RULES.hatchMs)};this.emit('egg-place',actor,{pos:{x:x+.5,y,z:z+.5},species:egg,key});}
-  if(stack.id==='furnace')this.furnaces[blockKey(x,y,z)]={slots:[null,null,null],burn:0,burnTotal:0,progress:0,recipe:null};this.emit('place',actor,{pos:{x:x+.5,y:y+.5,z:z+.5},color:BLOCKS[def.block].color,normal:hit.normal,blockId:def.block});return true;}
+  if(stack.id==='furnace')this.furnaces[blockKey(x,y,z)]={slots:[null,null,null],burn:0,burnTotal:0,progress:0,recipe:null};if(stack.id==='storageChest')this.chests[blockKey(x,y,z)]={slots:Array(RANCH_RULES.chestSlots).fill(null)};this.emit('place',actor,{pos:{x:x+.5,y:y+.5,z:z+.5},color:BLOCKS[def.block].color,normal:hit.normal,blockId:def.block});return true;}
  mine(actor,held){if(!held){actor.mine.target=null;actor.mine.elapsed=0;return;}const hit=this.aim(actor);if(!hit||Object.keys(this.drops).length>=CFG.maxDrops)return;
   const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z),item=Inventory.stats(actor).item;
   if(!Number.isFinite(b.hardness))return;
@@ -67,13 +85,15 @@ class Simulation {
   actor.mine.elapsed+=CFG.stepMs*speed;if(actor.mine.elapsed<b.hardness)return;
   actor.mine.elapsed=0;this.harvest(actor,hit);
  }
- harvest(actor,hit){
+ // `by`: the owned unit harvesting for its owner (chest labor); the owner still gets the mining experience.
+ harvest(actor,hit,by=null){
   const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z);if(this.terrain.get(hit.x,hit.y,hit.z)!==hit.id||!Number.isFinite(b?.hardness)||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id=this.terrain.set(hit.x,hit.y,hit.z,0);if(id===false)return false;
   const pos={x:hit.x+.5,y:hit.y+.5,z:hit.z+.5};this.spawnDrop(b.drop||b.id,1,pos);if(b.egg)delete this.eggs[key];
   if(CFG.rpg.mining[b.id])RPG.gain(actor,CFG.rpg.mining[b.id],this,'mine');
    if(id===BID.leaves){this.spawnDrop('leaves',1,pos);if(hash3(hit.x,hit.y,hit.z,this.terrain.seed)%4===0)this.spawnDrop('food',1,pos);}
   const furnace=this.furnaces[key];if(furnace){for(const s of furnace.slots)if(s)this.spawnDrop(s.id,s.count,pos);delete this.furnaces[key];}
-  this.emit('mine',actor,{pos,color:b.color,normal:hit.normal,blockId:hit.id});return true;
+  const chest=this.chests[key];if(chest){for(const s of chest.slots)if(s)this.spawnDrop(s.id,s.count,pos);delete this.chests[key];}
+  this.emit('mine',actor,{pos,color:b.color,normal:hit.normal,blockId:hit.id,...(by?{by}:{})});return true;
  }
  command(actor,c){if(!c||typeof c.op!=='string'||actor.dead||actor.suspended)return false;
   switch(c.op){
@@ -88,7 +108,9 @@ class Simulation {
    case 'interact':return this.interact(actor);
     case 'upgrade':return RPG.upgrade(actor,c.skill,this);
    case 'eat':return this.useConsumable(actor);
-   case 'drop':{const i=actor.inventory,s=i.cursor||Inventory.selected(i);if(!s)return false;const n=c.all?s.count:1;if(!this.spawnDrop(s.id,n,V.add(actor.pos,V.scale(actor.facing,1))))return false;s.count-=n;if(!s.count){if(i.cursor===s)i.cursor=null;else i.slots[i.selected]=null;}return true;}
+   case 'drop':{const i=actor.inventory,s=i.cursor||Inventory.selected(i);if(!s)return false;const n=c.all?s.count:1,toss=V.norm({x:actor.facing.x,y:Math.max(-.3,actor.facing.y),z:actor.facing.z}),eye=V.add(actor.pos,{x:0,y:1.05,z:0}),from=V.add(eye,V.scale(V.norm({x:toss.x,y:0,z:toss.z}),.75));
+    // Thrown forward (Minecraft Q); against a wall it falls at the feet instead of entering the block.
+    if(!this.spawnDrop(s.id,n,this.physics.sight(eye,from)?{...from,y:from.y-.35}:V.add(actor.pos,{x:0,y:.4,z:0}),toss))return false;s.count-=n;if(!s.count){if(i.cursor===s)i.cursor=null;else i.slots[i.selected]=null;}return true;}
   }return false;
  }
  kill(actor,source){
@@ -182,6 +204,11 @@ class Simulation {
   if(this.terrain.get(e.x,e.y,e.z)!==BID[SPECIES[e.species].egg]){delete this.eggs[key];continue;}
   const owner=this.actors[e.owner];if(!owner||owner.suspended)continue;const unit=this.companions.hatch(owner,e);if(!unit)continue;
   this.terrain.set(e.x,e.y,e.z,0);delete this.eggs[key];this.progress.hatched=true;this.emit('egg-hatch',owner,{pos:{x:e.x+.5,y:e.y,z:e.z+.5},species:e.species,companionId:unit.id,name:SPECIES[e.species].name});}}
+ // D-106 regrowth: a block taken by chest labor grows back in place regrowTicks later, once its cell is empty of players
+ // and units. Anything the player put there first cancels it.
+ tickRegrow(){for(const key of Object.keys(this.regrow).sort(cmp)){const g=this.regrow[key];if(this.tick<g.tick)continue;if(this.terrain.get(g.x,g.y,g.z)!==0){delete this.regrow[key];continue;}
+  if(this.physics.overlapActors({x:g.x+.5,y:g.y+.5,z:g.z+.5},.49).length||this.companions.all().some(u=>u.location==='ranch'&&[u.cell,u.next].some(c=>c&&c.x===g.x&&c.y===g.y&&c.z===g.z)))continue;
+  if(this.terrain.set(g.x,g.y,g.z,g.id)===false)continue;delete this.regrow[key];this.emit('regrow',{id:'regrow:'+key,pos:{x:g.x+.5,y:g.y,z:g.z+.5},enemy:false},{blockId:g.id,color:BLOCKS[g.id].color});}}
  tickCreatureEncounters(players){
   if(this.tick<this.nextSpawn)return;this.nextSpawn=this.tick+CFG.creatures.encounterCheckTicks;
   if(!this.night()&&this.tick>0&&this.tick%CFG.creatures.spawnTicks===0)this.spawnCreature(players);
@@ -192,7 +219,7 @@ class Simulation {
   const actors=Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),playerInputs=new Map();
   for(const e of [...actors,...Object.values(this.drops),...Object.values(this.projectiles)])e.previous={...e.pos};
   for(const actor of actors){actor.anim+=CFG.stepMs;if(!actor.dead)continue;actor.respawn-=CFG.stepMs;if(actor.respawn<=0){if(actor.enemy||actor.speciesId||actor.boss){delete this.actors[actor.id];continue;}actor.dead=false;actor.hp=actor.maxHp;actor.combat=Combat.state();this.physics.world.getRigidBody(actor.body).setBodyType(this.R.RigidBodyType.Dynamic,true);this.physics.teleport(actor,this.terrain.spawn);}}
-  this.physics.syncTerrain(Object.values(this.actors),[...Object.values(this.drops),...this.companions.bodies()],Object.values(this.projectiles),this.tick);
+  this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick);
   // Phase 1: deterministic actor-ID order for commands and ALL voxel edits.
   for(const actor of actors){if(actor.dead||actor.suspended||actor.enemy||actor.speciesId||actor.boss)continue;const entry=inputs.get(actor.id),input=entry?decodeInput(entry.input):neutralInput();if(actor.inventory.selected!==input.selected)actor.companionSlot=-1;actor.inventory.selected=input.selected;actor.facing=direction(input.yaw,input.pitch);
    for(const command of entry?.commands||[]){try{this.command(actor,decodeCommand(command.payload));}catch(e){this.emit('invalid-command',actor,{message:e.message});}}
@@ -200,23 +227,26 @@ class Simulation {
    const selected=Inventory.stats(actor).item,previous=actor.inputPrevious;
    if(input.enabled&&input.left&&!previous.left){const enemy=this.physics.aimEnemy(actor,Combat.weapon(actor,this).reach),block=this.aim(actor),canMine=actor.companionSlot<0&&(!selected?.weapon||!!selected?.tool),attackBusy=actor.combat.state==='attack';previous.primary=!input.attackOnly&&canMine&&block&&!enemy&&!attackBusy?'mine':'attack';}
    this.mine(actor,input.enabled&&(input.mine||input.left&&previous.primary==='mine'));
-   if(input.enabled&&input.right&&!previous.right&&!selected?.weapon&&actor.companionSlot<0){if(selected?.id==='bucket'||selected?.id==='waterBucket')this.useBucket(actor);else this.place(actor);}
+   if(input.enabled&&input.right&&!previous.right&&!selected?.weapon&&actor.companionSlot<0){const aimed=this.aim(actor);
+    // Right-click works a gate or opens a storage chest before anything is placed against it (Minecraft order).
+    if(aimed&&BLOCKS[aimed.id].gate)this.toggleGate(actor,aimed);else if(aimed&&BLOCKS[aimed.id].station==='chest')this.interact(actor);
+    else if(selected?.throwable)this.throwPotion(actor);else if(selected?.id==='bucket'||selected?.id==='waterBucket')this.useBucket(actor);else this.place(actor);}
    this.physics.flushTerrainChanges();
    playerInputs.set(actor.id,{...input,left:input.left&&previous.primary==='attack',right:input.right&&(!!selected?.weapon||actor.companionSlot>=0)});previous.left=input.left;previous.right=input.right;if(!input.left)previous.primary='none';
   }
-  this.companions.tick();this.tickEggs();this.physics.flushTerrainChanges();
+  this.companions.tick();this.tickEggs();this.tickRegrow();this.physics.flushTerrainChanges();
   this.terrain.water.step(actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss),this.tick);
   // Phase 2: movement/AI see the final terrain for this tick, independent of renderer jobs.
   for(const actor of Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id))){if(actor.dead||actor.suspended)continue;const control=actor.enemy||actor.speciesId?this.ai(actor):Combat.updatePlayer(actor,playerInputs.get(actor.id)||neutralInput(),this);Combat.tick(actor,this);this.physics.control(actor,control.move,control.speed,control.jump,control.autoJump!==false,control.swimRise,control.swimDive);}
   // New shots/drops need support before their first integration.
-  this.physics.syncTerrain(Object.values(this.actors),[...Object.values(this.drops),...this.companions.bodies()],Object.values(this.projectiles),this.tick,false);
+  this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick,false);
   this.physics.step(this);
   for(const actor of Object.values(this.actors))if(!actor.dead&&actor.pos.y<CFG.bottom-6)this.kill(actor,null);
   this.tickFurnaces();
   const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss&&!a.dead&&!a.suspended).sort((a,b)=>cmp(a.id,b.id));
-  for(const id of Object.keys(this.drops).sort(cmp)){const d=this.drops[id];d.age+=CFG.stepMs;for(const p of players){if(d.age<350||V.len(V.sub(V.add(p.pos,{x:0,y:.6,z:0}),d.pos))>1.8)continue;const old=d.count;d.count=Inventory.addTo(p.inventory.slots,d.item,d.count);if(d.count<old){this.markItem(d.item);this.emit('pickup',p,{item:d.item,count:old-d.count});}if(!d.count)break;}
+  for(const id of Object.keys(this.drops).sort(cmp)){const d=this.drops[id];d.age+=CFG.stepMs;for(const p of players){if(d.age<(d.pickupMs??350)||V.len(V.sub(V.add(p.pos,{x:0,y:.6,z:0}),d.pos))>1.8)continue;const old=d.count;d.count=Inventory.addTo(p.inventory.slots,d.item,d.count);if(d.count<old){this.markItem(d.item);this.emit('pickup',p,{item:d.item,count:old-d.count});}if(!d.count)break;}
    if(!d.count||d.age>CFG.dropLife||d.pos.y<CFG.bottom-10){this.physics.removeBody(d);delete this.drops[id];}}
-  for(const [id,s]of Object.entries(this.projectiles)){s.age+=CFG.stepMs;if(s.companionId){this.companions.updateThrow(s);continue;}if(s.age>(s.lifetime??5000)||s.pos.y<CFG.bottom){this.companions.returned(s);this.physics.removeBody(s);delete this.projectiles[id];}}
+  for(const [id,s]of Object.entries(this.projectiles)){s.age+=CFG.stepMs;if(s.companionId){this.companions.updateThrow(s);continue;}if(s.potion){if(s.age>s.lifetime||s.pos.y<CFG.bottom)this.splashPotion(s);continue;}if(s.age>(s.lifetime??5000)||s.pos.y<CFG.bottom){this.companions.returned(s);this.physics.removeBody(s);delete this.projectiles[id];}}
   this.tickCreatureEncounters(players);
   this.tick=context.tick+1;this.revision++;this.silent=false;METRICS.add('simulation.tick',performance.now()-started);
  }
@@ -229,7 +259,7 @@ class Simulation {
   for(const id of [...joined].sort(cmp))this.addPlayer(id);
   for(const id of players){const a=this.actors[id];if(!a)throw Error('참가자 배우 없음');const inactive=!activePlayers.includes(id);if(a.suspended!==inactive){if(inactive)this.companions.unavailable(a);a.suspended=inactive;a.combat=Combat.state();const b=this.physics.world.getRigidBody(a.body);if(b){b.setLinvel({x:0,y:0,z:0},true);b.setBodyType(inactive?this.R.RigidBodyType.Fixed:this.R.RigidBodyType.Dynamic,true);}}}
  }
- meta(){return{companions:this.companions.snapshot(),version:SNAPSHOT_VERSION,seed:this.terrain.seed,tick:this.tick,epoch:this.epoch,sequence:this.sequence,actionSequence:this.actionSequence,actors:Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),drops:Object.values(this.drops).sort((a,b)=>cmp(a.id,b.id)),projectiles:Object.values(this.projectiles).sort((a,b)=>cmp(a.id,b.id)),furnaces:Object.entries(this.furnaces).sort(([a],[b])=>cmp(a,b)),eggs:Object.values(this.eggs).sort((a,b)=>cmp(a.key,b.key)),progress:this.progress,edits:this.terrain.snapshot(),fluid:this.terrain.water.snapshot(),terrainState:{editSerial:this.terrain.editSerial,physicsRevisions:[...this.terrain.physicsRevisions.entries()].sort(([a],[b])=>cmp(a,b))},nextSpawn:this.nextSpawn,physics:this.physics.metadata()};}
+ meta(){return{companions:this.companions.snapshot(),version:SNAPSHOT_VERSION,seed:this.terrain.seed,tick:this.tick,epoch:this.epoch,sequence:this.sequence,actionSequence:this.actionSequence,actors:Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),drops:Object.values(this.drops).sort((a,b)=>cmp(a.id,b.id)),projectiles:Object.values(this.projectiles).sort((a,b)=>cmp(a.id,b.id)),furnaces:Object.entries(this.furnaces).sort(([a],[b])=>cmp(a,b)),chests:Object.entries(this.chests).sort(([a],[b])=>cmp(a,b)),regrow:Object.values(this.regrow).sort((a,b)=>cmp(a.key,b.key)),eggs:Object.values(this.eggs).sort((a,b)=>cmp(a.key,b.key)),progress:this.progress,edits:this.terrain.snapshot(),fluid:this.terrain.water.snapshot(),terrainState:{editSerial:this.terrain.editSerial,physicsRevisions:[...this.terrain.physicsRevisions.entries()].sort(([a],[b])=>cmp(a,b))},nextSpawn:this.nextSpawn,physics:this.physics.metadata()};}
  save(){this.physics.flushTerrainChanges();const json=new TextEncoder().encode(JSON.stringify(this.meta())),phys=this.physics.snapshot(),out=new Uint8Array(12+json.length+phys.length),v=new DataView(out.buffer);v.setUint32(0,0x424C4D41,true);v.setUint32(4,json.length,true);v.setUint32(8,phys.length,true);out.set(json,12);out.set(phys,12+json.length);return out;}
  // One-time save migration, idempotent on current saves. Retired hostile kinds (<=0.27) and the 0.28-0.32 species
  // (shell, leaf) become the nearest new species (LEGACY_SPECIES); the old altar-summoned warden boss and the old
@@ -278,9 +308,33 @@ class Simulation {
    meta.projectiles=(meta.projectiles||[]).filter(shot=>{if(shot.weapon!=='bow')return true;if(shot.companionId){shot.weapon='ball';return true;}retiredBodies.push(shot);return false;});
    meta.retiredBodies=retiredBodies;
   }
-  parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));this.migrateLegacyActors(m);this.retireCombatResources(m);this.retireEquipment(m);
+  // 0.34.0 replaced the base work menu (거점 작업 배치, base storage, quick collect) with ranching and chest labor (D-106).
+  // Same-version saves: 'reserve' and 'work' units move to the ranch where they stand (a working unit's physics ball is
+  // retired), their cargo and every stored base stack go to meta.retiredBaseStorage, which load() puts into a storage
+  // chest placed at the old base spot (or the owner's bag, or the ground). Ranch walk fields start empty.
+  retireBaseWork(meta){const c=meta.companions;if(!c)return;const retiredBodies=meta.retiredBodies||[],storage=[];
+   for(const [owner,b]of Object.entries(c.bases||{}).sort(([a],[b])=>cmp(a,b)))storage.push({owner,pos:b?.pos?{...b.pos}:null,stacks:(Array.isArray(b?.slots)?b.slots:[]).filter(s=>s&&ITEMS[s.id]&&Number.isInteger(s.count)&&s.count>0).map(s=>({id:s.id,count:s.count}))});
+   delete c.bases;
+   for(const u of Object.values(c.units||{}).sort((a,b)=>cmp(a.id,b.id))){
+    if(u.cargo&&!('cell' in u)){let entry=storage.find(s=>s.owner===u.owner);if(!entry)storage.push(entry={owner:u.owner,pos:null,stacks:[]});entry.stacks.push({...u.cargo});u.cargo=null;}
+    if(u.location==='reserve'||u.location==='work'){if(u.body!==null&&u.body!==undefined)retiredBodies.push({body:u.body,collider:u.collider});u.body=null;u.collider=null;
+     u.location='ranch';u.slot=null;if(['travel','gather','carry'].includes(u.phase))u.phase='idle';u.target=null;u.progress=0;}
+    if(u.pending&&['reserve','work'].includes(u.pending.location))u.pending={location:'ranch'};
+    delete u.retry;u.fed??=0;if(!('cell' in u))Object.assign(u,Companions.ranchState(null));}
+   meta.retiredBodies=retiredBodies;meta.retiredBaseStorage=storage.filter(s=>s.stacks.length);meta.chests??=[];meta.regrow??=[];
+  }
+  // Runs after load() installs the restored world: base storage from retireBaseWork lands in a chest at the old base.
+  restoreBaseStorage(list){for(const entry of list||[]){const owner=this.actors[entry.owner],stacks=entry.stacks.map(s=>({...s}));let placed=null;
+    if(entry.pos){const x=Math.floor(entry.pos.x),z=Math.floor(entry.pos.z),y0=Math.floor(entry.pos.y+.05);
+     for(const y of [y0,y0+1,y0+2,y0+3]){const key=blockKey(x,y,z);if(this.terrain.get(x,y,z)!==0||!this.terrain.isSolid(this.terrain.get(x,y-1,z))||this.chests[key]||this.terrain.set(x,y,z,BID.storageChest)===false)continue;this.chests[key]={slots:Array(RANCH_RULES.chestSlots).fill(null)};placed={key,x,y,z};break;}}
+    const left=[];for(const s of stacks){const rest=placed?Inventory.addTo(this.chests[placed.key].slots,s.id,s.count):s.count;if(rest)left.push({id:s.id,count:rest});}
+    for(const s of left){const rest=owner?Inventory.addTo(owner.inventory.slots,s.id,s.count):s.count;if(rest)this.spawnDrop(s.id,rest,placed?{x:placed.x+.5,y:placed.y+1,z:placed.z+.5}:owner?.pos||entry.pos||this.terrain.spawn);}
+    this.progress['baseStorage:'+entry.owner]=placed?placed.key:'inventory';}
+   this.physics.flushTerrainChanges();}
+  parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));this.migrateLegacyActors(m);this.retireCombatResources(m);this.retireEquipment(m);this.retireBaseWork(m);
   if(m.version!==SNAPSHOT_VERSION)throw Error('현재 '+SNAPSHOT_VERSION+' 저장만 지원합니다. 이전 버전은 새 월드가 필요합니다.');
-  if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');if(!Array.isArray(m.eggs)||m.eggs.length>64||m.eggs.some(e=>!e||!['x','y','z','placedTick','hatchTick'].every(k=>Number.isInteger(e[k]))||e.key!==blockKey(e.x,e.y,e.z)||!SPECIES[e.species]||typeof e.owner!=='string'))throw Error('알 상태 손상');const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
+  if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');if(!Array.isArray(m.eggs)||m.eggs.length>64||m.eggs.some(e=>!e||!['x','y','z','placedTick','hatchTick'].every(k=>Number.isInteger(e[k]))||e.key!==blockKey(e.x,e.y,e.z)||!SPECIES[e.species]||typeof e.owner!=='string'))throw Error('알 상태 손상');
+  if(!Array.isArray(m.chests)||m.chests.length>4096||m.chests.some(([key,c])=>typeof key!=='string'||!Array.isArray(c?.slots)||c.slots.length!==RANCH_RULES.chestSlots||!c.slots.every(Inventory.validateStack.bind(Inventory)))||!Array.isArray(m.regrow)||m.regrow.length>512||m.regrow.some(g=>!g||!['x','y','z','id','tick'].every(k=>Number.isInteger(g[k]))||g.key!==blockKey(g.x,g.y,g.z)||!BLOCKS[g.id]))throw Error('상자·재생 상태 손상');const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
  }
  load(bytes){const {meta:m,physics:payload}=this.parse(bytes),terrain=VoxelWorld.restore(m.seed,m.edits);
   terrain.editSerial=m.terrainState?.editSerial??m.edits.length;terrain.physicsRevisions=new Map(m.terrainState?.physicsRevisions||[]);
@@ -295,7 +349,7 @@ class Simulation {
    physics.lastPrefetchTick=toTick(physics.lastPrefetchTick);for(const entry of physics.loaded.values())entry.until=toTick(entry.until);
    physics.world.timestep=CFG.stepMs/1000;
   }
-  this.physics.free();this.terrain=terrain;this.physics=physics;this.tick=m.tick;this.epoch=m.epoch;this.sequence=m.sequence;this.actionSequence=m.actionSequence;this.actors=Object.fromEntries(m.actors.map(a=>[a.id,a]));this.drops=Object.fromEntries(m.drops.map(a=>[a.id,a]));this.projectiles=Object.fromEntries(m.projectiles.map(a=>[a.id,a]));this.furnaces=Object.fromEntries(m.furnaces);this.eggs=Object.fromEntries(m.eggs.map(e=>[e.key,e]));this.progress=m.progress;this.nextSpawn=m.nextSpawn??(this.tick+CFG.creatures.encounterCheckTicks);this.companions=new Companions(this,m.companions);for(const a of Object.values(this.actors))a.companionSlot??=-1;this.effects=[];this.revision++;
+  this.physics.free();this.terrain=terrain;this.physics=physics;this.tick=m.tick;this.epoch=m.epoch;this.sequence=m.sequence;this.actionSequence=m.actionSequence;this.actors=Object.fromEntries(m.actors.map(a=>[a.id,a]));this.drops=Object.fromEntries(m.drops.map(a=>[a.id,a]));this.projectiles=Object.fromEntries(m.projectiles.map(a=>[a.id,a]));this.furnaces=Object.fromEntries(m.furnaces);this.chests=Object.fromEntries(m.chests);this.regrow=Object.fromEntries(m.regrow.map(g=>[g.key,g]));this.eggs=Object.fromEntries(m.eggs.map(e=>[e.key,e]));this.progress=m.progress;this.nextSpawn=m.nextSpawn??(this.tick+CFG.creatures.encounterCheckTicks);this.companions=new Companions(this,m.companions);for(const a of Object.values(this.actors))a.companionSlot??=-1;this.effects=[];this.restoreBaseStorage(m.retiredBaseStorage);this.effects=[];this.revision++;
  }
  adapter(){return{save:()=>this.save(),load:b=>this.load(b),validateSnapshot:(b,c)=>{try{const m=this.parse(b).meta;return(c.tick===undefined||m.tick===c.tick)&&(!c.players||JSON.stringify(m.actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss).map(a=>a.id).sort())===JSON.stringify([...c.players].sort()));}catch{return false;}},step:c=>this.step(c),applyMembership:c=>this.applyMembership(c)};}
  free(){this.physics.free();}

@@ -1,6 +1,6 @@
 'use strict';
 /* Simulation display state → cut-out rig looks (UnitRig.draw) for every companion-species body in the world:
- * wild individuals and structure bosses (actors), owned units (companions: following, striking, thrown, working)
+ * wild individuals and structure bosses (actors), owned units (companions: on the ranch, following, striking, thrown)
  * and placed eggs. Presentation only: reads interpolated display models and never writes the simulation.
  * Signature anims carry the species' attack: 뿌리 slam, 바위 병아리 headbutt (and hide while rolled up as a thrown
  * ball or hurt and cornered), 버섯 달팽이 spore. */
@@ -31,18 +31,19 @@ class UnitPresenter{
  // A fading ghost of a fallen wild unit or boss: its hurt pose sinking out.
  ghost(g,t){this.queue('ghost/'+g.id,'ghost',{...g.pos,y:g.pos.y-.15*t},{species:g.species,anim:'hurt',progress:.35,seconds:0,grade:g.boss?4:1,stage:g.boss?'boss':'adult'},g.facing||{x:0,y:0,z:1},{phase:'late',alpha:Math.pow(1-t,1.5)});}
  prepare(view,sim,actor,dyn){const r=this.r;
-  for(const b of Object.values(sim.companions.data.bases))if(r.worldVisualReady(b.pos,.3))r.box(dyn,V.add(b.pos,{x:1,y:.02,z:0}),{x:.9,y:.45,z:.65},[.42,.53,.32]);
   // Placed eggs (D-103): the species egg part, rocking harder through the last 30% before it hatches.
   for(const e of Object.values(sim.eggs)){const pos={x:e.x+.5,y:e.y,z:e.z+.5};if(!r.worldVisualReady(pos,.3))continue;const span=Math.max(1,e.hatchTick-e.placedTick),left=e.hatchTick-sim.tick,wobble=clamp(1-left/(span*.3),0,1);
    this.queue('egg/'+e.key,'egg',pos,{species:e.species,egg:true,wobble,seconds:(r.displayTimeMs||0)/1000+(hashStr(e.key)%97)*.1},{x:0,y:0,z:1});}
   const shots=new Map(Object.values(view.projectiles).filter(p=>p.companionId).map(p=>[p.companionId,p]));
-  for(const u of Object.values(view.companions)){const a=view.actors[u.owner];if(!a||a.dead||a.suspended)continue;
+  for(const u of Object.values(view.companions)){const a=view.actors[u.owner];if(u.location!=='ranch'&&(!a||a.dead||a.suspended))continue;
    const base={species:u.kind,anim:'idle',progress:0,seconds:(r.displayTimeMs||0)/1000+(hashStr(u.id)%53)*.07,grade:u.grade||1,stage:u.stage||'adult'};
    const shadow=(p,size)=>{if(r.worldVisualReady(p,.3))r.box(dyn,{x:p.x,y:p.y+.012,z:p.z},{x:size,y:.01,z:size*.7},[.20,.30,.22]);};
    const scale=UNIT_STAGES[base.stage].scale;
-   if(u.location==='work'){const p={x:u.pos.x,y:u.pos.y-.23,z:u.pos.z};if(!r.worldVisualReady(p,.3))continue;
-    const hard=BLOCKS[u.target?.id]?.hardness||650,gather=u.phase==='gather',moving=u.phase==='travel'||u.phase==='carry',dir=gather&&u.target?V.sub({x:u.target.x+.5,y:0,z:u.target.z+.5},{x:p.x,y:0,z:p.z}):Math.hypot(u.velocity?.x||0,u.velocity?.z||0)>.1?u.velocity:a.facing;
-    this.queue(u.id,'work',p,{...base,anim:gather?'attack':moving?'walk':'idle',progress:gather?(u.progress/hard*3)%1:0},V.norm({x:dir.x,y:0,z:dir.z}));shadow(p,.36*scale);continue;}
+   // Ranch (grid walk): walking, pecking at thrown food with a happy face, or working a block (chest labor).
+   if(u.location==='ranch'){const p={x:u.pos.x,y:u.pos.y,z:u.pos.z};if(!r.worldVisualReady(p,.3))continue;
+    const hard=BLOCKS[u.target?.id]?.hardness||650,gather=u.phase==='gather',eat=u.phase==='eat',moving=Math.hypot(u.velocity?.x||0,u.velocity?.z||0)>.3;
+    const look=gather?{...base,anim:'attack',progress:(u.progress/hard*3)%1}:eat?{...base,anim:'attack',progress:(u.progress/RANCH_RULES.eatTicks*2)%1,face:'happy'}:{...base,anim:moving?'walk':'idle'};
+    this.queue(u.id,'ranch',p,look,unitFacing(u.yaw||0));shadow(p,.36*scale);continue;}
    if(u.phase==='flight'){const shot=shots.get(u.id);if(!shot)continue;const radius=SPECIES[u.kind].capabilities.attack.projectile.radius,p={x:shot.pos.x,y:shot.pos.y-radius,z:shot.pos.z};if(!r.worldVisualReady(p,.3))continue;
     // Thrown rock chick: rolled up in its shell through the flight, peeking out again while it rests on the ground.
     const hold=SPECIES[u.kind].capabilities.attack.groundHoldMs,progress=shot.throwPhase==='ground'?.5+.5*clamp((shot.groundMs||0)/hold,0,1):.5;

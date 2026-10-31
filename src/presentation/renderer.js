@@ -211,7 +211,10 @@ class Renderer {
     const bob=Math.sin(d.age*.007+(hashStr(d.id)%37)*.12)*.045;
     this.sprite(dropSprites,{x:dp.x,y:dp.y-.075+bob,z:dp.z},.72,.72,frame,[1,1,1,1]);}
 
-  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(s.companionId||!this.worldVisualReady(sp,.08))continue;this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
+  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(s.companionId||!this.worldVisualReady(sp,.08))continue;
+   // A thrown item (the merge potion) spins as its item sprite; arrows and spit stay beams.
+   if(s.item&&this.dropAtlas.frames[s.item]){this.sprite(dropSprites,{x:sp.x,y:sp.y-.2,z:sp.z},.42,.42,this.dropAtlas.frames[s.item],[1,1,1,1],false,(s.age||0)*.012);continue;}
+   this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
   const hit=sim.aim(authority);this.target=hit;
   if(hit){
    const key=blockKey(hit.x,hit.y,hit.z),mining=authority.mine.target===key&&authority.mine.elapsed>0;
@@ -248,7 +251,7 @@ class Renderer {
    fx.time+=dt;if(fx.time>=fx.duration)this.blockFx=null;
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
-  this.units.prepare(view,sim,actor,dyn);
+  this.units.prepare(view,sim,actor,dyn);this.drawFences(dyn,sim);
   this.drawColored(dyn);
   this.playerRig.draw('world');this.unitRig.draw('world');
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
@@ -256,6 +259,23 @@ class Renderer {
   const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.playerRig.draw('late');this.unitRig.draw('late');this.combatFx.ui(sim);
   if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
  }
+ // Fences and gates (mesh:false blocks, only ever placed by players) as lit wooden posts and rails, kept in an index
+ // that follows VoxelWorld.editJournal. A fence joins fences, gates and full cubes on its four sides; a gate spans the
+ // axis its neighbours join on and swings its two halves open to one side.
+ fenceIndex(terrain){const f=this.fences;if(f?.world===terrain&&f.serial===terrain.editSerial)return f.map;
+  const changes=f?.world===terrain?terrain.changesAfter(f.serial):null,fenceLike=id=>!!(BLOCKS[id]?.fence||BLOCKS[id]?.gate);let map=changes?f.map:new Map();
+  if(changes){for(const c of changes)if(fenceLike(c.id))map.set(c.key,{x:c.x,y:c.y,z:c.z,id:c.id});else map.delete(c.key);}
+  else for(const [key,id]of terrain.edits)if(fenceLike(id)){const [x,y,z]=key.split(',').map(Number);map.set(key,{x,y,z,id});}
+  this.fences={world:terrain,serial:terrain.editSerial,map};return map;}
+ drawFences(out,sim){const t=sim.terrain,wood=[.66,.47,.28],rail=[.74,.54,.33],gate=[.82,.63,.38],eye=this.eye;
+  const joins=(x,y,z)=>{const id=t.get(x,y,z),b=BLOCKS[id];return !!id&&!!b&&(b.fence||!!b.gate||t.isSolid(id)&&b.mesh!==false);};
+  for(const f of this.fenceIndex(t).values()){const c={x:f.x+.5,y:f.y,z:f.z+.5};if(Math.abs(c.x-eye.x)>44||Math.abs(c.z-eye.z)>44||!this.worldVisualReady(c,.2))continue;const b=BLOCKS[f.id];
+   if(!b.gate){this.box(out,c,{x:.25,y:1,z:.25},wood);
+    for(const [dx,dz]of RANCH_DIRS){if(!joins(f.x+dx,f.y,f.z+dz))continue;for(const y of [.36,.74])this.box(out,{x:c.x+dx*.31,y:c.y+y,z:c.z+dz*.31},dx?{x:.38,y:.12,z:.09}:{x:.09,y:.12,z:.38},rail);}continue;}
+   const alongX=joins(f.x+1,f.y,f.z)||joins(f.x-1,f.y,f.z)||!(joins(f.x,f.y,f.z+1)||joins(f.x,f.y,f.z-1)),u=alongX?{x:1,z:0}:{x:0,z:1},n=alongX?{x:0,z:1}:{x:1,z:0},S=(a,b)=>alongX?{x:a,y:.12,z:b}:{x:b,y:.12,z:a};
+   for(const s of [-1,1]){const end={x:c.x+u.x*s*.44,y:c.y+.08,z:c.z+u.z*s*.44};this.box(out,end,{x:.1,y:.92,z:.1},wood);
+    if(b.gate==='closed'){for(const y of [.3,.74])this.box(out,{x:c.x+u.x*s*.22,y:c.y+y,z:c.z+u.z*s*.22},S(.44,.08),gate);this.box(out,{x:c.x+u.x*s*.04,y:c.y+.3,z:c.z+u.z*s*.04},{x:.08,y:.56,z:.08},gate);}
+    else{for(const y of [.3,.74])this.box(out,{x:end.x+n.x*.24,y:c.y+y,z:end.z+n.z*.24},S(.08,.44),gate);this.box(out,{x:end.x+n.x*.44,y:c.y+.3,z:end.z+n.z*.44},{x:.08,y:.56,z:.08},gate);}}}}
  // Reusable per-section water meshes. World streaming controls the same 3D readyChunks
  // used by entities/HUD. A dirty section is rebuilt at most once per revision;
  // unchanged GPU buffers are drawn without any upload or terrain scan.

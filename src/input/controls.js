@@ -52,7 +52,8 @@ class Controls {
   // Renderer aim and game input share this camera vector; next tick sets facing before commands.
   const preview={...a,facing:aim},enemy=this.app.sim.physics.aimEnemy(preview,Combat.weapon(a,this.app.sim).reach),block=this.app.sim.aim(preview),item=Inventory.stats(a).item;
   if(enemy){this.pressAction('left','touch');this.releaseAction('left');return;}
-  if(block&&BLOCKS[block.id]?.station){this.app.command({op:'interact'});return;}
+  if(block&&(BLOCKS[block.id]?.station||BLOCKS[block.id]?.gate)){this.app.command({op:'interact'});return;}
+  if(item?.throwable){this.pressAction('right','touch');this.releaseAction('right');return;}
   if(item?.id==='bucket'||item?.id==='waterBucket'){this.pressAction('right','touch');this.releaseAction('right');return;}
   if(block&&item?.block){this.pressAction('right','touch');this.releaseAction('right');return;}
   this.pressAction('left','touch');this.releaseAction('left');
