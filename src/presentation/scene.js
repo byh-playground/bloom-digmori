@@ -6,7 +6,7 @@ class ScenePresentation {
    id:R.STEP,displayKind:R.STEP,'pos.x':R.POSITION_X,'pos.y':R.POSITION_Y,'pos.z':R.POSITION_Z,
    yaw:R.ANGLE,pitch:R.LINEAR,anim:R.LINEAR,'velocity.x':R.LINEAR,'velocity.y':R.LINEAR,'velocity.z':R.LINEAR,
    enemy:R.STEP,kind:R.STEP,speciesId:R.STEP,wildState:R.STATE_KEY,targetId:R.STEP,dead:R.STEP,suspended:R.STEP,boss:R.STEP,scale:R.STEP,offset:R.STEP,hp:R.STEP,maxHp:R.STEP,sprinting:R.STEP,grounded:R.STEP,knock:R.COUNTDOWN_MS,
-   'combat.displayKey':R.STATE_KEY,'combat.state':R.STEP,'combat.elapsed':R.LINEAR,'combat.charge':R.LINEAR,'combat.action':R.STEP,
+   'combat.displayKey':R.STATE_KEY,'combat.state':R.STEP,'combat.elapsed':R.LINEAR,'combat.action':R.STEP,
    'motion.distance':R.LINEAR,'motion.speed':R.LINEAR,'motion.land':R.COUNTDOWN_MS,'motion.brake':R.COUNTDOWN_MS,'motion.air':R.LINEAR,'motion.grounded':R.STEP,'motion.impact':R.LINEAR,
    'mine.target':R.STATE_KEY,'mine.elapsed':R.LINEAR,'swim.inWater':R.STEP,inventory:R.STEP,companionSlot:R.STEP
   };}

@@ -46,14 +46,15 @@ const resourceRangeText=id=>{const r=RESOURCE_BY_ID[id];return r?`${r.name} Y ${
 // 무기 종류가 기본 성능을, 재료 등급이 공격력(+5 단위)을 결정한다.
 // 채광 속도와 무게는 피해 수치와 분리한다.
 const MATERIALS={wood:{name:'나무',tier:1,damageBonus:-10,speed:2,color:'#cfa876'},stone:{name:'돌',tier:2,damageBonus:-5,speed:4,color:'#a3adae'},iron:{name:'철',tier:3,damageBonus:0,speed:6,color:'#dde6e6'},diamond:{name:'다이아몬드',tier:4,damageBonus:5,speed:8,color:'#78ded9'},gold:{name:'금',tier:1,damageBonus:-5,speed:12,color:'#eed47b'}};
+// heavy: 강한 넉백과 타격 연출을 쓰는 무기(대검). 플레이어 전투는 기본 공격 연타(combo 단계)만 사용한다.
 const WEAPONS={
- sword:{name:'검',icon:'⚔',damage:25,poise:20,reach:3.3,arc:1.65,cost:15,weight:5,wind:250,active:125,recovery:375,combo:3,charge:[550,1200],skill:'thrust',secondary:'guard',guard:.55},
- greatsword:{name:'대검',icon:'⚔',damage:40,poise:50,reach:3.7,arc:1.8,cost:25,weight:11,wind:550,active:150,recovery:600,combo:3,charge:[900,1800],skill:'slam',secondary:'guard',guard:.7},
- spear:{name:'창',icon:'↟',damage:25,poise:20,reach:4.2,arc:.3,cost:15,weight:6,wind:300,active:100,recovery:450,combo:3,charge:[650,1300],skill:'lunge',secondary:'guard',guard:.48},
- axe:{name:'도끼',icon:'🪓',damage:30,poise:30,reach:3.2,arc:1.4,cost:20,weight:8,wind:425,active:125,recovery:450,combo:3,charge:[750,1500],skill:'cleave',secondary:'spin',guard:.25},
- dagger:{name:'단검',icon:'†',damage:15,poise:10,reach:3.0,arc:1.25,cost:10,weight:2,wind:125,active:75,recovery:250,combo:3,charge:[400,800],skill:'double',secondary:'guard',guard:.3},
- bow:{name:'활',icon:'🏹',damage:25,poise:10,reach:35,arc:0,cost:15,weight:3,wind:175,active:50,recovery:675,combo:2,charge:[700,1400],skill:'quickshot',secondary:'precision',guard:0},
- shield:{name:'방패',icon:'⛨',damage:15,poise:30,reach:3.0,arc:1.2,cost:15,weight:8,wind:250,active:100,recovery:450,combo:2,charge:[550,1100],skill:'bash',secondary:'guard',guard:.92}
+ sword:{name:'검',icon:'⚔',damage:25,reach:3.3,arc:1.65,weight:5,wind:250,active:125,recovery:375,combo:3},
+ greatsword:{name:'대검',icon:'⚔',damage:40,heavy:true,reach:3.7,arc:1.8,weight:11,wind:550,active:150,recovery:600,combo:3},
+ spear:{name:'창',icon:'↟',damage:25,reach:4.2,arc:.3,weight:6,wind:300,active:100,recovery:450,combo:3},
+ axe:{name:'도끼',icon:'🪓',damage:30,reach:3.2,arc:1.4,weight:8,wind:425,active:125,recovery:450,combo:3},
+ dagger:{name:'단검',icon:'†',damage:15,reach:3.0,arc:1.25,weight:2,wind:125,active:75,recovery:250,combo:3},
+ bow:{name:'활',icon:'🏹',damage:25,reach:35,arc:0,weight:3,wind:175,active:50,recovery:675,combo:2},
+ shield:{name:'방패',icon:'⛨',damage:15,reach:3.0,arc:1.2,weight:8,wind:250,active:100,recovery:450,combo:2}
 };
 const ITEMS={};
 function defineItem(id,name,icon,opts={}){ITEMS[id]={id,name,icon,stack:64,...opts};}
@@ -67,10 +68,10 @@ for(const [mat,m]of Object.entries(MATERIALS)){
  }
 }
 // 부위별 값은 정수 단위: 부위 가중치는 투구 1 / 흉갑 2 / 각반 1 / 신발 1.
-// 같은 세트의 방어력·강인도 총합을 바로 계산할 수 있다.
-for(const [mat,name,defense,weight,poise]of [['leather','가죽',5,2,5],['iron','철',10,5,10],['gold','금',5,4,5],['diamond','다이아몬드',15,4,15]])
+// 같은 세트의 방어력 총합을 바로 계산할 수 있다.
+for(const [mat,name,defense,weight]of [['leather','가죽',5,2],['iron','철',10,5],['gold','금',5,4],['diamond','다이아몬드',15,4]])
  for(const [part,pn,k]of [['helmet','투구',1],['chest','흉갑',2],['legs','각반',1],['boots','장화',1]])
-  defineItem(mat+'_'+part,name+' '+pn,'♜',{stack:1,armor:part,defense:defense*k,weight:weight*k,poise:poise*k,material:mat});
+  defineItem(mat+'_'+part,name+' '+pn,'♜',{stack:1,armor:part,defense:defense*k,weight:weight*k,material:mat});
 const RECIPES=[];
 function recipe(id,out,count,pattern,keys,station=2,unlock=null){RECIPES.push({id,out,count,pattern,keys,station,unlock});}
 recipe('planks','planks',4,['L'],{L:'log'});recipe('sticks','stick',4,['P','P'],{P:'planks'});recipe('workbench','workbench',1,['PP','PP'],{P:'planks'});
@@ -96,7 +97,7 @@ recipe('sigil','sigil',1,['SIS','IDI','SIS'],{S:'seed',I:'iron',D:'diamond'},3);
 recipe('trophy','trophy',1,[' D ','IHI','PPP'],{D:'diamond',I:'iron',H:'heart',P:'planks'},3,'boss');
 const FUELS={coal:48000,charcoal:48000,log:9000,planks:9000,stick:3000};
 const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:'charcoal',ms:6000},cobble:{out:'stone',ms:6000}};
-const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'}),endurance:Object.freeze({name:'지구력',description:'최대 기력 +10'})});
+const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'})});
 const QUESTS=Object.freeze([
  Object.freeze({id:'log',title:'첫 원목',hint:'나무 줄기를 채집해 시작하세요.'}),
  Object.freeze({id:'stone_pick',title:'석기 도구',hint:'돌 곡괭이를 제작하세요.'}),

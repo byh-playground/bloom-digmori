@@ -1,7 +1,7 @@
 'use strict';
 /* A single simulation clock selects poses. Animation never creates hits or moves a body. */
 const ANIMATION=Object.freeze({cell:{width:64,height:64},stride:2.1,runStride:2.8,land:175,brake:150,
- clips:{idle:4,walk:8,run:8,swim:8,brake:3,charge:4,light:8,lightReverse:8,heavy:8,heavyReverse:8,overhead:8,thrust:8,thrustReverse:8,guard:4,hurt:4,hurtHeavy:4,stun:4,rise:2,fall:2,land:4,dead:5,gather:4,bow:8,bash:8},rollFrames:12,
+ clips:{idle:4,walk:8,run:8,swim:8,brake:3,light:8,lightReverse:8,heavy:8,heavyReverse:8,overhead:8,thrust:8,thrustReverse:8,hurt:4,hurtHeavy:4,rise:2,fall:2,land:4,dead:5,gather:4,bow:8,bash:8},rollFrames:12,
  slash:{frames:6,tail:135,windup:70,debugGround:false}});
 const easeMotion=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
 function actionTiming(action,elapsed){if(!action)return{stage:'idle',phase:0,frame:0,active:false};
@@ -10,11 +10,11 @@ function actionTiming(action,elapsed){if(!action)return{stage:'idle',phase:0,fra
  const phase=clamp((elapsed-action.wind-action.active)/Math.max(1,action.recovery),0,1);return{stage:'recover',phase,frame:6+Math.min(1,Math.floor(phase*2)),active:false};
 }
 function attackClip(action){
- if(['companionBall','arrow','spit','precision','quickshot'].includes(action.kind))return 'bow';
+ if(['companionBall','arrow','spit'].includes(action.kind))return 'bow';
  const motion=attackMotion(action);if(motion==='overhead')return 'overhead';
- if(action.weapon==='shield'||action.kind==='bash')return 'bash';
+ if(action.weapon==='shield')return 'bash';
  if(motion==='thrust'||motion==='thrustReverse'||action.weapon==='fist')return motion==='thrustReverse'?'thrustReverse':'thrust';
- const heavy=action.tier>0||action.weapon==='greatsword'||['cleave','burst'].includes(action.kind);
+ const heavy=action.weapon==='greatsword'||action.kind==='burst';
  return (heavy?'heavy':'light')+(motion==='reverse'?'Reverse':'');
 }
 function weaponVisualPose(a,act,elapsed){const t=actionTiming(act,elapsed);if(t.stage==='active')return attackPose(a,act,t.phase);
@@ -33,11 +33,8 @@ function actorSpritePose(a,cameraYaw,reaction=null){const c=a.combat,act=c.actio
  const view=(Math.round(Math.atan2(f.x*cosQ(cameraYaw)-f.z*sinQ(cameraYaw),f.x*sinQ(cameraYaw)+f.z*cosQ(cameraYaw))/(Math.PI/4))+8)%8;
  if(c.state==='roll'&&act)return{clip:'roll'+(view>=5?(8-(act.directionIndex||0))%8:(act.directionIndex||0)),frame:Math.min(ANIMATION.rollFrames-1,Math.floor(clamp(c.elapsed/act.duration,0,1)*ANIMATION.rollFrames)),view,dir:view>=5?8-view:view,flip:view>=5,kind:'sprout'};
  if(a.dead||c.state==='dead'){clip='dead';frame=4;}
- else if(c.state==='stagger'){clip='stun';frame=Math.min(3,Math.floor(c.elapsed/CFG.poise.stagger*4));}
- else if(reaction&&reaction.age<230){clip=reaction.guard?'guard':reaction.heavy?'hurtHeavy':'hurt';frame=Math.min(3,Math.floor(reaction.age/230*4));}
+ else if(reaction&&reaction.age<230){clip=reaction.heavy?'hurtHeavy':'hurt';frame=Math.min(3,Math.floor(reaction.age/230*4));}
  else if(c.state==='attack'&&act){clip=attackClip(act);frame=actionTiming(act,c.elapsed).frame;}
- else if(c.state==='guard'){clip='guard';frame=Math.floor(a.anim/160)%4;}
- else if(c.state==='charge'||c.state==='secondary'){clip='charge';frame=Math.min(3,Math.floor(c.charge/260));}
  else if(a.swim?.inWater){clip='swim';frame=Math.floor(a.anim/120)%8;}
  else if(!a.grounded){clip=a.velocity.y>.15?'rise':'fall';frame=Math.abs(a.velocity.y)>3?1:0;}
  else if(m.land>0){clip='land';frame=Math.min(3,Math.floor((1-m.land/ANIMATION.land)*4));}
@@ -52,7 +49,6 @@ function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(rever
  if(clip==='idle')bob=Math.sin(cycle)*.35;
  if(clip==='walk'||clip==='run'){const run=clip==='run';stride=Math.sin(cycle)*(run?5.4:3.5);bob=Math.abs(Math.sin(cycle))*(run?1.8:.8);lean=run?.11:.025;armL=[13-stride*.7,39+stride*.5];armR=[34+stride*.75,39-stride*.5];knee=run?2.2:.7;}
  if(clip==='brake'){lean=-.15*(1-p);squash=1-.12*(1-p);stride=2*(1-p);armL=[10,38];armR=[36,36];}
- if(clip==='charge'){lean=-.08-p*.06;squash=.97-p*.04;armL=[24,29-p*7];armR=[29,26-p*10];}
  if(['light','heavy','overhead','thrust','bow','bash'].includes(clip)){
   const wind=frame<3,hit=frame>=3&&frame<6,t=wind?frame/2:hit?(frame-3)/2:frame-6,heavy=clip==='heavy',overhead=clip==='overhead';
   if(overhead){
@@ -74,8 +70,7 @@ function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(rever
  }
 
  if(clip==='swim'){const wave=Math.sin(cycle);lean=.22;squash=.93;bob=wave*.6;armL=[13+wave*5,21+wave*7];armR=[36-wave*5,23-wave*7];stride=wave*3.2;knee=3.5;}
- if(clip==='guard'){lean=-.08;squash=.95;armL=[24,28];armR=[30,23];stride=2;bob=frame%2*.3;}
- if(clip==='hurt'||clip==='hurtHeavy'||clip==='stun'){const heavy=clip!=='hurt',k=1-p;lean=-(heavy?.29:.17)*k;squash=1-(heavy?.18:.09)*Math.sin((p+.2)*Math.PI);armL=[9,31];armR=[39,31];stride=2*k;head=1;}
+ if(clip==='hurt'||clip==='hurtHeavy'){const heavy=clip!=='hurt',k=1-p;lean=-(heavy?.29:.17)*k;squash=1-(heavy?.18:.09)*Math.sin((p+.2)*Math.PI);armL=[9,31];armR=[39,31];stride=2*k;head=1;}
  if(clip==='rise'){squash=1.02;lean=.09;armL=[11,27];armR=[36,26];stride=2;knee=5;}
  if(clip==='fall'){lean=-.03;armL=[9,29];armR=[39,29];stride=2;knee=2;}
  if(clip==='land'){const k=1-p;squash=1-.28*k;lean=.10*k;armL=[11,38];armR=[37,38];stride=3*k;knee=3*k;}

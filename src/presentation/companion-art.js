@@ -143,7 +143,7 @@ class CompanionRenderer {
    const visual=r.combatFx.pose(candidate),reaction=r.combatFx.reactions.get(candidate.id),sample=actorSpritePose(visual,r.camera.yaw,reaction);
    let clip='idle',frame=sample.frame%4;
    if(sample.clip==='walk'||sample.clip==='run'||sample.clip==='swim'||sample.clip==='brake'){clip='walk';frame=Math.floor(sample.frame/2)%4;}
-   else if(['hurt','hurtHeavy','stun','rise','fall','land'].includes(sample.clip)){clip='ground';frame=sample.frame%3;}
+   else if(['hurt','hurtHeavy','rise','fall','land'].includes(sample.clip)){clip='ground';frame=sample.frame%3;}
    else if(visual.combat.state==='attack'){clip='work';frame=sample.frame%4;}
    this.world(this.behind,V.add(candidate.pos,{x:0,y:1,z:0}),'ball',clip,frame,candidate.facing,.55,candidate.id,false,candidate.anim);
   }

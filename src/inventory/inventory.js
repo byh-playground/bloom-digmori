@@ -113,9 +113,9 @@ class Inventory {
  }return made>0;}
  static close(actor,sim){const i=actor.inventory;for(let k=0;k<9;k++){const s=i.grid[k];if(s){const left=this.addTo(i.slots,s.id,s.count);if(left)sim.spawnDrop(s.id,left,actor.pos);i.grid[k]=null;}}
   if(i.cursor){const left=this.addTo(i.slots,i.cursor.id,i.cursor.count);if(left)sim.spawnDrop(i.cursor.id,left,actor.pos);i.cursor=null;}i.station=null;}
- static stats(actor){const i=actor.inventory,held=this.selected(i),item=held?ITEMS[held.id]:null;let load=item?.weight||0,defense=0,poise=CFG.player.poise;
-  for(const s of Object.values(i.armor)){if(!s)continue;const a=ITEMS[s.id];load+=a.weight;defense+=a.defense;poise+=a.poise;}
-  return{item,weapon:item?.weapon?WEAPONS[item.weapon]:null,material:item?.material?MATERIALS[item.material]:null,load,loadRatio:load/CFG.player.load,weightClass:load/CFG.player.load<.3?0:load/CFG.player.load<.7?1:2,defense,poise};}
+ static stats(actor){const i=actor.inventory,held=this.selected(i),item=held?ITEMS[held.id]:null;let load=item?.weight||0,defense=0;
+  for(const s of Object.values(i.armor)){if(!s)continue;const a=ITEMS[s.id];load+=a.weight;defense+=a.defense;}
+  return{item,weapon:item?.weapon?WEAPONS[item.weapon]:null,material:item?.material?MATERIALS[item.material]:null,load,loadRatio:load/CFG.player.load,weightClass:load/CFG.player.load<.3?0:load/CFG.player.load<.7?1:2,defense};}
 }
 
 
