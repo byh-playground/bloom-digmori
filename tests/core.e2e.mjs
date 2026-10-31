@@ -4,6 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {CURSOR_HELPERS} from './cursor-helpers.mjs';
 const started=Date.now(),errors=[],responses=[],pending=[],report={};
 const timeout=setTimeout(()=>{console.error('E2E exceeded 180 seconds');process.exit(1);},180000);
 let browser,server,page;
@@ -15,7 +16,7 @@ try {
  browser=await chromium.launch({...(process.env.BROWSER_CHANNEL||process.platform==='win32'?{channel:process.env.BROWSER_CHANNEL||'msedge'}:{}),headless:true});
  report.browser=browser.version();report.url=url;report.browserChannel=process.env.BROWSER_CHANNEL||(process.platform==='win32'?'msedge':'playwright-headless-shell');
  page=await browser.newPage({viewport:{width:1366,height:768},hasTouch:true});
- page.on('pageerror',error=>errors.push(error.message));
+ page.on('pageerror',error=>errors.push(error.message));await page.addInitScript(CURSOR_HELPERS);
  page.on('requestfailed',request=>errors.push(request.url()+': '+request.failure()?.errorText+' at '+(Date.now()-started)+'ms'));
  const config=fs.readFileSync(new URL('../src/core/config.js',import.meta.url),'utf8');
  const expectedVersion=config.match(/const VERSION='([^']+)'/)[1];
@@ -42,32 +43,30 @@ try {
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z<z-1,initial.pos.z,{timeout:5000});await page.keyboard.up('KeyW');
  const moved=await state();assert(moved.pos.z<initial.pos.z-1);
- await page.keyboard.press('KeyV');await page.mouse.move(683,384);
- // Exercise the supported touch-drag camera input without pointer-lock cursor warps.
- // CDP delivers browser touch events; no camera or game state is assigned.
+ // 0.35.2 cursor model (D-114/D-115): no pointer lock and no mouse look. A browser touch tap on a block is a left click at
+ // that point: the simulation walks the player there and mines it (CDP touch events; no camera or game state assigned).
  const touch=await page.context().newCDPSession(page);
- const beforeLook=await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}));
- await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:683,y:384,id:1}]});
- await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:683+beforeLook.yaw/.005,y:384+(.86-beforeLook.pitch)/.005,id:1}]});
- await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
- await page.waitForFunction(()=>Math.abs(window.Bloom.app.actor().pitch-.86)<.02,null,{timeout:5000});
- report.cameraInput={method:'browser touch drag',before:beforeLook,after:await page.evaluate(()=>({yaw:window.Bloom.app.renderer.camera.yaw,pitch:window.Bloom.app.renderer.camera.pitch}))};
- const target=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(target);report.beforeMining={initial,moved,target};
- await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:683,y:384,id:1}]});
- await page.waitForFunction(()=>window.Bloom.app.sim.terrain.edits.size>0,null,{timeout:10000});
- await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(400);
+ const groundFace=(near,far)=>page.evaluate(({near,far})=>{const app=window.Bloom.app,a=app.actor(),t=app.sim.terrain,eye={x:a.pos.x,y:a.pos.y+window.Bloom.CFG.player.eyeHeight,z:a.pos.z};
+  for(let r=near;r<=far;r++)for(const [dx,dz]of [[0,-1],[1,-1],[-1,-1],[0,1],[1,0],[-1,0]]){const x=Math.floor(a.pos.x)+dx*r,z=Math.floor(a.pos.z)+dz*r,y=t.height(x,z);
+   if(!t.get(x,y,z)||t.get(x,y+1,z)||t.get(x,y+2,z)||Math.abs(y+1-a.pos.y)>.6)continue;const s=window.__faceScreen({x,y,z},{x:0,y:1,z:0});if(s)return{target:{x,y,z,id:t.get(x,y,z)},screen:s,distance:Math.hypot(x+.5-eye.x,y+1-eye.y,z+.5-eye.z)};}return null;},{near,far});
+ const tapped=await groundFace(3,5);assert(tapped,'no visible ground face 3-5 m away');const target=tapped.target;report.cameraInput={method:'browser touch tap (left click) at a block face',tapped};
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:tapped.screen.x,y:tapped.screen.y,id:1}]});await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await page.waitForFunction(t=>window.Bloom.app.actor().task?.x===t.x||window.Bloom.app.sim.terrain.get(t.x,t.y,t.z)===0,target,{timeout:3000});
+ await page.waitForFunction(t=>window.Bloom.app.sim.terrain.get(t.x,t.y,t.z)===0,target,{timeout:10000});report.beforeMining={initial,moved,target};
+ await page.waitForTimeout(400);
  const mined=await state();assert(mined.edits.some(([key,value])=>key===target.x+','+target.y+','+target.z&&value===0));
  await page.locator('#world').focus();await page.keyboard.down('KeyW');
  await page.waitForFunction(()=>window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:10000});await page.keyboard.up('KeyW');
  const collected=await state();
  await page.keyboard.down('KeyS');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z>z+.5,collected.pos.z,{timeout:10000});await page.keyboard.up('KeyS');await page.waitForTimeout(300);
- const placeAim=await page.evaluate(()=>window.Bloom.app.sim.aim(window.Bloom.app.actor()));assert(placeAim);
- const placedKey=[placeAim.x+placeAim.normal.x,placeAim.y+placeAim.normal.y,placeAim.z+placeAim.normal.z].join(',');
- await page.touchscreen.tap(683,384);
+ // A long press is the right click: it places the held dirt on the pressed face.
+ const placeAim=await groundFace(2,3);assert(placeAim,'no ground face to place on');
+ const placedKey=[placeAim.target.x,placeAim.target.y+1,placeAim.target.z].join(',');
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:placeAim.screen.x,y:placeAim.screen.y,id:1}]});await page.waitForTimeout(600);await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  await page.waitForFunction(()=>!window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
  const placed=await state();report.placement={aim:placeAim,expected:placedKey,edits:placed.edits};assert(placed.edits.some(([key,value])=>key===placedKey&&value!==0));
- // E opens the actual inventory and exits pointer lock; synthetic Escape is browser-reserved.
- await page.keyboard.press('KeyE');await page.click('#inventory-close');await page.click('#menu-btn');
+ // Tab opens the actual inventory (E turns the camera since 0.35.2); synthetic Escape is browser-reserved.
+ await page.locator('#world').focus();await page.keyboard.press('Tab');await page.waitForFunction(()=>!document.querySelector('#inventory').hidden);await page.click('#inventory-close');await page.click('#menu-btn');
  await page.click('#save-world');await page.waitForFunction(()=>document.querySelector('#save-status').textContent.includes('저장됨'));
  const saved=await state();report.flow={initial,moved,target,mined,collected,placed,saved};report.presentation=await page.evaluate(()=>window.sceneCheck);if(!deploymentScope)assert(report.presentation.detached&&report.presentation.interpolated&&report.presentation.frames>0);else report.presentationObservation={...report.presentation,status:report.presentation.interpolated?'observed':'intermediate frame not observed; strict interpolation check not included in deployment scope'};await page.waitForLoadState('networkidle');await page.reload();await boot();
  assert.equal((await state()).edits.length,0);
@@ -85,7 +84,7 @@ try {
  await page.click('#menu-btn');await page.fill('#seed-input','190725');await page.click('#new-world');
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-14,null,{timeout:12000});await page.keyboard.up('KeyW');await page.waitForTimeout(300);
  const entrance=await state();if(process.env.CAVE_SCREENSHOT)await page.screenshot({path:process.env.CAVE_SCREENSHOT});
- await page.keyboard.press('KeyV');await page.keyboard.down('KeyW');
+ await page.keyboard.down('KeyW');
  await page.waitForFunction(()=>window.Bloom.app.actor().pos.z<-52,null,{timeout:20000});await page.keyboard.up('KeyW');await page.waitForTimeout(500);
  const cave=await page.evaluate(()=>{const b=window.Bloom,a=b.app.actor(),w=b.app.sim.terrain;let ores=new Set();for(let z=-60;z<=-27;z++)for(let x=-5;x<=5;x++)for(let y=-9;y<=3;y++){const id=w.get(x,y,z);if(b.BLOCKS[id]?.id?.endsWith('Ore'))ores.add(b.BLOCKS[id].id);}return{pos:{...a.pos},hp:a.hp,water:a.swim.inWater,ores:[...ores],workerFailures:b.app.renderer.meshBuilder.stats.failed};});
  assert(cave.pos.y<0&&cave.hp>0&&!cave.water);assert(cave.ores.includes('coalOre')&&cave.ores.includes('ironOre'));assert.equal(cave.workerFailures,0);
@@ -102,9 +101,9 @@ try {
  await mobile.waitForLoadState('networkidle');await mobile.close();
  // 0.33.0 removed the companion-combat design preview (it only compared the retired pebble-mole SVG); the unit-rig preview has its own test.
  await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,6);assert.deepEqual(errors,[]);
- Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:[...(deploymentScope?['Strict intermediate interpolation observation and cave traversal excluded from deployment scope; full-core checks retained']:[]),'No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/buttons and browser touch-drag, long-press mining, tap placement; read-only state observations; no mocked SDK or game-state fixture'});
+ Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:[...(deploymentScope?['Strict intermediate interpolation observation and cave traversal excluded from deployment scope; full-core checks retained']:[]),'No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/buttons and browser touch: tap a block (walk there and mine), long-press placement; read-only state observations; no mocked SDK or game-state fixture'});
  console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:6,errors:0}));
-} catch(error){if(page&&process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT.replace(/\.png$/,'.failure.png')}).catch(()=>{});if(page)report.failureState=await page.evaluate(()=>{const b=window.Bloom,a=b?.app;return{diagnostics:window.BloomDiagnostics?.format(),pos:a?.actor()?.pos,aim:a?.sim.aim(a.actor()),buttons:a?.controls.buttons,tick:a?.sim.tick,inputPrevious:a?.actor()?.inputPrevious,combat:a?.actor()?.combat,mine:a?.actor()?.mine,enemy:a?.sim.physics.aimEnemy(a.actor(),b.Combat.weapon(a.actor(),a.sim).reach),camera:a?.renderer.camera,pointerLock:document.pointerLockElement?.id,active:document.activeElement?.id,modal:a?.modal()};}).catch(()=>null);console.error(JSON.stringify(report.failureState));Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
+} catch(error){if(page&&process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT.replace(/\.png$/,'.failure.png')}).catch(()=>{});if(page)report.failureState=await page.evaluate(()=>{const b=window.Bloom,a=b?.app;return{diagnostics:window.BloomDiagnostics?.format(),pos:a?.actor()?.pos,aim:a?.sim.aim(a.actor()),buttons:a?.controls.buttons,tick:a?.sim.tick,inputPrevious:a?.actor()?.inputPrevious,combat:a?.actor()?.combat,mine:a?.actor()?.mine,task:a?.actor()?.task,cursor:a?.renderer.cursor,camera:a?.renderer.camera,active:document.activeElement?.id,modal:a?.modal()};}).catch(()=>null);console.error(JSON.stringify(report.failureState));Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
 
 

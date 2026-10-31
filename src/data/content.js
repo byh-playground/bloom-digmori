@@ -168,7 +168,7 @@ const QUESTS=Object.freeze([
  Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 적대 생물을 모두 쓰러뜨리세요.'}),
  Object.freeze({id:'boss',title:'보스 구조물',hint:'초원의 꽃 고리, 균류 숲의 버섯 고리, 동굴 유적 최심부에서 보스를 쓰러뜨리세요.'}),
  Object.freeze({id:'hatched',title:'첫 부화',hint:'보스가 남긴 알을 땅에 놓고 부화를 기다리세요.'}),
- Object.freeze({id:'grown',title:'목장의 성체',hint:'울타리 안에 먹이를 던져(Q) 아기에게 세 번 먹이세요.'}),
+ Object.freeze({id:'grown',title:'목장의 성체',hint:'울타리 안에 먹이를 던져(G) 아기에게 세 번 먹이세요.'}),
  Object.freeze({id:'merged',title:'첫 합성',hint:'같은 종·같은 등급 성체 둘에게 합성 물약을 던지세요.'}),
  Object.freeze({id:'labor',title:'상자 노동',hint:'울타리 안에 보관 상자와 적성 블록을 두면 성체가 캐서 상자에 넣습니다.'})
 ]);

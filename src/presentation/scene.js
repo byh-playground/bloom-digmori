@@ -22,7 +22,8 @@ class ScenePresentation {
    // Simulation previous is reset on teleport. A break from the last completed pose is an explicit discontinuity.
    const teleport=!!(old&&a.previous&&V.len(V.sub(a.previous,old.pos))>.001);
    let source={...a,displayKind:kind};
-   if(kind==='actor')source={...source,yaw:Math.atan2(-a.facing.x,-a.facing.z),pitch:Math.asin(clamp(-a.facing.y,-1,1)),combat:{...a.combat,displayKey:a.combat.state+':'+(a.combat.action?.sequence??'')},inventory:{slots:[Inventory.selected(a.inventory)],selected:0,armor:a.inventory.armor}};
+   // A player is drawn facing its body heading (movement or strike), not the cursor aim; creatures face their facing.
+   if(kind==='actor')source={...source,yaw:a.heading?Math.atan2(-a.heading.x,-a.heading.z):Math.atan2(-a.facing.x,-a.facing.z),pitch:a.heading?0:Math.asin(clamp(-a.facing.y,-1,1)),combat:{...a.combat,displayKey:a.combat.state+':'+(a.combat.action?.sequence??'')},inventory:{slots:[Inventory.selected(a.inventory)],selected:0,armor:a.inventory.armor}};
    const entity={id,generation,type:this.types[kind],source,teleport};
    if(!old&&!this.mode&&a.previous){entity.initialSource={...source,pos:{...a.previous}};entity.initialTimeMs=(sim.tick-1)*CFG.stepMs;}
    entities.push(entity);next.set(id,{source:a,generation,pos:{...a.pos}});

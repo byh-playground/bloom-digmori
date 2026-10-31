@@ -51,6 +51,10 @@ function knockbackResponse(target,power,heavy=false){
  return {horizontal,lift,duration};
 }
 
+// D-114: a player's body faces where it moves or strikes (heading); its aim (facing) follows the cursor. A melee strike
+// goes toward the cursor but keeps within about 27 degrees of level, so clicking the ground near a target still swings at it.
+function bodyHeading(a){const h=a.heading;return h?{x:h.x,y:0,z:h.z}:V.norm({x:a.facing.x,y:0,z:a.facing.z});}
+function aimDirection(a){const f=a.facing,h=Math.hypot(f.x,f.z);if(h<.2)return bodyHeading(a);return V.norm({x:f.x/h,y:clamp(f.y/h,-.5,.5),z:f.z/h});}
 /* One action executor and one hit resolver for players, retaliating wildlife, hostile mobs, and bosses. */
 class Combat {
  static state(){return {state:'idle',elapsed:0,action:null,left:false,combo:0,comboUntil:0,comboWeapon:null,queued:false,airRollUsed:false,invul:0};}
@@ -70,7 +74,7 @@ class Combat {
   return {name:'light',weapon,weaponKey,kind:actionKind,motion,comboLabel:label,comboCount:count,combo,
    wind:Math.round(w.wind*stage.wind),active:Math.round(w.active*stage.active),recovery:Math.round(w.recovery*stage.recovery),reach:w.reach,
    arc:w.arc,damage:statStep(Math.max(STAT_SCALE.damage,w.damage+damageBonus+(a.rpg?.skills.might||0)*5)*(1+combo*.1),STAT_SCALE.damage),heavy:false,
-   impulse:(CFG.combat.knockback.weapons[weapon]||5)*(1+combo*.08),enemy:a.enemy,dir:{...a.facing},hits:[],touched:[],fired:false,sequence:0};
+   impulse:(CFG.combat.knockback.weapons[weapon]||5)*(1+combo*.08),enemy:a.enemy,dir:aimDirection(a),hits:[],touched:[],fired:false,sequence:0};
  }
  static start(a,action,sim){const c=a.combat;if(!action||!this.canAct(c)||action.companionId&&sim.companions.ready(a)?.id!==action.companionId)return false;if(action.companionId&&!sim.companions.start(a,action))return false;
   action.sequence=++sim.actionSequence;action.enemy=a.enemy;c.state='attack';c.elapsed=0;c.action=action;c.queued=false;
@@ -123,6 +127,7 @@ class Combat {
   if(c.state==='dead'){speed=0;move={x:0,y:0,z:0};}
   const sprinting=input.sprint&&c.state==='idle'&&a.knock<=0&&Math.hypot(move.x,move.z)>.05;
   if(sprinting){speed=CFG.player.run;a.sprinting=true;}
+  const turn=c.state==='attack'&&c.action&&!c.action.companionId?c.action.dir:Math.hypot(move.x,move.z)>.1?move:null,th=turn?Math.hypot(turn.x,turn.z):0;if(th>.05)a.heading={x:turn.x/th,z:turn.z/th};
   return{move,speed,jump:input.jump&&c.state==='idle',autoJump:c.state==='idle',swimRise:input.swimRise,swimDive:input.swimDive&&submerged};
  }
  static tick(a,sim){const c=a.combat,dt=CFG.stepMs;if(a.dead)return;c.elapsed+=dt;if(c.state!=='attack'){c.comboUntil=Math.max(0,c.comboUntil-dt);if(c.comboUntil===0&&c.combo>0)this.resetCombo(c);}c.invul=Math.max(0,c.invul-dt);a.knock=Math.max(0,(a.knock||0)-dt);

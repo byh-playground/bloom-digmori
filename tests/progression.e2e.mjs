@@ -3,6 +3,7 @@ import {chromium} from 'playwright';
 import fs from 'node:fs';
 import http from 'node:http';
 import assert from 'node:assert/strict';
+import {CURSOR_HELPERS} from './cursor-helpers.mjs';
 
 // G2 step 4b (0.35.1): equipment progression and ranch follow-ups.
 //  1. Deterministic checks in a separate Simulation of seed 190725: the labor regrowth table, the grade multiplier (actual
@@ -22,24 +23,23 @@ const pass=(name,evidence)=>{const s=Math.round((Date.now()-began)/1000);report.
 const boot=p=>p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});
 const pause=(p,ms)=>p.waitForTimeout(ms);
 const shot=async(p,name)=>{if(SHOTS){fs.mkdirSync(SHOTS,{recursive:true});await p.screenshot({path:SHOTS+'/'+name+'.png'});}};
-// Turn the camera so the eye ray (with the simulation's input quantization) hits face n of block b.
-const aimAt=(p,b,n)=>p.evaluate(({b,n})=>{const app=Bloom.app,a=app.actor(),eye={x:a.pos.x,y:a.pos.y+Bloom.CFG.player.eyeHeight,z:a.pos.z};
- for(const [u,v]of [[0,0],[.3,0],[-.3,0],[0,.3],[0,-.3],[.3,.3],[-.3,-.3],[.3,-.3],[-.3,.3],[.42,0],[-.42,0],[0,.42],[0,-.42]]){
-  const pt={x:b.x+.5+n.x*.5+(n.x?0:u),y:b.y+.5+n.y*.5+(n.y?0:v),z:b.z+.5+n.z*.5+(n.z?0:n.x?u:v)},d={x:pt.x-eye.x,y:pt.y-eye.y,z:pt.z-eye.z},len=Math.hypot(d.x,d.y,d.z);if(len>Bloom.CFG.reach-.05)continue;
-  const yaw=Math.atan2(-d.x,-d.z),pitch=Math.asin(-d.y/len),q=Bloom.decodeInput(Bloom.encodeInputObject({...Bloom.neutralInput(),yaw,pitch})),hit=app.sim.aim({...a,facing:direction(q.yaw,q.pitch)});
-  if(hit&&hit.x===b.x&&hit.y===b.y&&hit.z===b.z&&hit.normal.x===n.x&&hit.normal.y===n.y&&hit.normal.z===n.z){app.renderer.camera.yaw=yaw;app.renderer.camera.pitch=pitch;return true;}}
- return false;},{b,n});
+// Move the mouse onto face n of block b (0.35.2 cursor model; the game's own pick confirms it) and wait until the
+// simulation holds that target within reach. Returns the screen point, or null.
+async function aimAt(p,b,n){for(let i=0;i<15;i++){const at=await p.evaluate(({b,n})=>window.__faceScreen(b,n),{b,n});if(at){await p.mouse.move(at.x,at.y);
+  const ok=await p.waitForFunction(({b,n})=>{const t=Bloom.app.sim.aim(Bloom.app.actor());return t&&t.x===b.x&&t.y===b.y&&t.z===b.z&&t.normal.x===n.x&&t.normal.y===n.y&&t.normal.z===n.z;},{b,n},{timeout:1500}).then(()=>true,()=>false);if(ok)return at;}await pause(p,80);}
+ return null;}
 async function hold(p,item){const ok=await p.evaluate(item=>{const s=Bloom.app.actor().inventory.slots,i=s.findIndex(s=>s?.id===item);if(i<0)return false;if(i!==8)[s[8],s[i]]=[s[i],s[8]];return true;},item);assert(ok,'no '+item+' in the bag');await p.locator('#world').focus();await p.keyboard.press('Digit9');await p.waitForFunction(item=>Bloom.app.actor().inventory.selected===8&&Bloom.app.actor().inventory.slots[8]?.id===item,item,{timeout:3000});}
-async function rightClick(p,b,n,expect,arg){assert(await aimAt(p,b,n),'cannot aim at '+JSON.stringify({b,n}));await pause(p,70);await p.locator('#world').focus();await p.mouse.click(683,384,{button:'right'});await p.waitForFunction(expect,arg,{timeout:3000});}
+async function rightClick(p,b,n,expect,arg){const at=await aimAt(p,b,n);assert(at,'cannot aim at '+JSON.stringify({b,n}));await p.mouse.click(at.x,at.y,{button:'right'});await p.waitForFunction(expect,arg,{timeout:3000});}
 const placeOn=(p,x,y,z,id)=>rightClick(p,{x,y:y-1,z},{x:0,y:1,z:0},({x,y,z,id})=>Bloom.BLOCKS[Bloom.app.sim.terrain.get(x,y,z)].id===id,{x,y,z,id});
 const give=(p,items)=>p.evaluate(items=>{const i=Bloom.app.actor().inventory;for(const [id,n]of items)Bloom.Inventory.addTo(i.slots,id,n);Bloom.app.refreshUI(true);},items);
-const teleport=(p,pos,yaw=0,pitch=.35)=>p.evaluate(({pos,yaw,pitch})=>{const app=Bloom.app;app.sim.physics.teleport(app.actor(),pos);app.renderer.camera.yaw=yaw;app.renderer.camera.pitch=pitch;},{pos,yaw,pitch});
+// The camera is the fixed third-person one (0.35.2): yaw step 0, so W walks toward -z. Teleport only moves the player.
+const teleport=(p,pos)=>p.evaluate(pos=>{const app=Bloom.app;app.sim.physics.teleport(app.actor(),pos);},pos);
 const gearHUD=p=>p.evaluate(()=>{const n=document.querySelector('#gear-status');return{hidden:n.hidden,title:n.querySelector('b')?.textContent||'',chips:[...n.querySelectorAll('span')].map(s=>({slot:s.dataset.slot,kind:s.className,text:s.textContent})),body:document.body.className,status:Bloom.Gear.status(Bloom.app.actor(),Bloom.app.sim.terrain),hp:Bloom.app.actor().hp};});
 
 try{
  server=http.createServer(serveStatic);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
- const pc=await browser.newPage({viewport:{width:1366,height:768}});pc.setDefaultTimeout(15000);pc.on('pageerror',e=>errors.push(e.message));
+ const pc=await browser.newPage({viewport:{width:1366,height:768}});pc.setDefaultTimeout(15000);pc.on('pageerror',e=>errors.push(e.message));await pc.addInitScript(CURSOR_HELPERS);
  await pc.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(pc);
 
  // ---- 1. Deterministic checks ----
@@ -126,7 +126,7 @@ try{
  await pc.click('#menu-btn');await pc.fill('#seed-input','190725');await pc.click('#new-world');await pause(pc,1500);
  // 2a. A fence row stops walking and jumping; a cobble row of the same height is climbed by the auto step.
  const crossRow=async(id)=>{await pc.evaluate(id=>{const sim=Bloom.app.sim;for(let x=-3;x<=3;x++){sim.terrain.set(x,5,-3,0);sim.terrain.set(x,5,-3,Bloom.BID[id]);}},id);
-  await teleport(pc,{x:.5,y:5.05,z:.5},0,.1);await pause(pc,400);await pc.evaluate(()=>{window.__track={minZ:Infinity,maxY:-Infinity};window.__trackTimer=setInterval(()=>{const a=Bloom.app.actor();window.__track.minZ=Math.min(window.__track.minZ,a.pos.z);window.__track.maxY=Math.max(window.__track.maxY,a.pos.y);},16);});
+  await teleport(pc,{x:.5,y:5.05,z:.5});await pause(pc,400);await pc.evaluate(()=>{window.__track={minZ:Infinity,maxY:-Infinity};window.__trackTimer=setInterval(()=>{const a=Bloom.app.actor();window.__track.minZ=Math.min(window.__track.minZ,a.pos.z);window.__track.maxY=Math.max(window.__track.maxY,a.pos.y);},16);});
   await pc.locator('#world').focus();await pc.keyboard.down('KeyW');for(let n=0;n<6;n++){await pc.keyboard.down('Space');await pause(pc,260);await pc.keyboard.up('Space');await pause(pc,240);}await pc.keyboard.up('KeyW');
   const t=await pc.evaluate(()=>{clearInterval(window.__trackTimer);return window.__track;});await pc.evaluate(()=>{const sim=Bloom.app.sim;for(let x=-3;x<=3;x++)sim.terrain.set(x,5,-3,0);});return t;};
  const fenceRun=await crossRow('fence'),cobbleRun=await crossRow('cobble');
@@ -134,36 +134,36 @@ try{
  pass('holding W and jumping into a fence row never crosses it, though the jumps lift the feet to '+fenceRun.maxY.toFixed(2)+' (fence voxel top 6; min z '+fenceRun.minZ.toFixed(2)+'); the same row of cobble is climbed',{fenceRun,cobbleRun});
 
  // 2b. Cave bare-handed: the HUD names the three short slots and their costs; the screen edge turns cold blue.
- await teleport(pc,{x:0,y:-1,z:-56},Math.PI,.22);await pause(pc,3000);const bare=await gearHUD(pc);await shot(pc,'01-cave-without-iron');
+ await teleport(pc,{x:0,y:-1,z:-56});await pause(pc,3000);const bare=await gearHUD(pc);await shot(pc,'01-cave-without-iron');
  assert.deepEqual(bare.chips.map(c=>[c.slot,c.kind]),[['pick','below'],['weapon','below'],['armor','below']]);assert(bare.title.includes('동굴')&&bare.title.includes('철')&&bare.title.includes('페널티'));
  assert(bare.chips[0].text.includes('×0.35')&&bare.chips[1].text.includes('×0.4')&&bare.chips[2].text.includes('×2')&&bare.chips[2].text.includes('추위'));assert(bare.body.includes('hazard-cold'));
  await pause(pc,2100);const drained=await gearHUD(pc);assert(drained.hp<=bare.hp-2,'cold drain '+bare.hp+' → '+drained.hp);
  pass('entering the cave bare-handed: the HUD shows 곡괭이 ×0.35, 무기 ×0.4, 방어구 ×2 + 추위, a blue edge, and HP drains',{bare:bare.chips.map(c=>c.text),title:bare.title,hp:[bare.hp,drained.hp]});
  // Iron pick and sword into the hotbar, iron armor equipped by clicking the bag slot then the armor slot (inventory UI).
  await give(pc,[['iron_pick',1],['iron_sword',1],['iron_helmet',1],['iron_chest',1],['iron_boots',1]]);
- await pc.keyboard.press('KeyE');await pc.waitForFunction(()=>!document.querySelector('#inventory').hidden);
+ await pc.keyboard.press('Tab');await pc.waitForFunction(()=>!document.querySelector('#inventory').hidden);
  for(const part of ['helmet','chest','boots']){const k=await pc.evaluate(part=>Bloom.app.actor().inventory.slots.findIndex(s=>s?.id==='iron_'+part),part);
   await pc.locator((k<9?'#inventory-hotbar':'#inventory-grid')+' [data-area="bag"][data-index="'+k+'"]').click();await pc.locator('#armor-slots [data-area="armor"][data-index="'+part+'"]').click();
   await pc.waitForFunction(part=>Bloom.app.actor().inventory.armor[part]?.id==='iron_'+part,part,{timeout:3000});}
- await pc.keyboard.press('KeyE');await pause(pc,700);const iron=await gearHUD(pc);await shot(pc,'02-cave-with-iron');
+ await pc.keyboard.press('Tab');await pause(pc,700);const iron=await gearHUD(pc);await shot(pc,'02-cave-with-iron');
  assert.deepEqual(iron.chips,[]);assert(iron.title.includes('✓'));assert(!iron.body.includes('hazard'));assert.deepEqual([iron.status.gather,iron.status.attack,iron.status.taken,iron.status.hazard],[1000,1000,1000,null]);
  await pause(pc,1500);assert.equal((await gearHUD(pc)).hp,iron.hp);
  // Taking the helmet off brings the armor penalty and the cold back.
- await pc.keyboard.press('KeyE');await pc.locator('#armor-slots [data-area="armor"][data-index="helmet"]').click();await pc.locator('#inventory-grid [data-area="bag"]:not([data-item])').first().click();await pc.keyboard.press('KeyE');
+ await pc.keyboard.press('Tab');await pc.locator('#armor-slots [data-area="armor"][data-index="helmet"]').click();await pc.locator('#inventory-grid [data-area="bag"]:not([data-item])').first().click();await pc.keyboard.press('Tab');
  await pc.waitForFunction(()=>!Bloom.app.actor().inventory.armor.helmet);await pause(pc,400);const noHelmet=await gearHUD(pc);
  assert.deepEqual(noHelmet.chips.map(c=>c.slot),['armor']);assert(noHelmet.chips[0].text.includes('2/3')&&noHelmet.body.includes('hazard-cold'));
  pass('equipping iron (pick and sword in the hotbar, three armor pieces through the inventory UI) clears every penalty and the drain; taking the helmet off brings back 방어구 2/3 ×2 + 추위',{iron:iron.title,noHelmet:noHelmet.chips.map(c=>c.text)});
 
  // 2c. The fungal forest with iron gear (no diamond): every slot is short, spore poison drains.
  const fungal=await pc.evaluate(()=>{const sim=Bloom.app.sim,ring=sim.terrain.bossAnchor('ring');for(let r=6;r<=30;r+=2)for(let k=0;k<16;k++){const a=k*Math.PI/8,x=Math.floor(ring.x+Math.cos(a)*r),z=Math.floor(ring.z+Math.sin(a)*r),h=sim.terrain.height(x,z);if(sim.terrain.realm(x+.5,h+1,z+.5)!=='fungal'||[1,2,3].some(dy=>sim.terrain.get(x,h+dy,z)))continue;return{x:x+.5,y:h+1.05,z:z+.5,yaw:Math.atan2(-(ring.x-x),-(ring.z-z))};}return null;});
- assert(fungal,'no fungal surface spot');await pc.keyboard.press('KeyE');await pc.locator('#inventory-grid [data-area="bag"][data-item="iron_helmet"]').click();await pc.locator('#armor-slots [data-area="armor"][data-index="helmet"]').click();await pc.keyboard.press('KeyE');
- await teleport(pc,fungal,fungal.yaw,.2);await pause(pc,1800);const spore=await gearHUD(pc);await shot(pc,'03-fungal-without-diamond');
+ assert(fungal,'no fungal surface spot');await pc.keyboard.press('Tab');await pc.locator('#inventory-grid [data-area="bag"][data-item="iron_helmet"]').click();await pc.locator('#armor-slots [data-area="armor"][data-index="helmet"]').click();await pc.keyboard.press('Tab');
+ await teleport(pc,fungal);await pause(pc,1800);const spore=await gearHUD(pc);await shot(pc,'03-fungal-without-diamond');
  assert.deepEqual(spore.chips.map(c=>[c.slot,c.kind]),[['pick','below'],['weapon','below'],['armor','below']]);assert(spore.title.includes('균류 숲')&&spore.title.includes('다이아몬드'));assert(spore.chips[2].text.includes('포자 독')&&spore.body.includes('hazard-spore'));
  assert(spore.chips[0].text.includes('철 곡괭이'));
  pass('the fungal forest with iron gear: 곡괭이/무기/방어구 below 다이아몬드 with 포자 독 and a yellow-green edge',{title:spore.title,chips:spore.chips.map(c=>c.text)});
 
  // 2d. The recipe card of the diamond helmet names the cave boss crown as a 동굴 resource; it crafts.
- await teleport(pc,{x:.5,y:5.05,z:.5},0,.3);await pause(pc,500);await give(pc,[['workbench',1],['diamond',5],['rockChickCrown',1]]);
+ await teleport(pc,{x:.5,y:5.05,z:.5});await pause(pc,500);await give(pc,[['workbench',1],['diamond',5],['rockChickCrown',1]]);
  await hold(pc,'workbench');await placeOn(pc,0,5,-2,'workbench');assert(await aimAt(pc,{x:0,y:5,z:-2},{x:0,y:1,z:0}),'aim workbench');await pc.keyboard.press('KeyF');
  await pc.waitForFunction(()=>!document.querySelector('#inventory').hidden&&document.querySelector('#station-name').textContent.includes('제작대'),null,{timeout:4000});
  await pc.locator('[data-recipe="diamond_helmet"]').click();await pc.waitForFunction(()=>Bloom.Inventory.result(Bloom.app.actor(),Bloom.app.sim)?.recipe.id==='diamond_helmet',null,{timeout:3000});
@@ -171,12 +171,12 @@ try{
  assert(card.includes('금광석 왕관 ×1 (동굴 자원)')&&card.includes('다이아몬드 ×5'),card);
  await pc.locator('#craft-result').click();await pc.waitForFunction(()=>Bloom.app.actor().inventory.cursor?.id==='diamond_helmet',null,{timeout:3000});
  await pc.locator('[data-recipe="iron_sword"]').click();const ironCard=await pc.evaluate(()=>document.querySelector('#recipe-detail').textContent);assert(ironCard.includes('나뭇가지 ×1 (초원 자원)'),ironCard);
- await pc.keyboard.press('KeyE');
+ await pc.keyboard.press('Tab');
  pass('the diamond helmet recipe card shows "금광석 왕관 ×1 (동굴 자원)" and crafts from 5 diamonds + the cave boss crown; the iron sword card tags the stick as a 초원 resource',{card,ironCard});
 
  // 2e. A snail farm built from placed mushroom caps: a fence ring (terrain edits), a chest and three caps placed by
  // right-click, a snail egg hatched in it and grown (debug), which then harvests the caps into the chest.
- await teleport(pc,{x:-.5,y:5.05,z:-.5},0,.5);await pause(pc,400);
+ await teleport(pc,{x:-.5,y:5.05,z:-.5});await pause(pc,400);
  await pc.evaluate(()=>{const sim=Bloom.app.sim,s=(x,z,id)=>sim.terrain.set(x,5,z,Bloom.BID[id]);for(let x=-5;x<=3;x++){s(x,-4,'fence');s(x,3,'fence');}for(let z=-4;z<=3;z++){s(-5,z,'fence');s(3,z,'fence');}sim.terrain.set(0,5,-2,0);});
  await pc.locator('#debug-kit').dispatchEvent('click');await pc.locator('#debug-ranch').dispatchEvent('click');await give(pc,[['storageChest',1]]);
  await hold(pc,'storageChest');await placeOn(pc,-3,5,-2,'storageChest');await hold(pc,'cap');for(const [x,z]of [[1,-2],[1,1],[-3,1]])await placeOn(pc,x,5,z,'cap');
@@ -186,8 +186,8 @@ try{
  await pc.waitForFunction(id=>Bloom.app.sim.companions.data.units[id]?.phase==='gather',pen.unit,{timeout:20000});
  await pc.waitForFunction(()=>Bloom.app.sim.chests['-3,5,-2']?.slots.some(s=>s?.id==='cap'),null,{timeout:20000});
  // Review shot: stand south of the pen, outside the fence, looking at the snail.
- await teleport(pc,{x:-.5,y:5.05,z:4.6},0,.8);await pc.waitForFunction(()=>!document.querySelector('#toast').classList.contains('show'),null,{timeout:6000});
- await pc.evaluate(id=>{const u=Bloom.app.sim.companions.data.units[id],a=Bloom.app.actor(),c=Bloom.app.renderer.camera;c.yaw=Math.atan2(-(u.pos.x-a.pos.x),-(u.pos.z-a.pos.z));c.distance=6;},pen.unit);await pause(pc,500);await shot(pc,'05-snail-cap-farm');
+ await teleport(pc,{x:-.5,y:5.05,z:4.6});await pc.waitForFunction(()=>!document.querySelector('#toast').classList.contains('show'),null,{timeout:6000});
+ await pc.evaluate(()=>Bloom.app.renderer.setZoom(6));await pause(pc,500);await shot(pc,'05-snail-cap-farm');
  report.farmShot=await pc.evaluate(id=>{const u=Bloom.app.sim.companions.data.units[id];return{pos:u.pos,task:u.task,phase:u.phase,sample:Bloom.app.renderer.unitRig.samples.find(s=>s.key===id)||null};},pen.unit);
  const farm=await pc.evaluate(()=>({chest:Bloom.app.sim.chests['-3,5,-2'].slots.filter(Boolean),regrow:Object.values(Bloom.app.sim.regrow).map(g=>[g.key,Bloom.BLOCKS[g.id].id]),floor:Object.values(Bloom.app.sim.drops).map(d=>d.item)}));
  assert(farm.regrow.some(([,id])=>id==='cap'));assert(!farm.floor.includes('cap'));

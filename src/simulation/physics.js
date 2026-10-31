@@ -181,11 +181,6 @@ class Physics {
   return support;
  }
  /** Closest active *other* actor under the camera-aligned aim ray. */
- aimEnemy(actor,reach){const eye=V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),ray=new this.R.Ray(eye,actor.facing),wall=this.terrain.ray(eye,actor.facing,reach),limit=wall?wall.distance:reach;let best=limit,found=null;
-  const candidates=[...this.tags.entries()].filter(([,tag])=>tag.type==='actor'&&tag.id!==actor.id).sort((a,b)=>cmp(a[1].id,b[1].id));
-  for(const [handle,tag]of candidates){const collider=this.world.getCollider(handle);if(!collider||collider.parent()?.bodyType()!==this.R.RigidBodyType.Dynamic)continue;const toi=collider.castRay(ray,limit,true);if(toi>=0&&(!wall||toi<limit-1e-6)&&(toi<best-1e-6||found===null&&toi<=best)){best=toi;found=tag.id;}}
-  return found;
- }
  overlapActors(pos,half){const found=[],shape=new this.R.Cuboid(half,half,half);for(const [handle,tag]of this.tags)if(tag.type==='actor'){const col=this.world.getCollider(handle);if(col?.intersectsShape(shape,pos,{x:0,y:0,z:0,w:1}))found.push(tag.id);}return found.sort(cmp);}
  sweepAttack(actor,action,fromT,toT){
   const started=performance.now(),contacts=new Map(),samples=attackSamples(actor,action,fromT,toT),radius=samples[0].radius,ball=new this.R.Ball(radius),reach=action.reach+radius+1;

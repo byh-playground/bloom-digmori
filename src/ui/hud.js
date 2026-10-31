@@ -51,7 +51,8 @@ class EnemyHealthHUD {
   const blocked=['inventory','journal','menu','network','ending','loading'].some(id=>{const e=document.getElementById(id);return e&&!e.hidden;});this.root.hidden=blocked||local.dead;
   if(this.root.hidden||!this.r.eye)return;
   const width=this.r.canvas.clientWidth,height=this.r.canvas.clientHeight,barWidth=this.mobile?HEALTH_HUD.mobileWidth:HEALTH_HUD.width,half=barWidth/2;
-  const aim=sim.physics.aimEnemy(authority,HEALTH_HUD.range),player=local.pos,candidates=[];
+  // The unit under the cursor (D-114 cursor targeting) is the aimed one.
+  const aim=this.r.cursor?.entity||null,player=local.pos,candidates=[];
   for(const a of Object.values(actors)){
    if(!alive.has(a.id)||!this.r.entityVisualReady(a))continue;const pos=a.pos,distance=V.len(V.sub(player,pos));if(distance>HEALTH_HUD.range)continue;
    const scale=a.scale||1,head=V.add(pos,{x:0,y:HEALTH_HUD.headHeight*scale,z:0}),center=V.add(pos,{x:0,y:a.offset,z:0}),p=this.r.projected(head),body=this.r.projected(center);

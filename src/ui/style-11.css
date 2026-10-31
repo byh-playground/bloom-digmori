@@ -22,3 +22,8 @@
 #hazard-tint{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:0;transition:opacity .6s}
 body.hazard-cold #hazard-tint{opacity:1;box-shadow:inset 0 0 7vw 1.5vw #6fb6e877}body.hazard-spore #hazard-tint{opacity:1;box-shadow:inset 0 0 7vw 1.5vw #b8d24a6e}
 @media(pointer:coarse){#gear-status{bottom:98px;font-size:9px;gap:2px 4px}#gear-status b,#gear-status span{padding:1px 5px}}
+
+/* 0.35.2 camera turn buttons (the Q/E 45° steps) above the jump/roll column on touch screens. */
+.camera-turn{position:fixed;right:max(19px,env(safe-area-inset-right));bottom:calc(max(19px,env(safe-area-inset-bottom)) + 146px);display:flex;gap:8px;z-index:15}
+.camera-turn .mobile-button{display:flex;flex-direction:column;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;font-size:19px;line-height:1.05;background:#324f41da;border:2px solid #a8c7a7;box-shadow:0 4px 14px #091b145e;touch-action:none}
+.camera-turn .mobile-button small{font-size:8px;font-weight:650}

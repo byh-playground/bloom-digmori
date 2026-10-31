@@ -1,7 +1,7 @@
 'use strict';
 class Simulation {
  constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.chests={};this.regrow={};this.eggs={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
- createActor(id,pos,speciesId=null,boss=false){const d=speciesId?(boss?SPECIES[speciesId]?.boss:SPECIES[speciesId]?.wild):null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
+ createActor(id,pos,speciesId=null,boss=false){const d=speciesId?(boss?SPECIES[speciesId]?.boss:SPECIES[speciesId]?.wild):null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},...(speciesId?{}:{heading:{x:0,z:-1}}),aimTarget:null,task:null,yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
  addPlayer(id){if(this.actors[id])return;const count=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length,p={x:.5+count*1.7,y:5.1,z:.5};const a=this.createActor(id,p);this.actors[id]=a;this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick);this.physics.addActor(a);return a;}
  addCreature(speciesId,pos,structureKey=null){if(!SPECIES[speciesId]||!structureKey&&Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey).length>=CFG.creatures.maxWild)return null;const id='creature:'+ ++this.sequence,a=this.createActor(id,pos,speciesId);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=0;this.actors[id]=a;this.physics.addActor(a);return a;}
  // A structure boss is the species body x3 with its hat (rig stage 'boss'); one live boss per structure, at most four at once.
@@ -41,7 +41,29 @@ class Simulation {
   this.physics.removeBody(shot);delete this.projectiles[id];
  }
  stationInReach(actor,key,kind){if(!actor||!key)return false;const xyz=key.split(',').map(Number);if(xyz.length!==3||!xyz.every(Number.isFinite))return false;const id=this.terrain.get(...xyz);return BLOCKS[id]?.station===kind&&V.len(V.sub({x:xyz[0]+.5,y:xyz[1],z:xyz[2]+.5},actor.pos))<=CFG.reach+1;}
- aim(actor){return this.terrain.ray(V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),actor.facing,CFG.reach);}
+ // Cursor targeting: the block the player's input names this tick (actor.aimTarget), accepted within CFG.reach of the eye.
+ aim(actor){const t=actor.aimTarget;if(!t)return null;const id=this.terrain.get(t.x,t.y,t.z);if(!id)return null;const distance=blockDistance(V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),t);return distance<=CFG.reach?{x:t.x,y:t.y,z:t.z,id,normal:{...t.normal},distance}:null;}
+ // The input's target cell and face, or under-feet placement (pillar-up): the first solid block at most 3 cells below the
+ // feet, top face, so the block goes into the cell the airborne player has just left (Minecraft rule: allowed once the
+ // feet are above that cell; place() still rejects any overlap with a body).
+ resolveTarget(actor,input){if(input.underFeet){const x=Math.floor(actor.pos.x),z=Math.floor(actor.pos.z),top=Math.floor(actor.pos.y-.001);for(let y=top;y>=top-3;y--)if(this.terrain.isSolid(this.terrain.get(x,y,z)))return{x,y,z,normal:{x:0,y:1,z:0}};return null;}
+  return input.target?{x:input.target.x,y:input.target.y,z:input.target.z,normal:{...TARGET_FACES[input.target.face]}}:null;}
+ canMine(actor,b){const item=Inventory.stats(actor).item,proper=b.tool===item?.tool;return Number.isFinite(b?.hardness)&&!(b.tier>0&&(!proper||item.tier<b.tier));}
+ // D-115 click-to-mine: a 'mine' command names a block; the player walks toward it (tickTask) and mines it until it breaks.
+ startTask(actor,c){if(![c.x,c.y,c.z].every(Number.isInteger))return false;const id=this.terrain.get(c.x,c.y,c.z),b=BLOCKS[id],item=Inventory.stats(actor).item;
+  if(!id||!Number.isFinite(b?.hardness)||actor.companionSlot>=0||item?.weapon&&!item.tool||Math.hypot(c.x+.5-actor.pos.x,c.y+.5-actor.pos.y,c.z+.5-actor.pos.z)>CFG.task.maxDistance)return false;
+  if(!this.canMine(actor,b)){this.emit('task-blocked',actor,{reason:'tool',blockId:id});return false;}
+  actor.task={kind:'mine',x:c.x,y:c.y,z:c.z,id,best:Infinity,still:0,mining:false};actor.mine.target=null;actor.mine.elapsed=0;return true;}
+ endTask(actor,reason){const t=actor.task;actor.task=null;actor.mine.target=null;actor.mine.elapsed=0;if(t&&(reason==='blocked'||reason==='tool'))this.emit('task-blocked',actor,{reason,blockId:t.id});}
+ // One tick of the task: done once the block is gone; mines inside mineRange (or from full reach after the walk stalls);
+ // otherwise returns the walk direction. A walk that stalls out of reach gives up.
+ tickTask(actor){const t=actor.task;if(!t){if(actor.mine.target){actor.mine.target=null;actor.mine.elapsed=0;}return null;}
+  const id=this.terrain.get(t.x,t.y,t.z);if(id!==t.id){this.endTask(actor,'done');return null;}if(!this.canMine(actor,BLOCKS[id])){this.endTask(actor,'tool');return null;}
+  const T=CFG.task,eye=V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),reach=blockDistance(eye,t),dx=t.x+.5-actor.pos.x,dz=t.z+.5-actor.pos.z,flat=Math.hypot(dx,dz);
+  if(flat<t.best-T.progress){t.best=flat;t.still=0;}else t.still++;
+  if(reach<=T.mineRange||reach<=CFG.reach&&(t.mining||t.still>=T.stuckTicks)){t.mining=true;if(flat>.05)actor.heading={x:dx/flat,z:dz/flat};this.mine(actor,{x:t.x,y:t.y,z:t.z,id,normal:faceToward(t,eye)});return null;}
+  if(t.still>=T.giveUpTicks){this.endTask(actor,'blocked');return null;}
+  return flat>.05?{x:dx/flat,z:dz/flat}:null;}
   interact(actor){const hit=this.aim(actor);if(!hit)return this.useConsumable(actor);const block=BLOCKS[hit.id];if(block.gate)return this.toggleGate(actor,hit);if(!block.station)return this.useConsumable(actor);const key=blockKey(hit.x,hit.y,hit.z);
    if(block.station==='loot')return this.openChest(actor,hit);
    if(block.station==='chest'&&!this.chests[key])return false;
@@ -77,12 +99,12 @@ class Simulation {
   if(this.terrain.set(x,y,z,def.block)===false)return false;if(--stack.count===0)inv.slots[inv.selected]=null;
   if(egg){const key=blockKey(x,y,z);this.eggs[key]={key,x,y,z,species:egg,owner:actor.id,placedTick:this.tick,hatchTick:this.tick+ticksForMs(EGG_RULES.hatchMs)};this.emit('egg-place',actor,{pos:{x:x+.5,y,z:z+.5},species:egg,key});}
   if(stack.id==='furnace')this.furnaces[blockKey(x,y,z)]={slots:[null,null,null],burn:0,burnTotal:0,progress:0,recipe:null};if(stack.id==='storageChest')this.chests[blockKey(x,y,z)]={slots:Array(RANCH_RULES.chestSlots).fill(null)};this.emit('place',actor,{pos:{x:x+.5,y:y+.5,z:z+.5},color:BLOCKS[def.block].color,normal:hit.normal,blockId:def.block});return true;}
- mine(actor,held){if(!held){actor.mine.target=null;actor.mine.elapsed=0;return;}const hit=this.aim(actor);if(!hit||Object.keys(this.drops).length>=CFG.maxDrops)return;
+ mine(actor,hit){if(Object.keys(this.drops).length>=CFG.maxDrops)return;
   const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z),item=Inventory.stats(actor).item;
   if(!Number.isFinite(b.hardness))return;
   if(actor.mine.target!==key){actor.mine.target=key;actor.mine.elapsed=0;}
   const proper=b.tool===item?.tool,speed=proper?item.miningSpeed||1:1;
-  if(b.tier>0&&(!proper||item.tier<b.tier)){actor.mine.elapsed=0;return;}
+  if(!this.canMine(actor,b)){actor.mine.elapsed=0;return;}
   // 0.35.1 equipment penalty: the realm's gathering factor (곡괭이 below its tier ×0.35, diamond bonus ×1.5), per-mille.
   actor.mine.elapsed+=CFG.stepMs*speed*Gear.status(actor,this.terrain).gather/1000;if(actor.mine.elapsed<b.hardness)return;
   actor.mine.elapsed=0;this.harvest(actor,hit);
@@ -117,6 +139,7 @@ class Simulation {
    case 'close':Inventory.close(actor,this);return true;
    case 'select':if(Number.isInteger(c.index)&&c.index>=0&&c.index<9){actor.inventory.selected=c.index;return true;}return false;
    case 'interact':return this.interact(actor);
+   case 'mine':return this.startTask(actor,c);
     case 'upgrade':return RPG.upgrade(actor,c.skill,this);
    case 'eat':return this.useConsumable(actor);
    case 'drop':{const i=actor.inventory,s=i.cursor||Inventory.selected(i);if(!s)return false;const n=c.all?s.count:1,toss=V.norm({x:actor.facing.x,y:Math.max(-.3,actor.facing.y),z:actor.facing.z}),eye=V.add(actor.pos,{x:0,y:1.05,z:0}),from=V.add(eye,V.scale(V.norm({x:toss.x,y:0,z:toss.z}),.75));
@@ -239,18 +262,20 @@ class Simulation {
   for(const actor of actors){actor.anim+=CFG.stepMs;if(!actor.dead)continue;actor.respawn-=CFG.stepMs;if(actor.respawn<=0){if(actor.enemy||actor.speciesId||actor.boss){delete this.actors[actor.id];continue;}actor.dead=false;actor.hp=actor.maxHp;actor.combat=Combat.state();this.physics.world.getRigidBody(actor.body).setBodyType(this.R.RigidBodyType.Dynamic,true);this.physics.teleport(actor,this.terrain.spawn);}}
   this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick);
   // Phase 1: deterministic actor-ID order for commands and ALL voxel edits.
-  for(const actor of actors){if(actor.dead||actor.suspended||actor.enemy||actor.speciesId||actor.boss)continue;const entry=inputs.get(actor.id),input=entry?decodeInput(entry.input):neutralInput();if(actor.inventory.selected!==input.selected)actor.companionSlot=-1;actor.inventory.selected=input.selected;actor.facing=direction(input.yaw,input.pitch);
+  for(const actor of actors){if(actor.dead||actor.suspended||actor.enemy||actor.speciesId||actor.boss)continue;const entry=inputs.get(actor.id),input=entry?decodeInput(entry.input):neutralInput();if(actor.inventory.selected!==input.selected)actor.companionSlot=-1;actor.inventory.selected=input.selected;actor.facing=direction(input.yaw,input.pitch);actor.aimTarget=this.resolveTarget(actor,input);
    for(const command of entry?.commands||[]){try{this.command(actor,decodeCommand(command.payload));}catch(e){this.emit('invalid-command',actor,{message:e.message});}}
    this.physics.flushTerrainChanges();
-   const selected=Inventory.stats(actor).item,previous=actor.inputPrevious;
-   if(input.enabled&&input.left&&!previous.left){const enemy=this.physics.aimEnemy(actor,Combat.weapon(actor,this).reach),block=this.aim(actor),canMine=actor.companionSlot<0&&(!selected?.weapon||!!selected?.tool),attackBusy=actor.combat.state==='attack';previous.primary=!input.attackOnly&&canMine&&block&&!enemy&&!attackBusy?'mine':'attack';}
-   this.mine(actor,input.enabled&&(input.mine||input.left&&previous.primary==='mine'));
-   if(input.enabled&&input.right&&!previous.right&&!selected?.weapon&&actor.companionSlot<0){const aimed=this.aim(actor);
-    // Right-click works a gate or opens a storage chest before anything is placed against it (Minecraft order).
-    if(aimed&&BLOCKS[aimed.id].gate)this.toggleGate(actor,aimed);else if(aimed&&BLOCKS[aimed.id].station==='chest')this.interact(actor);
+   const selected=Inventory.stats(actor).item,previous=actor.inputPrevious,leftPress=input.enabled&&input.left&&!previous.left,rightPress=input.enabled&&input.right&&!previous.right;
+   // D-115: movement input, another click, a roll or an open menu cancels the click-to-mine task.
+   if(actor.task&&(!input.enabled||Math.hypot(input.x,input.z)>.1||leftPress||rightPress||input.roll))this.endTask(actor,'cancel');
+   const walk=this.tickTask(actor);
+   if(rightPress&&!selected?.weapon&&actor.companionSlot<0){const aimed=this.aim(actor);
+    // Right-click works a gate or uses a station (workbench, furnace, storage chest, sealed chest) before anything is
+    // placed against it (Minecraft order).
+    if(aimed&&BLOCKS[aimed.id].gate)this.toggleGate(actor,aimed);else if(aimed&&BLOCKS[aimed.id].station)this.interact(actor);
     else if(selected?.throwable)this.throwPotion(actor);else if(selected?.id==='bucket'||selected?.id==='waterBucket')this.useBucket(actor);else this.place(actor);}
    this.physics.flushTerrainChanges();
-   playerInputs.set(actor.id,{...input,left:input.left&&previous.primary==='attack',right:input.right&&(!!selected?.weapon||actor.companionSlot>=0)});previous.left=input.left;previous.right=input.right;if(!input.left)previous.primary='none';
+   playerInputs.set(actor.id,{...input,...(walk?{x:walk.x,z:walk.z,sprint:false}:{}),right:input.right&&(!!selected?.weapon||actor.companionSlot>=0)});previous.left=input.left;previous.right=input.right;
   }
   this.companions.tick();this.tickEggs();this.tickRegrow();this.physics.flushTerrainChanges();
   this.terrain.water.step(actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss),this.tick);
@@ -374,9 +399,18 @@ class Simulation {
  adapter(){return{save:()=>this.save(),load:b=>this.load(b),validateSnapshot:(b,c)=>{try{const m=this.parse(b).meta;return(c.tick===undefined||m.tick===c.tick)&&(!c.players||JSON.stringify(m.actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss).map(a=>a.id).sort())===JSON.stringify([...c.players].sort()));}catch{return false;}},step:c=>this.step(c),applyMembership:c=>this.applyMembership(c)};}
  free(){this.physics.free();}
 }
-function neutralInput(){return{enabled:false,left:false,right:false,roll:false,jump:false,sprint:false,mine:false,attackOnly:false,swimRise:false,swimDive:false,x:0,z:0,yaw:0,pitch:0,selected:0};}
-function encodeInputObject(i){const b=new Uint8Array(CFG.net.inputSize),v=new DataView(b.buffer);let flags=(i.enabled?1:0)|(i.left?2:0)|(i.right?4:0)|(i.roll?8:0)|(i.jump?16:0)|(i.sprint?32:0)|(i.mine?64:0)|(i.attackOnly?128:0)|(i.swimRise?256:0)|(i.swimDive?512:0);v.setUint16(0,flags,true);v.setInt8(2,Math.round(clamp(i.x,-1,1)*127));v.setInt8(3,Math.round(clamp(i.z,-1,1)*127));v.setInt16(4,Math.round(((i.yaw%(TAU))+TAU)%TAU/TAU*32767),true);v.setInt16(6,Math.round(clamp(i.pitch,-1.5,1.5)/1.5*32767),true);b[8]=i.selected|0;return b;}
-function decodeInput(b){if(!b||b.length!==CFG.net.inputSize)return neutralInput();const v=new DataView(b.buffer,b.byteOffset,b.byteLength),f=v.getUint16(0,true);return{enabled:!!(f&1),left:!!(f&2),right:!!(f&4),roll:!!(f&8),jump:!!(f&16),sprint:!!(f&32),mine:!!(f&64),attackOnly:!!(f&128),swimRise:!!(f&256),swimDive:!!(f&512),x:v.getInt8(2)/127,z:v.getInt8(3)/127,yaw:v.getInt16(4,true)/32767*TAU,pitch:v.getInt16(6,true)/32767*1.5,selected:clamp(b[8],0,8)};}
+function neutralInput(){return{enabled:false,left:false,right:false,roll:false,jump:false,sprint:false,underFeet:false,swimRise:false,swimDive:false,x:0,z:0,yaw:0,pitch:0,selected:0,target:null};}
+// Cursor target faces (input byte 19) and the eye-to-block distance used for reach.
+const TARGET_FACES=Object.freeze([{x:1,y:0,z:0},{x:-1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:-1,z:0},{x:0,y:0,z:1},{x:0,y:0,z:-1}]);
+const targetFace=n=>n?TARGET_FACES.findIndex(f=>f.x===n.x&&f.y===n.y&&f.z===n.z):-1;
+function blockDistance(p,b){const d=(v,lo)=>Math.max(lo-v,0,v-lo-1);return Math.hypot(d(p.x,b.x),d(p.y,b.y),d(p.z,b.z));}
+// The face of block b that looks toward point p (mining chips fly out of it).
+function faceToward(b,p){const dx=p.x-(b.x+.5),dy=p.y-(b.y+.5),dz=p.z-(b.z+.5),ax=Math.abs(dx),ay=Math.abs(dy),az=Math.abs(dz);return ax>=ay&&ax>=az?{x:Math.sign(dx)||1,y:0,z:0}:ay>=az?{x:0,y:Math.sign(dy)||1,z:0}:{x:0,y:0,z:Math.sign(dz)||1};}
+// 20 bytes: flags, move x/z, aim yaw/pitch (eye toward the cursor point), hotbar slot, cursor target block (x int32,
+// y int16, z int32) and its face index. Flag 64 marks a target, 128 under-feet placement.
+function encodeInputObject(i){const b=new Uint8Array(CFG.net.inputSize),v=new DataView(b.buffer),face=targetFace(i.target?.normal),target=face>=0&&[i.target.x,i.target.y,i.target.z].every(Number.isInteger)&&Math.abs(i.target.y)<32768;let flags=(i.enabled?1:0)|(i.left?2:0)|(i.right?4:0)|(i.roll?8:0)|(i.jump?16:0)|(i.sprint?32:0)|(target?64:0)|(i.underFeet?128:0)|(i.swimRise?256:0)|(i.swimDive?512:0);v.setUint16(0,flags,true);v.setInt8(2,Math.round(clamp(i.x,-1,1)*127));v.setInt8(3,Math.round(clamp(i.z,-1,1)*127));v.setInt16(4,Math.round(((i.yaw%(TAU))+TAU)%TAU/TAU*32767),true);v.setInt16(6,Math.round(clamp(i.pitch,-1.5,1.5)/1.5*32767),true);b[8]=i.selected|0;
+ if(target){v.setInt32(9,i.target.x,true);v.setInt16(13,i.target.y,true);v.setInt32(15,i.target.z,true);b[19]=face;}return b;}
+function decodeInput(b){if(!b||b.length!==CFG.net.inputSize)return neutralInput();const v=new DataView(b.buffer,b.byteOffset,b.byteLength),f=v.getUint16(0,true);return{enabled:!!(f&1),left:!!(f&2),right:!!(f&4),roll:!!(f&8),jump:!!(f&16),sprint:!!(f&32),underFeet:!!(f&128),swimRise:!!(f&256),swimDive:!!(f&512),x:v.getInt8(2)/127,z:v.getInt8(3)/127,yaw:v.getInt16(4,true)/32767*TAU,pitch:v.getInt16(6,true)/32767*1.5,selected:clamp(b[8],0,8),target:f&64&&b[19]<6?{x:v.getInt32(9,true),y:v.getInt16(13,true),z:v.getInt32(15,true),face:b[19]}:null};}
 const encodeCommand=c=>new TextEncoder().encode(JSON.stringify(c));
 function decodeCommand(b){if(b.byteLength>2048)throw Error('명령 크기');return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(b));}
 

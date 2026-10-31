@@ -9,7 +9,7 @@
 #block-action-fx.play i:nth-child(3){animation-delay:.06s}
 #block-action-fx.effect-place i{border-color:#a9efd1}
 #block-action-fx.effect-blocked i{border-color:#e67d68}
-#crosshair.mining:before,#crosshair.mining:after{background:#ffce71!important;box-shadow:0 0 7px #f0ac45}
+
 @keyframes block-fx-appear{0%{opacity:1;transform:translate(-50%,-50%) scale(.65)}50%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(1.15)}}
 @keyframes block-fx-ring{0%{opacity:.95;transform:rotate(0) scale(.45)}75%{opacity:.5}100%{opacity:0;transform:rotate(16deg) scale(1.5)}}
 @media(prefers-reduced-motion:reduce){#block-action-fx.play,#block-action-fx.play i{animation-duration:.1s}}

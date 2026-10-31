@@ -1,20 +1,41 @@
 'use strict';
 /* three.js world renderer. Presentation reads simulation/display state only.
  * Every draw is submitted in the legacy pass order (sky → terrain → props → characters → sprites →
- * drops → water → effects → late characters → view arms): one ordered list via renderOrder with
+ * drops → water → effects → late characters): one ordered list via renderOrder with
  * explicit blend/depth state per material, so three.js never re-sorts the frame. */
+// Cave cutaway and line-of-sight fade, shared by the opaque terrain and the translucent first ceiling layer (render only).
+// cut = (first ceiling layer y, look target y, -, radius); cutLine = (target x, target z, slope x, slope z): the cut is a
+// cylinder around the view line (target toward the camera), so it stays open from the camera at every height.
+// Terrain within fade.x of the camera-to-target segment (and farther than fade.y from the target) is dithered away, and a
+// face seen from behind (from inside rock: the near wall of a tunnel, a cut cross-section) is not drawn.
+const RENDER_CUT_GLSL=`uniform vec4 cut;uniform vec4 cutLine;uniform vec3 camA;uniform vec3 camB;uniform vec2 fade;
+  float cutDistance(vec3 p){return distance(p.xz,cutLine.xy+cutLine.zw*(p.y-cut.y));}
+  float bayer4(vec2 f){ivec2 q=ivec2(mod(floor(f),4.));const float m[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);return(m[q.x+q.y*4]+.5)/16.;}
+  bool fadeOut(vec3 p){vec3 ab=camB-camA;float t=clamp(dot(p-camA,ab)/max(dot(ab,ab),1e-4),0.,1.);return t<.98&&distance(p,camA+ab*t)<fade.x&&distance(p,camB)>fade.y&&bayer4(gl_FragCoord.xy)<.62;}`;
 const RENDER_GLSL=Object.freeze({
  terrainVertex:'in vec3 position;in vec3 n;in float material;uniform mat4 vp;out vec3 wp;out vec3 normal;out float mat;void main(){wp=position;normal=n;mat=material;gl_Position=vp*vec4(position,1.);}',
  terrainFragment:`precision highp float;
   in vec3 wp;in vec3 normal;in float mat;uniform sampler2D tiles;uniform vec3 eye;uniform vec3 fog;uniform vec4 lights[8];uniform float ambient;uniform float textured;out vec4 fragColor;
-  void main(){vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
+  ${RENDER_CUT_GLSL}
+  void main(){float cd=cutDistance(wp);bool above=cut.w>0.&&wp.y>cut.x-.002;if(above&&cd<cut.w||fadeOut(wp)||dot(normal,eye-wp)<0.)discard;vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
    float face=n.y>.5?0.:n.y<-.5?2.:1.;float tile=floor(mat+.5)*3.+face;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
    vec2 coords=(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.);vec3 pixel=texture(tiles,coords).rgb,average=texture(tiles,(origin+31.5)/vec2(256.,512.)).rgb;
    float footprint=max(length(dFdx(uv)),length(dFdy(uv)))*16.;
    float blend=smoothstep(${CFG.textures.minifyStart.toFixed(2)},${CFG.textures.minifyEnd.toFixed(2)},footprint);
    vec3 c=mix(average,mix(pixel,average,blend),textured);float shade=top?(n.y>.5?1.:.57):abs(n.x)>.5?.79:.90;
    float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
-   c*=shade*clamp(light,.16,1.3);fragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);
+   c*=shade*clamp(light,.16,1.3);if(above)c*=mix(.3,1.,clamp((cd-cut.w)/.8,0.,1.));fragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);
+  }`,
+ // The first ceiling layer inside the cutaway: translucent block faces with bright outlines, so it reads as clickable.
+ ceilingFragment:`precision highp float;
+  in vec3 wp;in vec3 normal;in float mat;uniform sampler2D tiles;uniform vec4 lights[8];uniform float ambient;out vec4 fragColor;
+  ${RENDER_CUT_GLSL}
+  void main(){float cd=cutDistance(wp);if(cut.w<=0.||cd>=cut.w||wp.y<cut.x-.002||wp.y>cut.x+1.002)discard;
+   vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
+   float face=n.y>.5?0.:n.y<-.5?2.:1.;float tile=floor(mat+.5)*3.+face;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
+   vec3 c=texture(tiles,(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.)).rgb;float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
+   c*=clamp(light,.35,1.3);vec2 f=fract(uv);float e=min(min(f.x,1.-f.x),min(f.y,1.-f.y)),edge=1.-smoothstep(.025,.06,e),rim=smoothstep(cut.w,cut.w-.9,cd);
+   fragColor=vec4(mix(c,vec3(1.,.93,.66),edge*.85),(.32+.6*edge)*rim);
   }`,
  vfxVertex:'in vec3 position;in vec4 tint;uniform mat4 vp;out vec4 t;void main(){t=tint;gl_Position=vp*vec4(position,1.);}',
  vfxFragment:'precision mediump float;in vec4 t;out vec4 fragColor;void main(){fragColor=t;}',
@@ -48,13 +69,15 @@ class Renderer {
   this.three=new T.WebGLRenderer({canvas,context});
   this.three.outputColorSpace=T.LinearSRGBColorSpace;this.three.autoClear=true;this.gl=this.three.getContext();
   this.scene=new T.Scene();this.scene.matrixWorldAutoUpdate=false;this.view=new T.Camera();this.view.matrixAutoUpdate=false;this.view.matrixWorldAutoUpdate=false;this.clearColor=new T.Color();this.unusedBounds=new T.Sphere();this.pools=new Map();this.drawOrder=0;
-  this.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.viewRadius=new URLSearchParams(location.search).get('showcaseDemo')==='1'?1:matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;
+  this.resetCamera();this.pointer={x:innerWidth*.5,y:innerHeight*.5};this.cursor=null;this.viewRadius=new URLSearchParams(location.search).get('showcaseDemo')==='1'?1:matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;
   this.atlas=createSpriteAtlas(this.three.capabilities.maxTextureSize);this.atlas.texture=this.canvasTexture(this.atlas.canvas);
   this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.fog=new Float32Array([.69,.85,.86]);this.frameLights=NO_LIGHTS;this.stats={drawCalls:0,vertices:0};
   const blockAtlas=buildBlockAtlas(),blockTexture=new T.DataTexture(blockAtlas.data,blockAtlas.width,blockAtlas.height,T.RGBAFormat,T.UnsignedByteType);this.pixelTexture(blockTexture,false);this.blockAtlas={...blockAtlas,texture:blockTexture};
   this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.eggIcons(unitRigs);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
   this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
-  this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture}});
+  const cutUniforms=()=>({cut:{value:new Float32Array(4)},cutLine:{value:new Float32Array(4)},camA:{value:new Float32Array(3)},camB:{value:new Float32Array(3)},fade:{value:new Float32Array([CFG.cutaway.fadeRadius,CFG.cutaway.fadeKeep])}});
+  this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture},...cutUniforms()});
+  this.ceilingMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.ceilingFragment,{vp:{value:new Float32Array(16)},lights:{value:new Float32Array(32)},ambient:{value:1},tiles:{value:blockTexture},...cutUniforms()},{blend:'alpha',depthWrite:false});
   this.waterMaterial=this.material(RENDER_GLSL.waterVertex,RENDER_GLSL.waterFragment,{vp:{value:new Float32Array(16)},phase:{value:0}},{blend:'alpha',depthWrite:false});this.waterMeshes=new Map();this.waterDrawList=[];
   const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
   this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
@@ -80,15 +103,15 @@ class Renderer {
  // Unique renderOrder fixes the draw order, so three.js's depth tie-break never needs real bounds;
  // a shared placeholder sphere keeps it from scanning every streamed buffer.
  submit(object){object.visible=true;object.renderOrder=this.drawOrder++;this.stats.drawCalls++;object.geometry.boundingSphere??=this.unusedBounds;}
- beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values())m.object.visible=false;for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
+ beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values()){m.object.visible=false;m.ceiling.visible=false;}for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
   this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.playerRig.beginFrame();this.unitRig.beginFrame();}
  endFrame(){this.three.render(this.scene,this.view);this.playerRig.endFrame();this.unitRig.endFrame();}
  dynamic(kind,layout,uniforms,options){return this.pooled(kind,()=>{const geometry=new DynamicGeometry(this.T,layout),[vertex,fragment]=layout===RENDER_LAYOUT.mesh?[RENDER_GLSL.meshVertex,RENDER_GLSL.meshFragment]:layout===RENDER_LAYOUT.sprite?[RENDER_GLSL.spriteVertex,RENDER_GLSL.spriteFragment]:[RENDER_GLSL.vfxVertex,RENDER_GLSL.vfxFragment];return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(vertex,fragment,uniforms(),options))};});}
  submitDynamic(item,vertices,stride){item.object.geometry=item.geometry.upload(vertices);this.submit(item.object);this.stats.vertices+=vertices.length/stride;}
- // Lit vertex-colored boxes and beams; overlay draws (view arms) skip depth.
- drawColored(vertices,{lights=this.frameLights,vp=this.vp,eye=arr(this.eye),ambient=this.ambient,fog=this.fog,overlay=false,depthWrite=!overlay}={}){if(!vertices.length)return;
-  const item=this.dynamic(overlay?'mesh-overlay':'mesh',RENDER_LAYOUT.mesh,()=>({vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},ambient:{value:1},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)}}),overlay?{depthTest:false,depthWrite:false}:{}),u=item.object.material.uniforms;
-  item.object.material.depthWrite=depthWrite;u.vp.value.set(vp);u.eye.value.set(eye);u.ambient.value=ambient;u.fog.value.set(fog);u.lights.value.set(lights);this.submitDynamic(item,vertices,6);}
+ // Lit vertex-colored boxes.
+ drawColored(vertices,{lights=this.frameLights,vp=this.vp,eye=arr(this.eye),ambient=this.ambient,fog=this.fog}={}){if(!vertices.length)return;
+  const item=this.dynamic('mesh',RENDER_LAYOUT.mesh,()=>({vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},ambient:{value:1},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)}})),u=item.object.material.uniforms;
+  u.vp.value.set(vp);u.eye.value.set(eye);u.ambient.value=ambient;u.fog.value.set(fog);u.lights.value.set(lights);this.submitDynamic(item,vertices,6);}
  // Textured billboards; blend:true is straight-alpha blending (depth writes off unless requested).
  // Every sprite pass after the SVG characters keeps depth writes off, as the legacy frame did.
  drawSprites(vertices,texture,{ambient=this.ambient,blend=false,depthWrite=!blend}={}){if(!vertices.length)return;
@@ -96,10 +119,59 @@ class Renderer {
   u.vp.value.set(this.vp);u.ambient.value=ambient;u.tex.value=texture;this.setBlend(m,blend?'alpha':null);m.depthWrite=depthWrite;this.submitDynamic(item,vertices,9);}
  drawVfx(vertices){if(!vertices.length)return;const item=this.dynamic('vfx',RENDER_LAYOUT.vfx,()=>({vp:{value:new Float32Array(16)}}),{blend:'alpha',depthWrite:false});item.object.material.uniforms.vp.value.set(this.vp);this.submitDynamic(item,vertices,7);}
  resize(){const ratio=Math.min(devicePixelRatio||1,1.5),w=Math.round(this.canvas.clientWidth*ratio),h=Math.round(this.canvas.clientHeight*ratio);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
- updateCamera(actor,sim,renderPos=actor.pos){const c=this.camera,forward=direction(c.yaw,c.pitch),eye=V.add(renderPos,{x:0,y:CFG.player.eyeHeight,z:0});let camera={...eye};this.fov=lerp(this.fov||65,actor.sprinting?71:65,actor.sprinting?.18:.12);
-  if(!c.first){const right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)},back=V.add(V.scale(forward,-c.distance),V.scale(right,.55)),length=V.len(back),hit=sim.terrain.ray(eye,V.norm(back),length);camera=V.add(eye,V.scale(V.norm(back),hit?Math.max(.2,hit.distance-.25):length));}
-  this.right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)};camera=V.add(camera,this.combatFx.cameraOffset());this.eye=camera;this.forward=forward;this.right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)};this.vp=matrixMul(projection(this.fov*Math.PI/180,this.canvas.width/this.canvas.height,.035,130),viewMatrix(arr(camera),arr(V.add(camera,forward))));
+ // D-114 camera: yawStep 0..7 (45° each, animated over CFG.camera.stepMs), fixed pitch, zoom distance (wheel/pinch).
+ resetCamera(){this.camera={yawStep:0,yaw:0,pitch:CFG.camera.pitch,distance:initialCameraDistance(),turn:null};this.viewDistance=this.camera.distance;this.cut={active:false,amount:0,y:0,coverMs:0,openMs:0,pendY:null,pendMs:0,frame:null};}
+ rotateCamera(dir){const c=this.camera,n=CFG.camera.yawSteps;c.yawStep=((c.yawStep+dir)%n+n)%n;const to=c.yawStep*TAU/n,delta=((to-c.yaw)%TAU+TAU+Math.PI)%TAU-Math.PI;c.turn={from:c.yaw,to:c.yaw+delta,t:0};}
+ zoomCamera(sign){this.setZoom(this.camera.distance*Math.pow(CFG.camera.zoomStep,sign));}
+ setZoom(distance){this.camera.distance=clamp(distance,CFG.camera.minDistance,CFG.camera.maxDistance);}
+ // Cave cutaway state with hysteresis: a solid non-plant block within CFG.cutaway.probe cells above the head (player's
+ // column) is the first ceiling layer. Entering waits enterMs, leaving waits exitMs, the radius opens/closes over fadeMs.
+ updateCutaway(sim,pos,dt){const C=CFG.cutaway,k=this.cut,t=sim.terrain,x=Math.floor(pos.x),z=Math.floor(pos.z),head=Math.floor(pos.y+1.95);let ceil=null;
+  for(let y=head;y<=head+C.probe;y++){const id=t.get(x,y,z);if(t.isSolid(id)&&!CUTAWAY_PLANTS.has(id)){ceil=y;break;}}
+  if(ceil===null){k.openMs+=dt;k.coverMs=0;k.pendY=null;if(k.active&&k.openMs>=C.exitMs)k.active=false;}
+  else{k.coverMs+=dt;k.openMs=0;if(ceil!==k.y){if(k.pendY!==ceil){k.pendY=ceil;k.pendMs=0;}else k.pendMs+=dt;if(!k.active||k.pendMs>=C.enterMs){k.y=ceil;k.pendY=null;}}if(!k.active&&k.coverMs>=C.enterMs)k.active=true;}
+  k.amount=clamp(k.amount+(k.active?1:-1)*dt/C.fadeMs,0,1);}
+ updateCamera(actor,sim,renderPos,dt){const c=this.camera,C=CFG.camera;
+  if(c.turn){c.turn.t=Math.min(1,c.turn.t+dt/C.stepMs);const e=c.turn.t*c.turn.t*(3-2*c.turn.t);c.yaw=c.turn.from+(c.turn.to-c.turn.from)*e;if(c.turn.t>=1){c.yaw=((c.turn.to%TAU)+TAU)%TAU;c.turn=null;}}
+  this.fov=lerp(this.fov||65,actor.sprinting?71:65,actor.sprinting?.18:.12);this.updateCutaway(sim,renderPos,dt);
+  const forward=direction(c.yaw,c.pitch),back=V.scale(forward,-1),target=V.add(renderPos,{x:0,y:C.target,z:0}),k=this.cut;
+  // In a cave the zoom is capped so the cutaway stays readable; outside one, a line blocked by a thick obstacle (more than
+  // pullThickness solid cells, e.g. inside a hill) pulls the camera in front of it. Thin obstacles are only faded.
+  let want=lerp(c.distance,Math.min(c.distance,C.caveDistance),k.amount);
+  if(!k.active){const hit=sim.terrain.ray(target,back,want);if(hit){let solid=0,last='';for(let d=hit.distance;d<want;d+=.25){const p=V.add(target,V.scale(back,d)),key=Math.floor(p.x)+','+Math.floor(p.y)+','+Math.floor(p.z);if(key!==last){last=key;if(sim.terrain.isSolid(sim.terrain.get(p.x,p.y,p.z)))solid++;}}if(solid>CFG.cutaway.pullThickness)want=Math.max(1.2,hit.distance-.3);}}
+  this.viewDistance=want<this.viewDistance?lerp(this.viewDistance,want,clamp(dt/60,0,1)):lerp(this.viewDistance,want,clamp(dt/350,0,1));
+  let camera=V.add(target,V.scale(back,this.viewDistance));camera=V.add(camera,this.combatFx.cameraOffset());
+  this.eye=camera;this.forward=forward;this.right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)};this.up=V.norm({x:this.right.y*forward.z-this.right.z*forward.y,y:this.right.z*forward.x-this.right.x*forward.z,z:this.right.x*forward.y-this.right.y*forward.x});
+  this.vp=matrixMul(projection(this.fov*Math.PI/180,this.canvas.width/this.canvas.height,.035,130),viewMatrix(arr(camera),arr(V.add(camera,forward))));
+  const radius=CFG.cutaway.radius*k.amount*k.amount*(3-2*k.amount),flat=Math.hypot(back.x,back.z)||1,slope=1/Math.tan(c.pitch);
+  k.frame={y:k.y,base:target.y,radius,cx:target.x,cz:target.z,sx:back.x/flat*slope,sz:back.z/flat*slope,camera:{...camera},target:{...target},pos:{...renderPos}};
  }
+ // The cutaway centre at height y (the view line), and whether cell (x,y,z) is inside the cut above the first layer
+ // (hidden) or in the first ceiling layer itself.
+ cutCenter(y){const f=this.cut.frame;return{x:f.cx+f.sx*(y-f.base),z:f.cz+f.sz*(y-f.base)};}
+ cutCell(x,y,z){const f=this.cut.frame;if(!f||f.radius<=0||y<f.y)return null;const c=this.cutCenter(y+.5);if(Math.hypot(x+.5-c.x,z+.5-c.z)>=f.radius)return null;return y===f.y?'layer':'hidden';}
+ // Distance from p to the camera-to-target segment.
+ lineOfSight(p){const f=this.cut.frame,a=f.camera,ab=V.sub(f.target,a),t=clamp(V.dot(V.sub(p,a),ab)/Math.max(V.dot(ab,ab),1e-4),0,1);return V.len(V.sub(p,V.add(a,V.scale(ab,t))));}
+ // Cells the line of sight fades (same test as the terrain shader, at the cell centre).
+ fadedCell(x,y,z){const f=this.cut.frame;if(!f)return false;const p={x:x+.5,y:y+.5,z:z+.5},a=f.camera,ab=V.sub(f.target,a),t=clamp(V.dot(V.sub(p,a),ab)/Math.max(V.dot(ab,ab),1e-4),0,1);return t<.98&&V.len(V.sub(p,V.add(a,V.scale(ab,t))))<CFG.cutaway.fadeRadius&&V.len(V.sub(p,f.target))>CFG.cutaway.fadeKeep;}
+ // Cursor ray (render-side input): a screen point → the block face under it and/or the actor under it, skipping hidden and
+ // faded cells. The first ceiling layer is clickable (from below) within ceilingPick m of the player's column; a hit face buried in
+ // rock is swapped for the open face that looks toward the camera. point is what the aim yaw/pitch looks at.
+ pickAt(sx,sy){if(!this.eye||!this.cut.frame)return null;const w=this.canvas.clientWidth,h=this.canvas.clientHeight,t=Math.tan(this.fov*Math.PI/360),nx=(sx/w*2-1)*t*w/h,ny=(1-sy/h*2)*t;
+  const dir=V.norm(V.add(this.forward,V.add(V.scale(this.right,nx),V.scale(this.up,ny)))),origin={...this.eye},sim=this.simRef,terrain=sim?.terrain,f=this.cut.frame;if(!terrain)return null;
+  // The visible part of the first layer is its underside (the plane y = layer): a ray through that plane over the player
+  // picks the layer cell there, ahead of anything below it. Elsewhere the voxel ray passes through layer and hidden cells.
+  const skip=(x,y,z)=>!!this.cutCell(x,y,z)||this.fadedCell(x,y,z);let block=terrain.ray(origin,dir,80,skip);
+  if(f.radius>0&&dir.y<0){const t=(f.y-origin.y)/dir.y,p=V.add(origin,V.scale(dir,t)),x=Math.floor(p.x),z=Math.floor(p.z),id=terrain.get(x,f.y,z);
+   if(t>0&&(!block||t<block.distance)&&id&&this.cutCell(x,f.y,z)==='layer'&&Math.hypot(x+.5-f.pos.x,z+.5-f.pos.z)<=CFG.cutaway.ceilingPick&&!terrain.isSolid(terrain.get(x,f.y-1,z)))block={x,y:f.y,z,id,distance:t,normal:{x:0,y:-1,z:0},point:p};}
+  if(block){const open=n=>!terrain.isSolid(terrain.get(block.x+n.x,block.y+n.y,block.z+n.z));
+   if(!open(block.normal)){const faces=TARGET_FACES.filter(open).sort((a,b)=>V.dot(b,dir)-V.dot(a,dir));if(faces.length)block.normal={...faces[0]};}}
+  let entity=null,entityT=block?block.distance:Infinity,self=false;
+  for(const a of Object.values(this.lastActors||{})){if(a.dead)continue;const s=a.scale||1,r=CFG.player.radius*s+.2,top=a.pos.y+2*(a.offset||.95*s)+.2,hit=rayBox(origin,dir,{x:a.pos.x-r,y:a.pos.y-.1,z:a.pos.z-r},{x:a.pos.x+r,y:top,z:a.pos.z+r});if(hit===null)continue;if(a.id===this.localId){self=true;continue;}if(hit<entityT&&!this.cutCell(Math.floor(a.pos.x),Math.floor(a.pos.y+.5),Math.floor(a.pos.z))){entityT=hit;entity=a;}}
+  const local=this.lastActors?.[this.localId];if(local&&!self){const feet=this.projected(local.pos),head=this.projected(V.add(local.pos,{x:0,y:1.9,z:0}));if(feet&&head){const ab={x:head.x-feet.x,y:head.y-feet.y},len=ab.x*ab.x+ab.y*ab.y||1,u=clamp(((sx-feet.x)*ab.x+(sy-feet.y)*ab.y)/len,0,1);self=Math.hypot(sx-feet.x-ab.x*u,sy-feet.y-ab.y*u)<48;}}
+  let point=entity?V.add(entity.pos,{x:0,y:(entity.offset||.95),z:0}):block?block.point:null;
+  if(!point){const feetY=local?local.pos.y:f.pos.y;point=Math.abs(dir.y)>1e-4&&(feetY-origin.y)/dir.y>0?V.add(origin,V.scale(dir,(feetY-origin.y)/dir.y)):V.add(origin,V.scale(dir,20));}
+  this.cursor={sx,sy,block:entity?null:block&&{x:block.x,y:block.y,z:block.z,id:block.id,normal:{...block.normal},point:block.point,distance:block.distance},entity:entity?.id||null,self,point};return this.cursor;}
 
  blockFaceLine(out,center,u,v,x0,y0,x1,y1,width,color){
   const dx=x1-x0,dy=y1-y0,l=Math.hypot(dx,dy)||1,ox=-dy/l*width*.5,oy=dx/l*width*.5;
@@ -110,11 +182,12 @@ class Renderer {
  blockFace(out,hit,progress=0){
   const n=hit.normal,center={x:hit.x+.5+n.x*.514,y:hit.y+.5+n.y*.514,z:hit.z+.5+n.z*.514};
   const u=n.x?{x:0,y:0,z:1}:{x:1,y:0,z:0},v=n.y?{x:0,y:0,z:1}:{x:0,y:1,z:0};
-  const color=progress?[1,.83,.44]:[.83,.93,.74];
-  const line=(x0,y0,x1,y1,w=.018,c=color)=>this.blockFaceLine(out,center,u,v,x0,y0,x1,y1,w,c);
-  // Inset corner brackets are readable without obscuring the whole block.
+  const color=progress?[1,.83,.44]:[.96,1,.86],k=clamp((this.viewDistance||8)/10,.8,2);
+  const line=(x0,y0,x1,y1,w=.018,c=color)=>this.blockFaceLine(out,center,u,v,x0,y0,x1,y1,w*k,c);
+  // The camera sits 6–20 m away: a full face outline (thicker when zoomed out) plus bright corner brackets.
+  for(const a of [-1,1]){line(a*.48,-.48,a*.48,.48,.03);line(-.48,a*.48,.48,a*.48,.03);}
   for(const a of [-1,1])for(const b of [-1,1]){
-   line(a*.46,b*.46,a*.28,b*.46,.025);line(a*.46,b*.46,a*.46,b*.28,.025);
+   line(a*.46,b*.46,a*.22,b*.46,.06);line(a*.46,b*.46,a*.46,b*.22,.06);
   }
   if(progress>0){
    const paths=[[[0,0],[.20,.14]],[[0,0],[-.17,.22]],[[0,0],[.07,-.25]],[[.20,.14],[.36,.26]],[[.07,-.25],[.29,-.36]],[[-.17,.22],[-.36,.31]],[[.20,.14],[.36,.04]],[[-.17,.22],[-.31,-.07]]];
@@ -136,10 +209,10 @@ class Renderer {
   if(!m.materials||m.materials.length!==count)throw Error('텍스처 재질 데이터 누락');
   const indices=count<=65535?new Uint16Array(m.indices):m.indices,geometry=new T.BufferGeometry();
   geometry.setAttribute('position',new T.BufferAttribute(m.vertices,3));geometry.setAttribute('n',new T.BufferAttribute(m.normals,3));geometry.setAttribute('material',new T.BufferAttribute(m.materials,1));geometry.setIndex(new T.BufferAttribute(indices,1));
-  const object=this.worldObject(new T.Mesh(geometry,this.terrainMaterial));METRICS.add('render.upload',performance.now()-started);
-  return{object,count:indices.length,revision:m.revision,bytes:m.vertices.byteLength+m.normals.byteLength+m.materials.byteLength+indices.byteLength};
+  const object=this.worldObject(new T.Mesh(geometry,this.terrainMaterial)),ceiling=this.worldObject(new T.Mesh(geometry,this.ceilingMaterial));METRICS.add('render.upload',performance.now()-started);
+  return{object,ceiling,count:indices.length,revision:m.revision,bytes:m.vertices.byteLength+m.normals.byteLength+m.materials.byteLength+indices.byteLength};
  }
- deleteMesh(m){if(!m)return;this.scene.remove(m.object);m.object.geometry.dispose();}
+ deleteMesh(m){if(!m)return;this.scene.remove(m.object);this.scene.remove(m.ceiling);m.object.geometry.dispose();}
  stream(sim,actor){const started=performance.now();if(this.worldRef!==sim.terrain){for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.worldRef=sim.terrain;this.meshBuilder.reset(sim.terrain);this.streamSignature=null;this.streamComplete=false;this.uploadReady=[];this.visibleChunks.clear();this.readyChunks.clear();this.visibleColumns.clear();this.clearWaterMeshes();this.particles.length=0;}
   this.meshBuilder.sync(sim.terrain);const C=CFG.chunk,cx=Math.floor(actor.pos.x/C),cy=Math.floor(actor.pos.y/C),cz=Math.floor(actor.pos.z/C),want=new Set(),columns=new Set(),todo=[],distances=new Map(),yMin=Math.max(Math.floor(CFG.bottom/C),cy-1),yMax=Math.min(Math.ceil(CFG.top/C)-1,cy+1);
   for(let dz=-this.viewRadius;dz<=this.viewRadius;dz++)for(let dx=-this.viewRadius;dx<=this.viewRadius;dx++){const column=columnKey(cx+dx,cz+dz);columns.add(column);for(let y=yMin;y<=yMax;y++){const key=chunkKey(cx+dx,y,cz+dz),old=this.meshes.get(key),rev=sim.terrain.revisions.get(key)||0,dist=dx*dx+dz*dz+Math.abs(y-cy);want.add(key);distances.set(key,dist);if(!old||old.revision!==rev)todo.push({key,revision:rev,dist,dirty:!!old});}}
@@ -163,7 +236,6 @@ class Renderer {
  box(out,pos,scale,color,forward=null){const f=forward?normal([forward.x,0,forward.z]):[0,0,1],right=[f[2],0,-f[0]],p=(x,y,z)=>[pos.x+right[0]*x+f[0]*z,pos.y+y,pos.z+right[2]*x+f[2]*z],x=scale.x/2,z=scale.z/2,y=scale.y;
   const a=p(-x,0,-z),b=p(x,0,-z),c=p(x,y,-z),d=p(-x,y,-z),e=p(-x,0,z),f1=p(x,0,z),g=p(x,y,z),h=p(-x,y,z);
   for(const [quad,shade]of [[[a,d,c,b],.8],[[e,f1,g,h],1],[[a,e,h,d],.75],[[b,c,g,f1],.88],[[d,h,g,c],1.1],[[a,b,f1,e],.55]])for(const i of [0,1,2,0,2,3])out.push(...quad[i],...color.map(n=>n*shade));}
- weaponBeam(out,a,b,width,color){const f=V.norm(V.sub(b,a)),s=V.norm({x:f.z,y:0,z:-f.x}),u=V.norm({x:-f.y*s.z,y:f.z*s.x-f.x*s.z,z:f.y*s.x}),p=(v,i,j)=>V.add(v,V.add(V.scale(s,i*width),V.scale(u,j*width*.5))),q=[p(a,-1,-1),p(a,1,-1),p(a,1,1),p(a,-1,1),p(b,-1,-1),p(b,1,-1),p(b,1,1),p(b,-1,1)];for(const face of [[0,1,5,4],[3,7,6,2],[0,4,7,3],[1,2,6,5],[4,5,6,7]])for(const i of [0,1,2,0,2,3])out.push(q[face[i]].x,q[face[i]].y,q[face[i]].z,...color);}
  sprite(out,pos,w,h,frame,tint,flip=false,roll=0){const r=this.right;let right={x:r.x*Math.cos(roll),y:Math.sin(roll),z:r.z*Math.cos(roll)},up={x:-r.x*Math.sin(roll),y:Math.cos(roll),z:-r.z*Math.sin(roll)};
   const p=(x,y)=>[pos.x+right.x*x+up.x*y,pos.y+right.y*x+up.y*y,pos.z+right.z*x+up.z*y];const pts=[p(-w/2,0),p(w/2,0),p(w/2,h),p(-w/2,h)],u0=flip?frame.u1:frame.u0,u1=flip?frame.u0:frame.u1,uv=[[u0,frame.v1],[u1,frame.v1],[u1,frame.v0],[u0,frame.v0]];for(const i of [0,1,2,0,2,3])out.push(...pts[i],...uv[i],...tint);
  }
@@ -182,22 +254,37 @@ class Renderer {
   const az=TAU*phase-this.camera.yaw;
   const x=.5+.43*Math.sin(az),y=.30+.54*alt-.20*this.camera.pitch;
   u.sun.value.set([x,y,Math.cos(az)>0?.95:0]);u.moon.value.set([.5-.43*Math.sin(az),.30-.54*alt-.20*this.camera.pitch,Math.cos(az)<0?1:0]);this.submit(this.sky);}
- drawTerrain(lights){const u=this.terrainMaterial.uniforms;u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.ambient.value=this.ambient;u.fog.value.set(this.fog);u.lights.value.set(lights);u.textured.value=this.combatFx.options.textures?1:0;
+ setCutUniforms(u){const f=this.cut.frame;u.cut.value.set([f.y,f.base,0,f.radius]);u.cutLine.value.set([f.cx,f.cz,f.sx,f.sz]);u.camA.value.set(arr(f.camera));u.camB.value.set(arr(f.target));}
+ drawTerrain(lights){const u=this.terrainMaterial.uniforms;u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.ambient.value=this.ambient;u.fog.value.set(this.fog);u.lights.value.set(lights);u.textured.value=this.combatFx.options.textures?1:0;this.setCutUniforms(u);
   for(const [key,m]of this.meshes){if(!m.count)continue;const [x,y,z]=key.split(':').map(Number),dx=(x+.5)*16-this.eye.x,dz=(z+.5)*16-this.eye.z;if(dx*this.forward.x+dz*this.forward.z<-18||Math.hypot(dx,dz)>75)continue;this.submit(m.object);this.stats.vertices+=m.count;}}
+ // The translucent first ceiling layer: the same chunk geometry again, only the band [cut y, cut y+1] inside the cut.
+ drawCeiling(lights){const f=this.cut.frame;if(!f||f.radius<=0)return;const u=this.ceilingMaterial.uniforms,C=CFG.chunk,c=this.cutCenter(f.y+.5),cy=Math.floor(f.y/C);u.vp.value.set(this.vp);u.ambient.value=this.ambient;u.lights.value.set(lights);this.setCutUniforms(u);
+  for(const [key,m]of this.meshes){if(!m.count)continue;const [x,y,z]=key.split(':').map(Number);if(y!==cy&&y!==Math.floor((f.y+1)/C)||Math.max(Math.abs((x+.5)*C-c.x),Math.abs((z+.5)*C-c.z))>C/2+f.radius+1)continue;this.submit(m.ceiling);this.stats.vertices+=m.count;}}
+ // Darkened cross-sections of the cut: a cap on rock under the first layer and the slanted wall around the hidden volume,
+ // up to the ground surface there, so the cut reads as cut-away ground and not sky. No cap within 1.5 m of the line of sight, so
+ // the walls of a narrow tunnel never cover the player.
+ cutawayShell(out,sim){const f=this.cut.frame;if(!f||f.radius<=0)return;const t=sim.terrain,solid=(x,y,z)=>t.isSolid(t.get(x,y,z)),dark=CUTAWAY_ROCK,c0=this.cutCenter(f.y),r=Math.ceil(f.radius);
+  for(let z=Math.floor(c0.z)-r;z<=Math.floor(c0.z)+r;z++)for(let x=Math.floor(c0.x)-r;x<=Math.floor(c0.x)+r;x++){if(this.cutCell(x,f.y,z)!=='layer'||!solid(x,f.y-1,z)||this.lineOfSight({x:x+.5,y:f.y,z:z+.5})<1.5)continue;const y=f.y+.002;for(const p of [[x,y,z],[x+1,y,z],[x+1,y,z+1],[x,y,z],[x+1,y,z+1],[x,y,z+1]])out.push(...p,...dark);}
+  const N=36,ring=[];for(let i=0;i<=N;i++){const a=i/N*TAU,dx=Math.cos(a)*f.radius,dz=Math.sin(a)*f.radius;let top=f.y+1;for(let k=0;k<3;k++){const c=this.cutCenter(top);top=Math.max(f.y+1,t.height(Math.floor(c.x+dx),Math.floor(c.z+dz))+1);}ring.push({dx,dz,top:Math.min(top,f.camera.y+2)});}
+  for(let i=0;i<N;i++){const a=ring[i],b=ring[i+1],top=Math.min(a.top,b.top);if(top<=f.y)continue;const at=(q,y,k)=>{const c=this.cutCenter(y);return[c.x+q.dx,y,c.z+q.dz,...dark.map(v=>v*k)];};const lo=f.y,hiK=1.35;
+   out.push(...at(a,lo,1),...at(b,lo,1),...at(b,top,hiK),...at(a,lo,1),...at(b,top,hiK),...at(a,top,hiK));}}
+ // Whether an entity at pos stands in the hidden part of the cut (the ground under it is not drawn).
+ cutHides(pos){return this.cutCell(Math.floor(pos.x),Math.floor(pos.y+.5),Math.floor(pos.z))==='hidden';}
  render(sim,authority,dt,displayFrame){
   const view={actors:{},drops:{},projectiles:{},companions:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':model.displayKind==='companion'?'companions':'projectiles'][model.id]=value;});
   const actor=view.actors[authority.id];if(!actor)return;this.displayTimeMs=displayFrame.timeMs;
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
-  this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.updateCamera(actor,sim,viewPos);this.stream(sim,authority);const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
+  this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.simRef=sim;this.localId=authority.id;this.lastActors=view.actors;this.updateCamera(actor,sim,viewPos,dt);this.stream(sim,authority);const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
   this.ambient=.20+.80*daylight;
-  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);this.beginFrame(this.fog);
-  this.drawSky(daylight,phase,alt,twilight);
+  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);const cutK=this.cut.amount,rock=CUTAWAY_ROCK.map(v=>v*clamp(this.ambient,.16,1.3));this.beginFrame(cutK>0?this.fog.map((v,i)=>lerp(v,rock[i],cutK)):this.fog);
+  // Inside the cutaway, unmeshed rock interiors behind the cut show the rock colour instead of the sky.
+  if(cutK<=0)this.drawSky(daylight,phase,alt,twilight);
   const lights=this.lights(sim,actor);this.frameLights=lights;this.drawTerrain(lights);
   const dyn=[],sprites=[];
   // Fluid volumes are submitted separately after solid terrain; no global sea plane.
   this.animationSamples={};
   for(const a of Object.values(view.actors)){
-   if(a.dead||this.camera.first&&a.id===actor.id||a.id!==actor.id&&!this.entityVisualReady(a))continue;
+   if(a.dead||a.id!==actor.id&&(!this.entityVisualReady(a)||this.cutHides(a.pos)))continue;
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
    // Players keep their authored colours; co-op players are told apart by the name tag in EnemyHealthHUD.
@@ -215,15 +302,18 @@ class Renderer {
    // A thrown item (the merge potion) spins as its item sprite; arrows and spit stay beams.
    if(s.item&&this.dropAtlas.frames[s.item]){this.sprite(dropSprites,{x:sp.x,y:sp.y-.2,z:sp.z},.42,.42,this.dropAtlas.frames[s.item],[1,1,1,1],false,(s.age||0)*.012);continue;}
    this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
-  const hit=sim.aim(authority);this.target=hit;
-  if(hit){
-   const key=blockKey(hit.x,hit.y,hit.z),mining=authority.mine.target===key&&authority.mine.elapsed>0;
-   const progress=mining?clamp(authority.mine.elapsed/Math.max(1,BLOCKS[hit.id].hardness),0,1):0;
-   this.blockFace(dyn,hit,progress);
+  // Cursor highlight (render-side pick of the pointer) and the click-to-mine task block with its crack progress.
+  const cursor=this.pickAt(this.pointer.x,this.pointer.y),task=authority.task,taskHit=task?{x:task.x,y:task.y,z:task.z,id:task.id,normal:faceToward(task,this.eye)}:null;
+  if(this.pointer.shown!==false&&cursor?.block&&!(task&&cursor.block.x===task.x&&cursor.block.y===task.y&&cursor.block.z===task.z))this.blockFace(dyn,cursor.block,0);
+  const hit=taskHit||(this.pointer.shown!==false?cursor?.block:null)||null;this.target=hit;
+  if(taskHit){
+   const key=blockKey(taskHit.x,taskHit.y,taskHit.z),mining=authority.mine.target===key&&authority.mine.elapsed>0;
+   const progress=mining?clamp(authority.mine.elapsed/Math.max(1,BLOCKS[taskHit.id].hardness),0,1):0;
+   this.blockFace(dyn,taskHit,progress);
    const index=mining?Math.floor(authority.mine.elapsed/140):-1;
    if(index!==this.mineFxStep&&index>=0&&index<=8){
-    const n=hit.normal,p={x:hit.x+.5+n.x*.50,y:hit.y+.5+n.y*.50,z:hit.z+.5+n.z*.50};
-    this.addBlockChips(p,BLOCKS[hit.id].color,3,n);
+    const n=taskHit.normal,p={x:taskHit.x+.5+n.x*.50,y:taskHit.y+.5+n.y*.50,z:taskHit.z+.5+n.z*.50};
+    this.addBlockChips(p,BLOCKS[taskHit.id].color,3,n);
     this.blockFxStats.chips++;
    }
    this.mineFxStep=index;
@@ -251,13 +341,13 @@ class Renderer {
    fx.time+=dt;if(fx.time>=fx.duration)this.blockFx=null;
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
-  this.units.prepare(view,sim,actor,dyn);this.drawFences(dyn,sim);
-  this.drawColored(dyn);
+  this.units.prepare(view,sim,actor,dyn);this.drawFences(dyn,sim);this.cutawayShell(dyn,sim);
+  this.drawColored(dyn);this.drawCeiling(lights);
   this.playerRig.draw('world');this.unitRig.draw('world');
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
   this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
   const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.playerRig.draw('late');this.unitRig.draw('late');this.combatFx.ui(sim);
-  if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
+  this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
  }
  // Fences and gates (mesh:false blocks, only ever placed by players) as lit wooden posts and rails, kept in an index
  // that follows VoxelWorld.editJournal. A fence joins fences, gates and full cubes on its four sides; a gate spans the
@@ -324,45 +414,14 @@ class Renderer {
     const pts=dx===1?[[x+1,top,z],[x+1,top,z+1],[x+1,bottom,z+1],[x+1,bottom,z]]:dx===-1?[[x,top,z+1],[x,top,z],[x,bottom,z],[x,bottom,z+1]]:dz===1?[[x+1,top,z+1],[x,top,z+1],[x,bottom,z+1],[x+1,bottom,z+1]]:[[x,top,z],[x+1,top,z],[x+1,bottom,z],[x,bottom,z]];faces(pts,[.14,.47,.76],.47);}}
   return new Float32Array(out);
  }
- renderViewArms(actor){
-  // Client-only viewmodel: NOT in simulation, snapshots, world meshes or other peers' cameras.
-  // Coordinates are meters, relative to a fixed first-person overlay camera at (0,0,0).
-  const geom=[],action=actor.combat.action,c=actor.combat;
-  const attacking=c.state==='attack'&&!!action;
-  const wind=attacking&&c.elapsed<action.wind?clamp(c.elapsed/action.wind,0,1):0;
-  const active=attacking?clamp((c.elapsed-action.wind)/action.active,0,1):0;
-  const recovery=attacking?clamp((c.elapsed-action.wind-action.active)/action.recovery,0,1):0;
-  const strike=attacking&&c.elapsed>=action.wind?Math.sin(active*Math.PI)*(1-recovery):0;
-  const item=Inventory.stats(actor).item;
-  const blockAction=this.actionFx,blockProgress=blockAction?1-blockAction.elapsed/blockAction.duration:0;
-  const mining=!!actor.mine.target&&actor.mine.elapsed>0;
-  const toolSwing=mining ? .18*Math.sin(actor.mine.elapsed*.038) : blockAction?.kind==='mine' ? .30*Math.sin(Math.PI*blockProgress) : 0;
-  const buildPush=blockAction?.kind==='place' ? .36*Math.sin(Math.PI*blockProgress) : 0;
-  // Each sleeve emerges below the screen, not out of the character's head in world space.
-  for(let hand=0;hand<2;hand++){
-   const sign=hand===0?-1:1,leading=!!(action&&action.combo%2===hand);
-   const punch=leading?strike:0;
-   let x=sign*(.53-.14*punch),y=-.28-.10*wind+.10*punch-(hand===1?toolSwing:0)+buildPush*.10,z=-1.17-.52*punch+.10*wind-(hand===1?(toolSwing+buildPush):0);
-   if(attacking){const vp=weaponVisualPose({...actor,pos:{x:0,y:0,z:0}}, {...action,dir:{x:0,y:0,z:-1}},c.elapsed);const guide=V.add({x:.18,y:-.31,z:-.82},V.scale(vp.dir,.32));if(hand===1||vp.overhead){x=guide.x+(hand===0?-.12:.06);y=guide.y;z=guide.z;}}
-   this.box(geom,{x,y:y-.09,z:z+.16},{x:.18,y:.20,z:.40},[.45,.64,.41],{x:0,y:0,z:-1});
-   this.box(geom,{x,y,z:z-.08},{x:.21,y:.21,z:.25},[.88,.76,.54],{x:0,y:0,z:-1});
-  }
-  // Held item also has a viewmodel, but no additional remote/world entity.
-  if(attacking&&item?.weapon){
-   const vp=weaponVisualPose({...actor,pos:{x:0,y:0,z:0}},{...action,dir:{x:0,y:0,z:-1}},c.elapsed),root={x:.18,y:-.31,z:-.82},length=clamp(vp.reach*.42,.48,1.55),color=c3(MATERIALS[item.material]?.color||'#c5b7a0');
-   this.weaponBeam(geom,root,V.add(root,V.scale(vp.dir,length)),.065,color);
-  }else if(item&&(item.tool||item.weapon)){
-   const w=item.weapon,tool=item.tool,t=attacking?strike:0;
-   const z=-1.35-.33*t-toolSwing-buildPush,y=-.28+.15*t-toolSwing*.35;
-   const color=c3(MATERIALS[item.material]?.color||'#c5b7a0');
-   this.box(geom,{x:.41,y,z},{x:.11,y:.13,z:.64},c3('#8e6246'),{x:0,y:0,z:-1});
-   this.box(geom,{x:.41,y:y+.03,z:z-.39},{x:.15,y:.13,z:tool==='pick'?.62:w==='spear'?.95:.74},color,{x:0,y:0,z:-1});
-  }
-  // Drawn *after* world+sprites with depth disabled so it never clips through local terrain.
-  this.drawColored(geom,{overlay:true,lights:NO_LIGHTS,vp:matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])),eye:[0,0,0],ambient:Math.max(.6,this.ambient),fog:[.69,.85,.86]});
- }
  free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.playerRig.dispose();this.unitRig.dispose();
   for(const pool of this.pools.values())for(const item of pool.items){item.geometry?.dispose();item.object.material.dispose();}this.pools.clear();
-  for(const m of [this.terrainMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
+  for(const m of [this.terrainMaterial,this.ceilingMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
   this.combatFx.reset();this.healthHud.reset();this.three.dispose();}
 }
+// Colour of cut-away rock (caps, the cut wall and the background seen through rock interiors).
+const CUTAWAY_ROCK=Object.freeze([.3,.27,.24]);
+// Plant blocks over the head (a tree canopy, a giant mushroom) do not make a cave ceiling.
+const CUTAWAY_PLANTS=new Set(['log','leaves','cap','stem'].map(id=>BID[id]));
+// Ray against an axis-aligned box: the entry distance, or null.
+function rayBox(o,d,min,max){let t0=0,t1=Infinity;for(const k of ['x','y','z']){if(Math.abs(d[k])<1e-9){if(o[k]<min[k]||o[k]>max[k])return null;continue;}let a=(min[k]-o[k])/d[k],b=(max[k]-o[k])/d[k];if(a>b)[a,b]=[b,a];t0=Math.max(t0,a);t1=Math.min(t1,b);if(t0>t1)return null;}return t0;}

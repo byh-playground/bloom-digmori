@@ -419,10 +419,11 @@ class VoxelWorld {
   const updates=[[cx,cy,cz]];if(x-cx*C===0)updates.push([cx-1,cy,cz]);if(x-cx*C===C-1)updates.push([cx+1,cy,cz]);if(y-cy*C===0)updates.push([cx,cy-1,cz]);if(y-cy*C===C-1)updates.push([cx,cy+1,cz]);if(z-cz*C===0)updates.push([cx,cy,cz-1]);if(z-cz*C===C-1)updates.push([cx,cy,cz+1]);
   for(const [a,b,c]of updates){const k=chunkKey(a,b,c);this.revisions.set(k,(this.revisions.get(k)||0)+1);this.meshes.delete(k);this.dirty.add(k);}this.water.onBlockEdited(x,y,z);return old;
  }
- ray(origin,dir,max=CFG.reach){const d=V.norm(dir);let x=Math.floor(origin.x),y=Math.floor(origin.y),z=Math.floor(origin.z),distance=0,normal={x:0,y:0,z:0};
+ // skip(x,y,z,id): a cell the ray passes through although it holds a block (the cursor ray skips cutaway-hidden and faded cells).
+ ray(origin,dir,max=CFG.reach,skip=null){const d=V.norm(dir);let x=Math.floor(origin.x),y=Math.floor(origin.y),z=Math.floor(origin.z),distance=0,normal={x:0,y:0,z:0};
   const sx=d.x>=0?1:-1,sy=d.y>=0?1:-1,sz=d.z>=0?1:-1,ddx=Math.abs(1/d.x),ddy=Math.abs(1/d.y),ddz=Math.abs(1/d.z);
   let tx=((sx>0?x+1:x)-origin.x)/d.x,ty=((sy>0?y+1:y)-origin.y)/d.y,tz=((sz>0?z+1:z)-origin.z)/d.z;if(!Number.isFinite(tx))tx=Infinity;if(!Number.isFinite(ty))ty=Infinity;if(!Number.isFinite(tz))tz=Infinity;
-  for(let n=0;n<300&&distance<=max;n++){const id=this.get(x,y,z);if(id)return{x,y,z,id,distance,normal,point:V.add(origin,V.scale(d,distance))};if(tx<=ty&&tx<=tz){x+=sx;distance=tx;tx+=ddx;normal={x:-sx,y:0,z:0};}else if(ty<=tz){y+=sy;distance=ty;ty+=ddy;normal={x:0,y:-sy,z:0};}else{z+=sz;distance=tz;tz+=ddz;normal={x:0,y:0,z:-sz};}}return null;
+  for(let n=0;n<300&&distance<=max;n++){const id=this.get(x,y,z);if(id&&!skip?.(x,y,z,id))return{x,y,z,id,distance,normal,point:V.add(origin,V.scale(d,distance))};if(tx<=ty&&tx<=tz){x+=sx;distance=tx;tx+=ddx;normal={x:-sx,y:0,z:0};}else if(ty<=tz){y+=sy;distance=ty;ty+=ddy;normal={x:0,y:-sy,z:0};}else{z+=sz;distance=tz;tz+=ddz;normal={x:0,y:0,z:-sz};}}return null;
  }
  mesh(cx,cy,cz){const it=this.meshSteps(cx,cy,cz);let result;do{result=it.next();}while(!result.done);return result.value;}
  *meshSteps(cx,cy,cz){const key=chunkKey(cx,cy,cz);let cached=this.meshes.get(key);if(cached)return cached;
