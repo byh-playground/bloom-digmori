@@ -76,6 +76,9 @@ async function boot(){
   window.BloomDiagnostics.setPhase('vector-art');
   $('load-status').textContent='원본 동료 SVG를 불러오고 있어요.';
   const companionVector=await loadCompanionVectorAsset(gamekit);
+  window.BloomDiagnostics.setPhase('player-art');
+  $('load-status').textContent='플레이어 부품 그림을 불러오고 있어요.';
+  const playerRig=await PlayerRig.load(DEPENDENCIES.playerArt.base);
   window.BloomDiagnostics.setPhase('three');
   $('load-status').textContent='three.js 렌더러를 불러오고 있어요.';
   const THREE=await loadThree();
@@ -85,8 +88,8 @@ async function boot(){
    console.info('Bloom dependency',e.phase,e.url);
   },attempt);
   window.BloomDiagnostics.setPhase('simulation');
-  app=new App(R,gamekit,companionVector,THREE);
-  window.Bloom={app,diagnostics:window.BloomDiagnostics,vectorAssetLoader:companionVectorLoader,companionVector:companionVector.pebbleMole,vectorAssets:companionVector,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
+  app=new App(R,gamekit,companionVector,THREE,playerRig);
+  window.Bloom={app,diagnostics:window.BloomDiagnostics,vectorAssetLoader:companionVectorLoader,companionVector:companionVector.pebbleMole,vectorAssets:companionVector,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,PlayerRig,playerRigLook,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
   app.start();window.BloomDiagnostics.setPhase('playing');console.info('Bloom boot: ready');return app;
  }catch(e){console.error(e);window.BloomDiagnostics.report(e,{kind:'boot-error',visibility:'fatal',origin:e.stage||'boot'});$('load-title').textContent='화원을 불러오지 못했어요';$('load-status').textContent=e.message;$('loading').querySelector('.spinner').style.display='none';$('load-retry').hidden=false;$('load-retry').disabled=false;return null;
  }finally{bootPromise=null;}})();return bootPromise;

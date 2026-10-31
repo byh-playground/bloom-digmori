@@ -39,7 +39,7 @@ class DynamicGeometry {
 }
 function interleavedGeometry(T,layout,vertices){const stride=layout.reduce((n,[,size])=>n+size,0),buffer=new T.InterleavedBuffer(vertices,stride),geometry=new T.BufferGeometry();let offset=0;for(const [name,size]of layout){geometry.setAttribute(name,new T.InterleavedBufferAttribute(buffer,size,offset));offset+=size;}return geometry;}
 class Renderer {
- constructor(canvas,gamekit,companionVector,THREE){
+ constructor(canvas,gamekit,companionVector,THREE,playerRig){
   if(typeof THREE?.WebGLRenderer!=='function')throw Error('three.js 모듈이 필요한 게임입니다.');
   const T=this.T=THREE;T.ColorManagement.enabled=false;this.canvas=canvas;
   // An opaque drawing buffer (three.js would otherwise request alpha:true), so straight-alpha
@@ -58,8 +58,11 @@ class Renderer {
   this.waterMaterial=this.material(RENDER_GLSL.waterVertex,RENDER_GLSL.waterFragment,{vp:{value:new Float32Array(16)},phase:{value:0}},{blend:'alpha',depthWrite:false});this.waterMeshes=new Map();this.waterDrawList=[];
   const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
   this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
-  this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);
+  this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);this.playerRig=new PlayerRigRenderer(this,playerRig);
  }
+ // Players are the cut-out PNG rig; enemies, NPCs and companions keep their GameKit SVG meshes.
+ hasCharacter(kind){return kind==='player'||this.companionRenderer.hasCharacter(kind);}
+ queueCharacter(item){if(item.kind==='player')this.playerRig.queue(item);else this.companionRenderer.queueCharacter(item);}
  // Nearest-filtered, unmipmapped, clamped textures exactly like the legacy atlases.
  pixelTexture(texture,flipY){const T=this.T;texture.flipY=flipY;texture.generateMipmaps=false;texture.minFilter=texture.magFilter=T.NearestFilter;texture.wrapS=texture.wrapT=T.ClampToEdgeWrapping;texture.needsUpdate=true;return texture;}
  canvasTexture(canvas){return this.pixelTexture(new this.T.CanvasTexture(canvas),true);}
@@ -74,8 +77,8 @@ class Renderer {
  // a shared placeholder sphere keeps it from scanning every streamed buffer.
  submit(object){object.visible=true;object.renderOrder=this.drawOrder++;this.stats.drawCalls++;object.geometry.boundingSphere??=this.unusedBounds;}
  beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values())m.object.visible=false;for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
-  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.companionRenderer.beginFrame();}
- endFrame(){this.three.render(this.scene,this.view);this.companionRenderer.endFrame();}
+  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.companionRenderer.beginFrame();this.playerRig.beginFrame();}
+ endFrame(){this.three.render(this.scene,this.view);this.companionRenderer.endFrame();this.playerRig.endFrame();}
  dynamic(kind,layout,uniforms,options){return this.pooled(kind,()=>{const geometry=new DynamicGeometry(this.T,layout),[vertex,fragment]=layout===RENDER_LAYOUT.mesh?[RENDER_GLSL.meshVertex,RENDER_GLSL.meshFragment]:layout===RENDER_LAYOUT.sprite?[RENDER_GLSL.spriteVertex,RENDER_GLSL.spriteFragment]:[RENDER_GLSL.vfxVertex,RENDER_GLSL.vfxFragment];return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(vertex,fragment,uniforms(),options))};});}
  submitDynamic(item,vertices,stride){item.object.geometry=item.geometry.upload(vertices);this.submit(item.object);this.stats.vertices+=vertices.length/stride;}
  // Lit vertex-colored boxes and beams; overlay draws (view arms) skip depth.
@@ -196,23 +199,8 @@ class Renderer {
    let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:[[1,1,1,1],[.78,.89,1,1],[1,.8,.9,1],[1,.92,.7,1]][hashStr(a.id)%4];if(a.id===actor.id)tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
    const whiteFlash=!!(reaction&&reaction.age<CFG.combat.feedback.flash&&reaction.age<45);
    if(reaction&&reaction.age<CFG.combat.feedback.flash&&!whiteFlash)tint=[1.75,.65,.5,1];
-   const rp=a.pos;this.companionRenderer.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,pos:rp,scale,tint,alpha:1,whiteFlash});
+   const rp=a.pos;this.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,actor:visual,reaction,pos:rp,scale,tint,alpha:1,whiteFlash});
    const raw=sim.actors[a.id],hit=raw?sim.physics.ground(raw,rp,2.5):null;if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}
-  }
-  for(const raw of Object.values(view.actors)){
-   if(raw.dead||raw.enemy||raw.combat.state==='roll'||this.camera.first&&raw.id===actor.id||raw.id!==actor.id&&!this.entityVisualReady(raw))continue;const a=this.combatFx.pose(raw),st=Inventory.stats(a),item=st.item,c=a.combat,act=c.action,rp=a.pos;
-   if(c.state==='attack'&&act&&!act.companionId&&!['arrow','quickshot','precision'].includes(act.kind)){
-    const phase=clamp((c.elapsed-act.wind)/act.active,0,1),pose=weaponVisualPose({...a,pos:rp},act,c.elapsed),col=c3(st.material?.color||'#edcea0');
-    if(act.weapon==='fist'){if(c.elapsed>=act.wind&&c.elapsed<act.wind+act.active){this.box(dyn,{...pose.tip,y:pose.tip.y-.13},{x:.23,y:.26,z:.23},col);}}
-    else{const root=V.add(pose.origin,V.scale(pose.dir,.45)),tip=pose.tip;this.weaponBeam(dyn,root,tip,act.weapon==='greatsword'?.19:act.weapon==='spear'?.075:.10,col);
-     if(act.weapon==='axe')this.box(dyn,{...tip,y:tip.y-.16},{x:.58,y:.32,z:.15},col,pose.dir);
-     if(act.weapon==='shield')this.box(dyn,{...tip,y:tip.y-.45},{x:.78,y:.9,z:.13},col,pose.dir);
-    }
-   }else if(a.companionSlot<0&&(item?.weapon||item?.tool)){
-    const f=a.facing,side={x:f.z,y:0,z:-f.x},p=V.add(rp,{x:f.x*.35+side.x*.35,y:1.05,z:f.z*.35+side.z*.35}),col=c3(st.material?.color||'#dac6a6');
-    if(item.weapon==='shield')this.box(dyn,p,{x:.75,y:.85,z:.12},col,f);
-    else{this.box(dyn,p,{x:.10,y:.13,z:.65},c3('#8e6246'),f);this.box(dyn,V.add(p,V.scale(f,.70)),{x:item.weapon==='greatsword'?.23:.13,y:.11,z:item.weapon==='spear'?1.6:item.weapon==='dagger'?.5:1.1},col,f);if(item.weapon==='axe'||item.tool==='pick')this.box(dyn,V.add(p,V.scale(f,1)),{x:.60,y:.27,z:.13},col,f);}
-   }
   }
   const dropSprites=[];for(const d of Object.values(view.drops)){const dp=d.pos,frame=this.dropAtlas.frames[d.item];if(!frame||!this.worldVisualReady(dp,.16))continue;
     const bob=Math.sin(d.age*.007+(hashStr(d.id)%37)*.12)*.045;
@@ -257,10 +245,10 @@ class Renderer {
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
   this.companionRenderer.prepare(view,sim,actor,dyn);
   this.drawColored(dyn);
-  this.companionRenderer.drawCharacters('world');this.companionRenderer.draw(false);
+  this.companionRenderer.drawCharacters('world');this.playerRig.draw('world');this.companionRenderer.draw(false);
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
   this.companionRenderer.draw(true);this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
-  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.companionRenderer.drawCharacters('late');this.combatFx.ui(sim);
+  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.companionRenderer.drawCharacters('late');this.playerRig.draw('late');this.combatFx.ui(sim);
   if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
  }
  // Reusable per-section water meshes. World streaming controls the same 3D readyChunks
@@ -348,7 +336,7 @@ class Renderer {
   // Drawn *after* world+sprites with depth disabled so it never clips through local terrain.
   this.drawColored(geom,{overlay:true,lights:NO_LIGHTS,vp:matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])),eye:[0,0,0],ambient:Math.max(.6,this.ambient),fog:[.69,.85,.86]});
  }
- free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.companionRenderer.dispose();
+ free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.companionRenderer.dispose();this.playerRig.dispose();
   for(const pool of this.pools.values())for(const item of pool.items){item.geometry?.dispose();item.object.material.dispose();}this.pools.clear();
   for(const m of [this.terrainMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
   this.combatFx.reset();this.healthHud.reset();this.three.dispose();}
