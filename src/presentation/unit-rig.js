@@ -1,8 +1,9 @@
 'use strict';
-/* Cut-out rig for the three new companion species (0.32.0): 뿌리 (root), 바위 병아리 (rock-chick), 버섯 달팽이 (mushroom-snail).
+/* Cut-out rig for the three companion species: 뿌리 (root), 바위 병아리 (rock-chick), 버섯 달팽이 (mushroom-snail).
  * Same path as the player rig: authored part PNGs from src/assets/units/<species>/ are assembled at runtime on a 2D canvas
  * per unit and shown in the three.js world as a camera-facing quad (RIG_GLSL from player-rig.js: depth tested, tint, white flash).
- * Presentation only: never reads or writes the simulation. Not routed to any game actor yet.
+ * Presentation only: never reads or writes the simulation. Since 0.33.0 every wild, boss and owned unit and every placed
+ * egg is drawn through UnitRigRenderer.queue (see unit-looks.js for the sim state → look mapping).
  * Rig units: ground at y=0, y up, x right; the art faces screen-left (side view), `flip` mirrors it. Adult body ≈ 100 units. */
 const UNIT_SPECIES=Object.freeze(['root','rock-chick','mushroom-snail']);
 const UNIT_VIEWS=Object.freeze(['front','side','back']);
@@ -147,6 +148,10 @@ class UnitRig{
   ctx.save();ctx.translate(origin.x,origin.y);if(look.flip)ctx.scale(-1,1);this.effect(ctx,p,U,'front',view);ctx.restore();
   return{view,face:view==='back'?null:faceKey,parts:drawn,effect:p.fx&&p.fxQ>=0&&p.fxQ<=1?p.fx:null};
  }
+ // The egg part (item, drop and placed block art) standing on the ground row. look.wobble 0..1 rocks it faster and
+ // wider as hatching nears; deterministic in look.seconds.
+ drawEgg(ctx,look,origin){if(look.species!==this.species)throw Error('동료 리그 종 불일치: '+look.species);const m=this.parts.egg,im=this.images.egg,U=UNIT_VIEW.pixelsPerUnit*origin.scale,s=this.scale[m.group]*U,w=unitClamp01(look.wobble||0),r=Math.sin((look.seconds||0)*(5+16*w))*.2*w;
+  ctx.save();ctx.translate(origin.x,origin.y);ctx.rotate(r);ctx.drawImage(im,-m.anchor[0]*s,-m.anchor[1]*s,im.width*s,im.height*s);ctx.restore();return{view:'front',face:null,parts:['egg'],effect:null};}
  // Signature effects in rig space, deterministic in the anim progress. layer: 'back' (behind the body) or 'front'.
  effect(ctx,p,U,layer,view){
   const q=p.fxQ;if(!p.fx||q<0||q>1)return;const fade=1-q*q;ctx.save();ctx.lineJoin='round';
@@ -181,9 +186,9 @@ class UnitRigRenderer{
  queue(item){
   const look=item.look,rig=this.rigs[look?.species];if(!rig)throw Error('알 수 없는 동료 종: '+look?.species);
   const size=look.stage==='boss'?UNIT_VIEW.bossCanvas:UNIT_VIEW.canvas,s=this.surface(item.key,size);
-  if(s.frame!==this.r.frame){s.ctx.clearRect(0,0,size,size);const k=size/UNIT_VIEW.canvas;s.info=rig.draw(s.ctx,look,{x:size/2,y:UNIT_VIEW.ground*k,scale:k});s.texture.needsUpdate=true;s.frame=this.r.frame;s.look=look;}
+  if(s.frame!==this.r.frame){s.ctx.clearRect(0,0,size,size);const k=size/UNIT_VIEW.canvas,origin={x:size/2,y:UNIT_VIEW.ground*k,scale:k};s.info=look.egg?rig.drawEgg(s.ctx,look,origin):rig.draw(s.ctx,look,origin);s.texture.needsUpdate=true;s.frame=this.r.frame;s.look=look;}
   this.items.push({...item,surface:s});
-  this.samples.push({mode:'unit-rig',phase:item.phase,key:item.key,species:look.species,anim:look.anim,progress:look.progress??0,view:s.info.view,flip:!!look.flip,face:s.info.face,grade:look.grade??1,stage:look.stage||'adult',size:look.size??1,effect:s.info.effect,parts:s.info.parts.length,whiteFlash:!!item.whiteFlash,alpha:item.alpha??1,depthTest:true,depthWrite:false,pos:{...item.pos}});
+  this.samples.push({mode:'unit-rig',phase:item.phase,key:item.key,role:item.role||null,species:look.species,egg:!!look.egg,anim:look.egg?'egg':look.anim,progress:look.progress??0,view:s.info.view,flip:!!look.flip,face:s.info.face,grade:look.grade??1,stage:look.stage||'adult',size:look.size??1,effect:s.info.effect,parts:s.info.parts.length,whiteFlash:!!item.whiteFlash,alpha:item.alpha??1,depthTest:true,depthWrite:false,pos:{...item.pos}});
  }
  draw(phase){const r=this.r,T=r.T;
   for(const item of this.items){if(item.phase!==phase)continue;

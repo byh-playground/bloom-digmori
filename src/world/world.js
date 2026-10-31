@@ -1,9 +1,21 @@
 'use strict';
+// The dungeon is the cave realm's boss structure (D-102): a rock-chick pack guards the rooms and
+// 광맥 병아리 대왕 waits in the vault (최심부).
 const DUNGEON_THEMES=Object.freeze([
- Object.freeze({name:'잊힌 석실',wall:'cobble',trim:'obsidian',species:['shell','leaf']}),
- Object.freeze({name:'균사 성소',wall:'cobble',trim:'stem',species:['shell','leaf']}),
- Object.freeze({name:'수정 묘역',wall:'stone',trim:'obsidian',species:['shell','leaf']})
+ Object.freeze({name:'잊힌 석실',wall:'cobble',trim:'obsidian',species:['rock-chick']}),
+ Object.freeze({name:'균사 성소',wall:'cobble',trim:'stem',species:['rock-chick']}),
+ Object.freeze({name:'수정 묘역',wall:'stone',trim:'obsidian',species:['rock-chick']})
 ]);
+// Surface boss structures (D-102), generated like Minecraft structures: one candidate per `spacing` grid cell,
+// kept with `chance` percent when its centre sits in a suitable terrain biome on gentle ground. Biomes blend, so a
+// structure appears wherever its biome happens to be. The nearest suitable cell to the world origin is always kept,
+// so every seed has one of each within walking reach of spawn. Shapes are plain voxels:
+// grove = 뿌리 거인의 꽃 고리 (grass clearing, leaf hedge ring with four gaps, log posts with torches, dug-soil centre);
+// ring  = 포자 군주의 버섯 고리 (mycelium clearing ringed by eight mushrooms, a crystal at the centre).
+const BOSS_STRUCTURES=Object.freeze({
+ grove:Object.freeze({name:'뿌리 거인의 꽃 고리',species:'root',biomes:Object.freeze(['meadow']),spacing:80,chance:40,salt:3701,radius:7,attempts:6}),
+ ring:Object.freeze({name:'포자 군주의 버섯 고리',species:'mushroom-snail',biomes:Object.freeze(['forest','fungal']),spacing:80,chance:40,salt:4701,radius:7,attempts:6})
+});
 const DUNGEON_ROOMS=Object.freeze([
  Object.freeze({name:'입구',dx:0,dz:0,r:5,role:'entrance'}),
  Object.freeze({name:'동쪽 경비실',dx:16,dz:-4,r:4,role:'guard'}),
@@ -172,6 +184,19 @@ class VoxelWorld {
   return{height:h,canopy:rule.canopy};
  }
  biome(x,z){const h=this.height(Math.floor(x),Math.floor(z));return h<3?'이슬 해안':BIOMES[this.climate(x,z).id].name;}
+ // Gameplay realm (REALMS key) at a point: underground (≥3 blocks under the column surface) is the cave realm.
+ realm(x,y,z){if(y<this.height(Math.floor(x),Math.floor(z))-3)return 'cave';return BIOMES[this.climate(x,z).id].realm||null;}
+ // Surface boss structure candidate of one grid cell (pure in seed and cell), or null when no attempt is suitable.
+ bossSite(type,gx,gz){const def=BOSS_STRUCTURES[type],span=def.spacing-24;
+  for(let attempt=0;attempt<def.attempts;attempt++){const h=hash3(gx,attempt,gz,this.seed+def.salt),x=gx*def.spacing+12+h%span,z=gz*def.spacing+12+(h>>>8)%span,y=this.height(x,z);
+   if(Math.hypot(x,z)<28||Math.hypot(x-24,z+14)<18||y<CFG.sea+2||y>18||!def.biomes.includes(this.climate(x,z).id))continue;
+   let low=y,high=y;for(let i=0;i<8;i++){const a=i*Math.PI/4,q=this.height(Math.round(x+Math.cos(a)*def.radius),Math.round(z+Math.sin(a)*def.radius));low=Math.min(low,q);high=Math.max(high,q);}
+   if(high-low>4)continue;return{type,key:type+':'+gx+':'+gz,x,y,z,hash:h,gx,gz};}
+  return null;}
+ // The guaranteed cell: nearest suitable candidate to the origin within four grid rings (cached; pure in seed).
+ bossAnchor(type){this.bossAnchors??=new Map();if(this.bossAnchors.has(type))return this.bossAnchors.get(type);let best=null;
+  for(let gz=-4;gz<=3;gz++)for(let gx=-4;gx<=3;gx++){const s=this.bossSite(type,gx,gz);if(s&&(!best||Math.hypot(s.x,s.z)<Math.hypot(best.x,best.z)||Math.hypot(s.x,s.z)===Math.hypot(best.x,best.z)&&cmp(s.key,best.key)<0))best=s;}
+  this.bossAnchors.set(type,best);return best;}
  caveAnchors(minX,minZ,maxX,maxZ){const out=[],spacing=CFG.worldgen.caveSpacing,margin=CFG.worldgen.caveLength+8;
   const add=c=>{if(c&&c.x+margin>=minX&&c.x-margin<=maxX&&c.z+margin>=minZ&&c.z-margin<=maxZ)out.push(c);};
   add({key:'cave:start',x:0,z:-20,y:4,dx:0,dz:-1});
@@ -211,7 +236,12 @@ class VoxelWorld {
    const mouth=depth<10&&Math.abs(noise(x*.040,0,z*.040,this.seed+682))<.05&&Math.abs(noise(x*.022,y*.040,z*.022,this.seed+683))<.12;
    return cheese||spaghetti||noodle||shaft||mouth;
   }
- structureAnchors(minX,minZ,maxX,maxZ){const out=[],add=(type,spacing,salt,depthBase,depthSpan,margin)=>{const gx0=Math.floor((minX-margin)/spacing),gx1=Math.floor((maxX+margin)/spacing),gz0=Math.floor((minZ-margin)/spacing),gz1=Math.floor((maxZ+margin)/spacing);for(let gz=gz0;gz<=gz1;gz++)for(let gx=gx0;gx<=gx1;gx++){const h=hash3(gx,0,gz,this.seed+salt),span=Math.max(1,spacing-32),x=gx*spacing+16+(h%span),z=gz*spacing+16+((h>>>8)%span);if(Math.hypot(x,z)<20)continue;const y=depthBase-((h>>>16)%depthSpan);out.push({type,key:type+':'+gx+':'+gz,x,y,z,hash:h});}};add('mine',CFG.worldgen.mineSpacing,1701,-6,9,24);add('dungeon',CFG.worldgen.dungeonSpacing,2701,-17,8,38);return out.sort((a,b)=>cmp(a.key,b.key));}
+ // The dungeon margin covers its 66-step surface staircase (r+66 north of the centre). With the old 38 the chunks past
+ // that reach never saw the dungeon, so the stairs stopped underground and the cave boss could not be walked to.
+ structureAnchors(minX,minZ,maxX,maxZ){const out=[],add=(type,spacing,salt,depthBase,depthSpan,margin)=>{const gx0=Math.floor((minX-margin)/spacing),gx1=Math.floor((maxX+margin)/spacing),gz0=Math.floor((minZ-margin)/spacing),gz1=Math.floor((maxZ+margin)/spacing);for(let gz=gz0;gz<=gz1;gz++)for(let gx=gx0;gx<=gx1;gx++){const h=hash3(gx,0,gz,this.seed+salt),span=Math.max(1,spacing-32),x=gx*spacing+16+(h%span),z=gz*spacing+16+((h>>>8)%span);if(Math.hypot(x,z)<20)continue;const y=depthBase-((h>>>16)%depthSpan);out.push({type,key:type+':'+gx+':'+gz,x,y,z,hash:h});}};add('mine',CFG.worldgen.mineSpacing,1701,-6,9,24);add('dungeon',CFG.worldgen.dungeonSpacing,2701,-17,8,80);
+  for(const [type,def]of Object.entries(BOSS_STRUCTURES)){const margin=def.radius+2,anchor=this.bossAnchor(type),gx0=Math.floor((minX-margin)/def.spacing),gx1=Math.floor((maxX+margin)/def.spacing),gz0=Math.floor((minZ-margin)/def.spacing),gz1=Math.floor((maxZ+margin)/def.spacing);
+   for(let gz=gz0;gz<=gz1;gz++)for(let gx=gx0;gx<=gx1;gx++){const keep=anchor&&anchor.gx===gx&&anchor.gz===gz,roll=hash3(gx,7,gz,this.seed+def.salt+1)%100;if(!keep&&roll>=def.chance)continue;const site=keep?anchor:this.bossSite(type,gx,gz);if(site&&site.x+margin>=minX&&site.x-margin<=maxX&&site.z+margin>=minZ&&site.z-margin<=maxZ)out.push({type,key:site.key,x:site.x,y:site.y,z:site.z,hash:site.hash});}}
+  return out.sort((a,b)=>cmp(a.key,b.key));}
  structuresNear(pos,radius=CFG.worldgen.resourceGuideRadius){return this.structureAnchors(pos.x-radius,pos.z-radius,pos.x+radius,pos.z+radius).map(s=>({...s,distance:Math.hypot(s.x-pos.x,s.y-pos.y,s.z-pos.z)})).filter(s=>s.distance<=radius).sort((a,b)=>a.distance-b.distance||cmp(a.key,b.key));}
  nearestStructure(pos,radius=CFG.worldgen.resourceGuideRadius){return this.structuresNear(pos,radius)[0]||null;}
  rawTerrain(x,y,z,h){if(y<=CFG.bottom)return BID.bedrock;if(y>=CFG.top||y>h)return 0;
@@ -247,8 +277,27 @@ class VoxelWorld {
      paint(s.x,s.y,s.z,BID.lootChest);paint(s.x+2,s.y+1,s.z+2,BID.torch);
      continue;
     }
+    if(BOSS_STRUCTURES[s.type]){
+     const R=BOSS_STRUCTURES[s.type].radius;if(s.x+R+1<x0||s.x-R-1>=x0+C||s.z+R+1<z0||s.z-R-1>=z0+C||s.y+9<y0||s.y-4>=y0+C)continue;
+     const grove=s.type==='grove',floor=grove?BID.grass:BID.mycelium;
+     // A flat clearing: solid soil up to the floor, open air above it, so the boss always has room to stand and fight.
+     for(let dz=-R;dz<=R;dz++)for(let dx=-R;dx<=R;dx++){const d=Math.hypot(dx,dz);if(d>R+.5)continue;
+      for(let dy=-3;dy<0;dy++)paint(s.x+dx,s.y+dy,s.z+dz,BID.dirt);paint(s.x+dx,s.y,s.z+dz,grove&&d<2.5?BID.dirt:floor);for(let dy=1;dy<=8;dy++)carve(s.x+dx,s.y+dy,s.z+dz);}
+     if(grove){
+      // Leaf hedge ring with four entrance gaps, eight log posts topped by torches.
+      for(let dz=-R;dz<=R;dz++)for(let dx=-R;dx<=R;dx++){const d=Math.hypot(dx,dz);if(d<R-1.2||d>R-.2||Math.min(Math.abs(dx),Math.abs(dz))<=1)continue;paint(s.x+dx,s.y+1,s.z+dz,BID.leaves);}
+      for(let i=0;i<8;i++){const a=(i+.5)*Math.PI/4,px=s.x+Math.round(Math.cos(a)*(R-.7)),pz=s.z+Math.round(Math.sin(a)*(R-.7));for(let dy=1;dy<=3;dy++)paint(px,s.y+dy,pz,BID.log);paint(px,s.y+4,pz,BID.torch);}
+     }else{
+      // Eight mushrooms of alternating height around the clearing; a resonant crystal marks the lord's centre.
+      for(let i=0;i<8;i++){const a=i*Math.PI/4,px=s.x+Math.round(Math.cos(a)*(R-1)),pz=s.z+Math.round(Math.sin(a)*(R-1)),tall=2+i%2;
+       for(let dy=1;dy<=tall;dy++)paint(px,s.y+dy,pz,BID.stem);for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++)paint(px+dx,s.y+tall+1,pz+dz,BID.cap);paint(px,s.y+tall+2,pz,BID.cap);}
+      paint(s.x,s.y,s.z,BID.crystalBloom);
+     }
+     continue;
+    }
     const rooms=this.dungeonRooms(s),theme=this.dungeonTheme(s),wall=BID[theme.wall],trim=BID[theme.trim],base=s.y;
-    if(base+6<y0||base-2>=y0+C)continue;
+    // The surface staircase climbs up to 33 blocks above the floor; chunks up to there must still carve it.
+    if(base+40<y0||base-2>=y0+C)continue;
     // Geometry and semantic rooms are one deterministic seed-derived definition.
     for(const room of rooms){const r=room.r;if(room.x+r<x0||room.x-r>=x0+C||room.z+r<z0||room.z-r>=z0+C)continue;
      for(let dz=-r;dz<=r;dz++)for(let dx=-r;dx<=r;dx++)for(let dy=0;dy<=5;dy++){
@@ -322,7 +371,7 @@ class VoxelWorld {
    if(y0<0&&y0+C>CFG.bottom+3){
     for(let gz=Math.floor(z0/5);gz<=Math.floor((z0+C-1)/5);gz++)for(let gx=Math.floor(x0/5);gx<=Math.floor((x0+C-1)/5);gx++){
      const key=hash3(gx,0,gz,this.seed+2991),x=gx*5+key%5,z=gz*5+(key>>>4)%5;
-     if(x<x0||x>=x0+C||z<z0||z>=z0+C||key%5!==0||generatedStructures.some(s=>Math.abs(x-s.x)<46&&Math.abs(z-s.z)<47))continue;
+     if(x<x0||x>=x0+C||z<z0||z>=z0+C||key%5!==0||generatedStructures.some(s=>!BOSS_STRUCTURES[s.type]&&Math.abs(x-s.x)<46&&Math.abs(z-s.z)<47))continue;
      for(let y=Math.max(y0,CFG.bottom+4);y<Math.min(y0+C,-8);y++){
       const j=(x-x0)+C*((y-y0)+C*(z-z0));
       if(out[j]||y<=y0)continue;
@@ -401,6 +450,8 @@ class VoxelWorld {
    padded[at(x+1,y+1,0)]=back[x+C*(y+C*(C-1))];
    padded[at(x+1,y+1,C+1)]=front[x+C*y];
   }
+  // Sprite-drawn blocks (mesh:false, the companion eggs) never produce cube faces nor hide their neighbours' faces.
+  for(let n=0;n<padded.length;n++)if(padded[n]&&BLOCKS[padded[n]].mesh===false)padded[n]=0;
   const voxel=(x,y,z)=>padded[at(x+1,y+1,z+1)];
   // Greedy face merging, material and direction remain part of the merge key.
   for(let axis=0;axis<3;axis++){

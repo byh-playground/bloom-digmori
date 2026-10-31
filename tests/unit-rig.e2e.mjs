@@ -1,4 +1,4 @@
-// New species cut-out rig (0.32.0): the deterministic preview loads with 0 errors and draws every species,
+// Companion species cut-out rig: the deterministic preview loads with 0 errors and draws every species,
 // view, anim and expression from the authored PNG parts listed in each <species>-parts.json.
 import {serveStatic} from '../scripts/static-server.mjs';
 import {chromium} from 'playwright';

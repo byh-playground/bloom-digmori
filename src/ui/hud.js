@@ -11,11 +11,13 @@ function projectWorldToScreen(m,pos,width,height){
  if(![nx,ny,depth].every(Number.isFinite)||depth< -1||depth>1)return null;
  return{x:(nx*.5+.5)*width,y:(.5-ny*.5)*height,depth,w};
 }
+// Wild units are plain wildlife since 0.33.0 (no recruitment): name plus state; structure bosses show their own name.
+function enemyLabelName(a){if(a.boss)return SPECIES[a.speciesId].boss.name+' · 보스';if(a.speciesId)return SPECIES[a.speciesId].name+(a.wildState==='retaliating'?' · 반격 중':' · 야생');return a.enemy?'적대 생물':'플레이어 · '+String(a.id).slice(0,6);}
 class EnemyHealthHUD {
  constructor(renderer){this.r=renderer;this.root=document.getElementById('enemy-labels');this.nodes=new Map();this.world=null;this.samples=[];this.clock=0;this.mobile=matchMedia('(pointer:coarse)').matches;}
  reset(){for(const v of this.nodes.values())v.node.remove();this.nodes.clear();this.world=null;this.clock=0;this.samples=[];}
- create(a){const node=document.createElement('div');node.className='enemy-label';node.dataset.actorId=a.id;node.classList.toggle('candidate',!!a.speciesId);
-  const caption=document.createElement('div');caption.className='enemy-caption';const name=document.createElement('span');name.className='enemy-name';name.textContent=a.speciesId?SPECIES[a.speciesId].name+(a.wildState==='retaliating'?' · 반격 중':' · 야생 후보'):a.boss?BOSS.name:a.enemy?'적대 생물':'플레이어 · '+String(a.id).slice(0,6);
+ create(a){const node=document.createElement('div');node.className='enemy-label';node.dataset.actorId=a.id;node.classList.toggle('wild',!!a.speciesId);
+  const caption=document.createElement('div');caption.className='enemy-caption';const name=document.createElement('span');name.className='enemy-name';name.textContent=enemyLabelName(a);
   const warning=document.createElement('span');warning.className='enemy-warning';warning.textContent='!';warning.hidden=true;caption.append(name,warning);
   const bar=document.createElement('div');bar.className='enemy-health';bar.setAttribute('role','progressbar');bar.setAttribute('aria-label',name.textContent+' 생명력');
   const trail=document.createElement('i');trail.className='enemy-health-trail';const fill=document.createElement('i');fill.className='enemy-health-fill';bar.append(trail,fill);
@@ -42,7 +44,7 @@ class EnemyHealthHUD {
    else if(meter.value<entry.hp){entry.trailRatio=Math.max(entry.trailRatio,entry.hp/entry.max);entry.changedAt=this.clock;entry.flashUntil=this.clock+170;}
    entry.hp=meter.value;entry.max=meter.maximum;
    if(this.clock-entry.changedAt>HEALTH_HUD.trailDelay)entry.trailRatio=Math.max(meter.ratio,entry.trailRatio-Math.max(0,dt)/HEALTH_HUD.trailDuration);
-   entry.name.textContent=a.speciesId?SPECIES[a.speciesId].name+(a.wildState==='retaliating'?' · 반격 중':' · 야생 후보'):a.boss?BOSS.name:a.enemy?'적대 생물':'플레이어 · '+String(a.id).slice(0,6);entry.node.classList.toggle('candidate',!!a.speciesId);entry.node.classList.toggle('retaliating',a.wildState==='retaliating');entry.number.textContent=meter.text;entry.fill.style.transform='scaleX('+meter.ratio+')';entry.trail.style.transform='scaleX('+Math.max(entry.trailRatio,meter.ratio)+')';
+   entry.name.textContent=enemyLabelName(a);entry.node.classList.toggle('wild',!!a.speciesId);entry.node.classList.toggle('retaliating',a.wildState==='retaliating');entry.number.textContent=meter.text;entry.fill.style.transform='scaleX('+meter.ratio+')';entry.trail.style.transform='scaleX('+Math.max(entry.trailRatio,meter.ratio)+')';
    entry.bar.setAttribute('aria-valuemin','0');entry.bar.setAttribute('aria-valuemax',String(meter.maximum));entry.bar.setAttribute('aria-valuenow',String(meter.value));entry.bar.setAttribute('aria-valuetext',meter.text);
    entry.node.dataset.hp=String(meter.value);entry.node.dataset.maxHp=String(meter.maximum);entry.node.classList.toggle('targeted',a.id===aim);entry.node.classList.toggle('critical',meter.ratio<=.25);entry.node.classList.toggle('damaged',this.clock<entry.flashUntil);entry.node.classList.toggle('boss',!!a.boss);entry.node.classList.toggle('player',!a.enemy&&!a.speciesId&&!a.boss);
    entry.warning.hidden=!(a.combat.state==='attack'&&a.combat.action&&a.combat.elapsed<a.combat.action.wind);

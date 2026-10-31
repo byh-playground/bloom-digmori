@@ -1,10 +1,11 @@
 'use strict';
 class Simulation {
- constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
- createActor(id,pos,speciesId=null,boss=false){const d=boss?BOSS:speciesId?SPECIES[speciesId]?.wild:null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId|| (boss?'boss':null),speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
+ constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.companions=new Companions(this);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.eggs={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
+ createActor(id,pos,speciesId=null,boss=false){const d=speciesId?(boss?SPECIES[speciesId]?.boss:SPECIES[speciesId]?.wild):null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),companionSlot:-1,combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false,primary:'none'},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
  addPlayer(id){if(this.actors[id])return;const count=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length,p={x:.5+count*1.7,y:5.1,z:.5};const a=this.createActor(id,p);this.actors[id]=a;this.physics.syncTerrain(Object.values(this.actors),[...Object.values(this.drops),...this.companions.bodies()],Object.values(this.projectiles),this.tick);this.physics.addActor(a);return a;}
  addCreature(speciesId,pos,structureKey=null){if(!SPECIES[speciesId]||!structureKey&&Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey).length>=CFG.creatures.maxWild)return null;const id='creature:'+ ++this.sequence,a=this.createActor(id,pos,speciesId);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=0;this.actors[id]=a;this.physics.addActor(a);return a;}
- addBoss(pos){if(Object.values(this.actors).some(a=>a.boss&&!a.dead))return null;const id='boss:'+ ++this.sequence,a=this.createActor(id,pos,'warden',true);a.homePos={...pos};this.actors[id]=a;this.physics.addActor(a);return a;}
+ // A structure boss is the species body x3 with its hat (rig stage 'boss'); one live boss per structure, at most four at once.
+ addBoss(speciesId,pos,structureKey=null){const live=Object.values(this.actors).filter(a=>a.boss&&!a.dead);if(!SPECIES[speciesId]?.boss||live.length>=4||structureKey&&live.some(a=>a.structureKey===structureKey))return null;const id='boss:'+ ++this.sequence,a=this.createActor(id,pos,speciesId,true);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=600;this.actors[id]=a;this.physics.addActor(a);return a;}
  emit(type,actor,data={}){if(this.silent)return;if(this.effects.length>=CFG.presentation.maxBuffered)throw Error('표현 이벤트 버퍼 초과');const sequence=this.presentationSequence++;this.effects.push({id:this.epoch+':'+this.tick+':'+sequence,tick:this.tick,sequence,type,pos:{...actor.pos},actorId:actor.id,enemy:actor.enemy,...data});}
  drainEffects(){const events=this.effects;this.effects=[];return events;}
  markItem(id){this.progress[id]=true;}
@@ -29,7 +30,6 @@ class Simulation {
  aim(actor){return this.terrain.ray(V.add(actor.pos,{x:0,y:CFG.player.eyeHeight,z:0}),actor.facing,CFG.reach);}
   interact(actor){const hit=this.aim(actor);if(!hit)return this.useConsumable(actor);const block=BLOCKS[hit.id];if(!block.station)return this.useConsumable(actor);const key=blockKey(hit.x,hit.y,hit.z);
    if(block.station==='loot')return this.openChest(actor,hit);
-  if(block.station==='altar')return this.summon(actor);
   actor.inventory.station=key;if(block.station==='furnace'&&!this.furnaces[key])this.furnaces[key]={slots:[null,null,null],burn:0,burnTotal:0,progress:0,recipe:null};this.emit('open-station',actor,{station:block.station,key});return true;}
   useConsumable(actor){const i=actor.inventory,s=Inventory.selected(i);if(!s||actor.hp>=actor.maxHp||!['food','healingSalve'].includes(s.id))return false;
    actor.hp=Math.min(actor.maxHp,actor.hp+(s.id==='healingSalve'?50:25));if(--s.count===0)i.slots[i.selected]=null;this.emit('heal',actor,{item:s.id});return true;
@@ -50,9 +50,13 @@ class Simulation {
   if(selected.id==='waterBucket'){const hit=this.terrain.ray(eye,actor.facing);if(!hit)return false;const x=hit.x+hit.normal.x,y=hit.y+hit.normal.y,z=hit.z+hit.normal.z;
    if(!water.source(x,y,z,true))return false;selected.id='bucket';this.emit('water-place',actor,{pos:{x:x+.5,y:y+.5,z:z+.5}});return true;}
   return false;}
- place(actor){const inv=actor.inventory,stack=Inventory.selected(inv),def=stack?ITEMS[stack.id]:null;if(!def?.block){this.emit('place-blocked',actor,{reason:'item'});return false;}const hit=this.aim(actor);if(!hit){this.emit('place-blocked',actor,{reason:'target'});return false;}const x=hit.x+hit.normal.x,y=hit.y+hit.normal.y,z=hit.z+hit.normal.z;
-  if(this.terrain.get(x,y,z)||this.physics.overlapActors({x:x+.5,y:y+.5,z:z+.5},.49).length){this.emit('place-blocked',actor,{pos:{x:x+.5,y:y+.5,z:z+.5}});return false;}
+ place(actor){const inv=actor.inventory,stack=Inventory.selected(inv),def=stack?ITEMS[stack.id]:null;if(!def?.block){this.emit('place-blocked',actor,{reason:'item'});return false;}const hit=this.aim(actor);if(!hit){this.emit('place-blocked',actor,{reason:'target'});return false;}const x=hit.x+hit.normal.x,y=hit.y+hit.normal.y,z=hit.z+hit.normal.z,egg=eggSpecies(def.block);
+  // D-103: an egg is set down on the ground (the top face of a solid block) and hatches where it lies. It is not solid,
+  // so a player standing on the spot does not block it.
+  if(egg&&(hit.normal.y!==1||!this.terrain.isSolid(hit.id)||Object.keys(this.eggs).length>=64)){this.emit('place-blocked',actor,{reason:'egg',pos:{x:x+.5,y:y+.5,z:z+.5}});return false;}
+  if(this.terrain.get(x,y,z)||!egg&&this.physics.overlapActors({x:x+.5,y:y+.5,z:z+.5},.49).length){this.emit('place-blocked',actor,{pos:{x:x+.5,y:y+.5,z:z+.5}});return false;}
   if(this.terrain.set(x,y,z,def.block)===false)return false;if(--stack.count===0)inv.slots[inv.selected]=null;
+  if(egg){const key=blockKey(x,y,z);this.eggs[key]={key,x,y,z,species:egg,owner:actor.id,placedTick:this.tick,hatchTick:this.tick+ticksForMs(EGG_RULES.hatchMs)};this.emit('egg-place',actor,{pos:{x:x+.5,y,z:z+.5},species:egg,key});}
   if(stack.id==='furnace')this.furnaces[blockKey(x,y,z)]={slots:[null,null,null],burn:0,burnTotal:0,progress:0,recipe:null};this.emit('place',actor,{pos:{x:x+.5,y:y+.5,z:z+.5},color:BLOCKS[def.block].color,normal:hit.normal,blockId:def.block});return true;}
  mine(actor,held){if(!held){actor.mine.target=null;actor.mine.elapsed=0;return;}const hit=this.aim(actor);if(!hit||Object.keys(this.drops).length>=CFG.maxDrops)return;
   const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z),item=Inventory.stats(actor).item;
@@ -65,7 +69,7 @@ class Simulation {
  }
  harvest(actor,hit){
   const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z);if(this.terrain.get(hit.x,hit.y,hit.z)!==hit.id||!Number.isFinite(b?.hardness)||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id=this.terrain.set(hit.x,hit.y,hit.z,0);if(id===false)return false;
-  const pos={x:hit.x+.5,y:hit.y+.5,z:hit.z+.5};this.spawnDrop(b.drop||b.id,1,pos);
+  const pos={x:hit.x+.5,y:hit.y+.5,z:hit.z+.5};this.spawnDrop(b.drop||b.id,1,pos);if(b.egg)delete this.eggs[key];
   if(CFG.rpg.mining[b.id])RPG.gain(actor,CFG.rpg.mining[b.id],this,'mine');
    if(id===BID.leaves){this.spawnDrop('leaves',1,pos);if(hash3(hit.x,hit.y,hit.z,this.terrain.seed)%4===0)this.spawnDrop('food',1,pos);}
   const furnace=this.furnaces[key];if(furnace){for(const s of furnace.slots)if(s)this.spawnDrop(s.id,s.count,pos);delete this.furnaces[key];}
@@ -85,18 +89,18 @@ class Simulation {
     case 'upgrade':return RPG.upgrade(actor,c.skill,this);
    case 'eat':return this.useConsumable(actor);
    case 'drop':{const i=actor.inventory,s=i.cursor||Inventory.selected(i);if(!s)return false;const n=c.all?s.count:1;if(!this.spawnDrop(s.id,n,V.add(actor.pos,V.scale(actor.facing,1))))return false;s.count-=n;if(!s.count){if(i.cursor===s)i.cursor=null;else i.slots[i.selected]=null;}return true;}
-   case 'summon':return this.summon(actor);
   }return false;
  }
- summon(actor){if(V.len(V.sub(actor.pos,this.terrain.altar))>7||Object.values(this.actors).some(a=>a.boss&&!a.dead)||!Inventory.takeFrom(actor.inventory.slots,'sigil',1))return false;
-  const pos={x:24.5,y:6.1,z:-17.5},boss=this.addBoss(pos);if(!boss)return false;if(this.progress.boss){boss.maxHp=boss.hp*1.5;boss.hp=boss.maxHp;}this.emit('boss-spawn',boss);return true;}
  kill(actor,source){
   if(actor.dead)return;if(!actor.enemy&&!actor.speciesId&&!actor.boss)this.companions.unavailable(actor);actor.dead=true;Combat.resetCombo(actor.combat);actor.combat.state='dead';actor.combat.action=null;actor.respawn=CFG.respawn;this.emit('death',actor);
-  if(actor.speciesId){this.physics.removeBody(actor);actor.body=null;if(actor.boss)this.completeBoss(actor,source);this.clearDungeonIfEmpty(actor.structureKey,actor);}
-  else if(actor.boss){this.completeBoss(actor,source);this.physics.removeBody(actor);actor.body=null;}
+  if(actor.speciesId){this.physics.removeBody(actor);actor.body=null;if(actor.boss)this.completeBoss(actor,source);else for(const [id,count]of SPECIES[actor.speciesId].wild.loot)this.spawnDrop(id,count,actor.pos);this.clearDungeonIfEmpty(actor.structureKey,actor);}
   else{const i=actor.inventory;for(const s of [...i.slots,...i.grid,i.cursor,...Object.values(i.armor)])if(s)this.spawnDrop(s.id,s.count,actor.pos);actor.inventory=Inventory.empty();const b=this.physics.world.getRigidBody(actor.body);b.setBodyType(this.R.RigidBodyType.Fixed,true);}
  }
- completeBoss(actor,source){const killer=this.actors[source];if(killer&&!killer.enemy&&!killer.speciesId&&!killer.boss)RPG.gain(killer,CFG.rpg.xp.boss,this,'combat');for(const [id,count]of BOSS.loot)this.spawnDrop(id,count,actor.pos);this.progress.boss=true;this.progress.victories=(this.progress.victories||0)+1;this.emit('victory',actor,{source});}
+ // D-107 egg rule: a player's first kill of each boss species always drops its egg, later kills roll EGG_RULES.chance.
+ completeBoss(actor,source){const killer=this.actors[source],player=killer&&!killer.enemy&&!killer.speciesId&&!killer.boss?killer:null,species=actor.speciesId,first=!this.progress.boss;if(player)RPG.gain(player,CFG.rpg.xp.boss,this,'combat');for(const [id,count]of BOSS_LOOT)this.spawnDrop(id,count,actor.pos);
+  const firstKey=player?'egg:'+player.id+':'+species:null,guaranteed=!!firstKey&&!this.progress[firstKey],egg=guaranteed||hash3(hashStr(actor.id),this.tick,this.terrain.seed,4127)%100<EGG_RULES.chance;
+  if(guaranteed)this.progress[firstKey]=true;if(egg&&!this.spawnDrop(SPECIES[species].egg,1,actor.pos)&&player)Inventory.addTo(player.inventory.slots,SPECIES[species].egg,1);
+  if(actor.structureKey)this.progress['boss:'+actor.structureKey]=this.tick;this.progress.boss=true;this.progress.victories=(this.progress.victories||0)+1;this.emit('victory',actor,{source,species,first,egg,guaranteed});}
  clearDungeonIfEmpty(structureKey,sourceActor){
   if(!structureKey)return false;const key='dungeon:'+structureKey;if(this.progress[key]!=='active')return false;
   if(Object.values(this.actors).some(a=>a.speciesId&&!a.dead&&a.structureKey===structureKey))return false;
@@ -113,8 +117,11 @@ class Simulation {
   if(can&&f.burn>0){f.progress+=CFG.stepMs;if(f.progress>=r.ms){f.progress-=r.ms;if(--input.count===0)f.slots[0]=null;if(output)output.count++;else f.slots[2]={id:r.out,count:1};this.markItem(r.out);}}
   else f.progress=Math.max(0,f.progress-CFG.stepMs*2);
  }}
- ai(actor){const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss&&!a.dead&&!a.suspended).sort((a,b)=>V.len(V.sub(a.pos,actor.pos))-V.len(V.sub(b.pos,actor.pos))||cmp(a.id,b.id)),def=actor.boss?BOSS:SPECIES[actor.speciesId]?.wild;let target=actor.speciesId?(actor.wildState==='retaliating'?this.actors[actor.targetId]:null):actor.boss?players[0]:null;
-  if(actor.speciesId&&actor.wildState==='retaliating'&&(!target||target.dead||target.suspended||V.len(V.sub(target.pos,actor.pos))>CFG.creatures.leash)){actor.targetId=null;actor.wildState='neutral';actor.enemy=false;target=null;const c=actor.combat;if(c.state==='attack'){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}}
+ ai(actor){const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss&&!a.dead&&!a.suspended).sort((a,b)=>V.len(V.sub(a.pos,actor.pos))-V.len(V.sub(b.pos,actor.pos))||cmp(a.id,b.id)),def=actor.boss?SPECIES[actor.speciesId].boss:SPECIES[actor.speciesId]?.wild;
+  // A structure boss guards its home: it engages the nearest player inside the aggro radius and lets go past the leash.
+  if(actor.boss&&actor.wildState!=='retaliating'){const home=actor.homePos||actor.pos,next=players.find(p=>V.len(V.sub(p.pos,home))<=CFG.creatures.bossAggro&&Math.abs(p.pos.y-home.y)<8);if(next){actor.wildState='retaliating';actor.enemy=true;actor.targetId=next.id;}}
+  let target=actor.wildState==='retaliating'?this.actors[actor.targetId]:null;
+  if(actor.wildState==='retaliating'&&(!target||target.dead||target.suspended||V.len(V.sub(target.pos,actor.boss?actor.homePos||actor.pos:actor.pos))>(actor.boss?CFG.creatures.bossLeash:CFG.creatures.leash))){actor.targetId=null;actor.wildState='neutral';actor.enemy=false;target=null;const c=actor.combat;if(c.state==='attack'){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}}
   if(!target){if(actor.speciesId){const delta=V.sub(actor.homePos||actor.pos,actor.pos),dist=V.len(delta),flat=V.norm({x:delta.x,y:0,z:delta.z}),speed=dist>1.4?Math.min(def.speed*.45,dist):0;return{move:flat,speed,jump:false};}return{move:{x:0,y:0,z:0},speed:0,jump:false};}
   const delta=V.sub(target.pos,actor.pos),dist=V.len(delta),flat=V.norm({x:delta.x,y:0,z:delta.z}),c=actor.combat;actor.facing=V.norm({x:delta.x,y:delta.y,z:delta.z});actor.yaw=Math.atan2(-flat.x,-flat.z);
   actor.ai.cooldown=Math.max(0,actor.ai.cooldown-CFG.stepMs);let speed=def.speed,move=flat;if(dist>30||dist<def.reach*.82)speed=0;
@@ -129,32 +136,56 @@ class Simulation {
  spawnCreature(players){if(!players.length)return;const candidates=Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey);for(const c of candidates)if(!c.structureKey&&players.every(p=>V.len(V.sub(c.pos,p.pos))>CFG.creatures.despawnRadius)){this.physics.removeBody(c);delete this.actors[c.id];}const active=candidates.filter(c=>this.actors[c.id]);if(active.length>=CFG.creatures.maxWild)return;
   const counts=new Map(players.map(p=>[p.id,active.filter(c=>V.len(V.sub(c.pos,p.pos))<CFG.creatures.encounterRadius).length]));const player=players.filter(p=>(counts.get(p.id)||0)<CFG.creatures.perPlayer).sort((a,b)=>(counts.get(a.id)||0)-(counts.get(b.id)||0)||cmp(a.id,b.id))[0];if(!player)return;
   const seed=hash3(this.tick,0,hashStr(player.id),this.terrain.seed+1181),start=seed%4096;
-  for(let attempt=0;attempt<16;attempt++){const angle=((start+attempt*1597)%4096)/4096*TAU,radius=8+((seed>>>(attempt%4*6))%6000)/1000,x=Math.floor(player.pos.x+Math.cos(angle)*radius),z=Math.floor(player.pos.z+Math.sin(angle)*radius),h=this.terrain.height(x,z),biome=BIOMES[this.terrain.climate(x,z).id];
-   if(!biome.wildlife.length||h<CFG.sea+1||h>19||Math.abs(h+1.1-player.pos.y)>3.5||Math.hypot(x,z)<8)continue;let low=h,high=h;for(const[dx,dz]of [[1,0],[-1,0],[0,1],[0,-1]]){const n=this.terrain.height(x+dx,z+dz);low=Math.min(low,n);high=Math.max(high,n);}if(high-low>2)continue;
+  if(this.terrain.realm(player.pos.x,player.pos.y,player.pos.z)==='cave'){this.spawnCaveCreature(players,player,seed);return;}
+  for(let attempt=0;attempt<16;attempt++){const angle=((start+attempt*1597)%4096)/4096*TAU,radius=8+((seed>>>(attempt%4*6))%6000)/1000,x=Math.floor(player.pos.x+Math.cos(angle)*radius),z=Math.floor(player.pos.z+Math.sin(angle)*radius),h=this.terrain.height(x,z),realm=BIOMES[this.terrain.climate(x,z).id].realm;
+   if(!realm||h<CFG.sea+1||h>19||Math.abs(h+1.1-player.pos.y)>3.5||Math.hypot(x,z)<8)continue;let low=h,high=h;for(const[dx,dz]of [[1,0],[-1,0],[0,1],[0,-1]]){const n=this.terrain.height(x+dx,z+dz);low=Math.min(low,n);high=Math.max(high,n);}if(high-low>2)continue;
    const px=x+.5,pz=z+.5,y=h+1.1;if(this.terrain.get(x,h,z)===0||this.terrain.get(x,h+1,z)!==0||this.terrain.get(x,h+2,z)!==0||this.terrain.get(x,h+3,z)!==0)continue;
    if(players.some(p=>Math.hypot(p.pos.x-px,p.pos.z-pz)<7.5))continue;if(Object.values(this.actors).some(a=>!a.dead&&Math.hypot(a.pos.x-px,a.pos.z-pz)<5.5))continue;
-   const speciesId=biome.wildlife[(Math.floor(this.tick/CFG.creatures.spawnTicks)+seed+attempt)%biome.wildlife.length];this.addCreature(speciesId,{x:px,y,z:pz});return;
+   this.addCreature(REALMS[realm].species,{x:px,y,z:pz});return;
   }
+ }
+ // Underground the cave realm spawns rock chicks on a cave floor near the player's depth (open cell with a solid sole).
+ spawnCaveCreature(players,player,seed){
+  for(let attempt=0;attempt<24;attempt++){const h=hash3(seed,attempt,7,this.terrain.seed+1187),angle=(h%4096)/4096*TAU,radius=7+((h>>>12)%7000)/1000,x=Math.floor(player.pos.x+Math.cos(angle)*radius),z=Math.floor(player.pos.z+Math.sin(angle)*radius);
+   for(let dy=-3;dy<=3;dy++){const y=Math.floor(player.pos.y)+dy;if(!this.terrain.isSolid(this.terrain.get(x,y-1,z))||[0,1,2].some(k=>this.terrain.get(x,y+k,z)!==0)||this.terrain.realm(x+.5,y,z+.5)!=='cave')continue;
+    const pos={x:x+.5,y:y+.1,z:z+.5};if(players.some(p=>V.len(V.sub(p.pos,pos))<6)||Object.values(this.actors).some(a=>!a.dead&&V.len(V.sub(a.pos,pos))<4.5))continue;
+    this.addCreature(REALMS.cave.species,pos);return;}}
  }
  tickDungeonEncounters(players){
   for(const p of players)for(const structure of this.terrain.structuresNear(p.pos,44)){
    if(structure.type!=='dungeon'||Math.abs(p.pos.y-(structure.y+1))>7)continue;
    const rooms=this.terrain.dungeonRooms(structure);if(!rooms.some(r=>Math.abs(p.pos.x-r.x)<r.r+9&&Math.abs(p.pos.z-r.z)<r.r+9))continue;
    const visited='dungeon:'+structure.key;if(this.progress[visited])continue;
-   const theme=this.terrain.dungeonTheme(structure),slots=[rooms[0],rooms[1],rooms[3],rooms[5]].slice(0,CFG.creatures.dungeonPackSize);let spawned=0;
+   const theme=this.terrain.dungeonTheme(structure),slots=[rooms[0],rooms[1],rooms[3]].slice(0,CFG.creatures.dungeonPackSize);let spawned=0;
    for(let i=0;i<slots.length;i++){
     const room=slots[i];if(!room)continue;const pos={x:room.x+.5,y:structure.y+1.1,z:room.z+.5},x=Math.floor(pos.x),y=Math.floor(pos.y),z=Math.floor(pos.z);
     if(!this.terrain.isSolid(this.terrain.get(x,y-1,z))||this.terrain.isSolid(this.terrain.get(x,y,z))||this.terrain.isSolid(this.terrain.get(x,y+1,z))||this.terrain.isSolid(this.terrain.get(x,y+2,z)))continue;
     const choices=(theme.species||[]).filter(kind=>SPECIES[kind]);if(!choices.length)continue;const speciesId=choices[(i+Math.abs(structure.hash||0))%choices.length];if(this.addCreature(speciesId,pos,structure.key))spawned++;
    }
-   if(!spawned)continue;this.progress[visited]='active';this.emit('dungeon-enter',{id:'structure:'+structure.key,pos:{x:structure.x,y:structure.y+1,z:structure.z},enemy:false},{name:theme.name,captureAvailable:true,creatures:spawned});
+   if(!spawned)continue;this.progress[visited]='active';this.emit('dungeon-enter',{id:'structure:'+structure.key,pos:{x:structure.x,y:structure.y+1,z:structure.z},enemy:false},{name:theme.name,creatures:spawned});
   }
  }
 
+ // Structure bosses wake when a player walks up to their structure, leave when every player is far away,
+ // and come back EGG_RULES.respawnMs after a defeat (D-102/D-107).
+ bossSpot(structure){if(structure.type==='dungeon'){const vault=this.terrain.dungeonRooms(structure)[5];return{x:vault.x+.5,y:structure.y+1.1,z:vault.z+.5};}return{x:structure.x+.5,y:structure.y+1.1,z:structure.z+.5};}
+ bossSpecies(structure){return structure.type==='dungeon'?REALMS.cave.species:BOSS_STRUCTURES[structure.type]?.species||null;}
+ tickBossStructures(players){
+  for(const b of Object.values(this.actors).filter(a=>a.boss&&!a.dead).sort((a,b)=>cmp(a.id,b.id)))if(players.every(p=>V.len(V.sub(p.pos,b.pos))>CFG.creatures.despawnRadius)){this.physics.removeBody(b);delete this.actors[b.id];}
+  for(const p of players)for(const structure of this.terrain.structuresNear(p.pos,CFG.creatures.bossTrigger+48)){const species=this.bossSpecies(structure);if(!species)continue;const spot=this.bossSpot(structure);
+   if(Math.hypot(p.pos.x-spot.x,p.pos.z-spot.z)>CFG.creatures.bossTrigger||Math.abs(p.pos.y-spot.y)>8)continue;
+   const defeated=this.progress['boss:'+structure.key];if(Number.isInteger(defeated)&&this.tick-defeated<ticksForMs(EGG_RULES.respawnMs))continue;
+   const boss=this.addBoss(species,spot,structure.key);if(boss)this.emit('boss-spawn',boss,{species,structureKey:structure.key,structure:structure.type});}
+ }
+ // D-103: an egg block hatches in place into a baby owned by the player who set it down (who must be present).
+ tickEggs(){for(const key of Object.keys(this.eggs).sort(cmp)){const e=this.eggs[key];if(this.tick<e.hatchTick)continue;
+  if(this.terrain.get(e.x,e.y,e.z)!==BID[SPECIES[e.species].egg]){delete this.eggs[key];continue;}
+  const owner=this.actors[e.owner];if(!owner||owner.suspended)continue;const unit=this.companions.hatch(owner,e);if(!unit)continue;
+  this.terrain.set(e.x,e.y,e.z,0);delete this.eggs[key];this.progress.hatched=true;this.emit('egg-hatch',owner,{pos:{x:e.x+.5,y:e.y,z:e.z+.5},species:e.species,companionId:unit.id,name:SPECIES[e.species].name});}}
  tickCreatureEncounters(players){
   if(this.tick<this.nextSpawn)return;this.nextSpawn=this.tick+CFG.creatures.encounterCheckTicks;
   if(!this.night()&&this.tick>0&&this.tick%CFG.creatures.spawnTicks===0)this.spawnCreature(players);
-  this.tickDungeonEncounters(players);
+  this.tickDungeonEncounters(players);this.tickBossStructures(players);
  }
 
  step(context){const started=performance.now();this.presentationSequence=0;this.silent=!!(context.recovering||context.replaying);const inputs=new Map(context.inputs.map(i=>[i.playerId,i]));
@@ -173,7 +204,7 @@ class Simulation {
    this.physics.flushTerrainChanges();
    playerInputs.set(actor.id,{...input,left:input.left&&previous.primary==='attack',right:input.right&&(!!selected?.weapon||actor.companionSlot>=0)});previous.left=input.left;previous.right=input.right;if(!input.left)previous.primary='none';
   }
-  this.companions.tick();this.physics.flushTerrainChanges();
+  this.companions.tick();this.tickEggs();this.physics.flushTerrainChanges();
   this.terrain.water.step(actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss),this.tick);
   // Phase 2: movement/AI see the final terrain for this tick, independent of renderer jobs.
   for(const actor of Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id))){if(actor.dead||actor.suspended)continue;const control=actor.enemy||actor.speciesId?this.ai(actor):Combat.updatePlayer(actor,playerInputs.get(actor.id)||neutralInput(),this);Combat.tick(actor,this);this.physics.control(actor,control.move,control.speed,control.jump,control.autoJump!==false,control.swimRise,control.swimDive);}
@@ -198,15 +229,27 @@ class Simulation {
   for(const id of [...joined].sort(cmp))this.addPlayer(id);
   for(const id of players){const a=this.actors[id];if(!a)throw Error('참가자 배우 없음');const inactive=!activePlayers.includes(id);if(a.suspended!==inactive){if(inactive)this.companions.unavailable(a);a.suspended=inactive;a.combat=Combat.state();const b=this.physics.world.getRigidBody(a.body);if(b){b.setLinvel({x:0,y:0,z:0},true);b.setBodyType(inactive?this.R.RigidBodyType.Fixed:this.R.RigidBodyType.Dynamic,true);}}}
  }
- meta(){return{companions:this.companions.snapshot(),version:SNAPSHOT_VERSION,seed:this.terrain.seed,tick:this.tick,epoch:this.epoch,sequence:this.sequence,actionSequence:this.actionSequence,actors:Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),drops:Object.values(this.drops).sort((a,b)=>cmp(a.id,b.id)),projectiles:Object.values(this.projectiles).sort((a,b)=>cmp(a.id,b.id)),furnaces:Object.entries(this.furnaces).sort(([a],[b])=>cmp(a,b)),progress:this.progress,edits:this.terrain.snapshot(),fluid:this.terrain.water.snapshot(),terrainState:{editSerial:this.terrain.editSerial,physicsRevisions:[...this.terrain.physicsRevisions.entries()].sort(([a],[b])=>cmp(a,b))},nextSpawn:this.nextSpawn,physics:this.physics.metadata()};}
+ meta(){return{companions:this.companions.snapshot(),version:SNAPSHOT_VERSION,seed:this.terrain.seed,tick:this.tick,epoch:this.epoch,sequence:this.sequence,actionSequence:this.actionSequence,actors:Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),drops:Object.values(this.drops).sort((a,b)=>cmp(a.id,b.id)),projectiles:Object.values(this.projectiles).sort((a,b)=>cmp(a.id,b.id)),furnaces:Object.entries(this.furnaces).sort(([a],[b])=>cmp(a,b)),eggs:Object.values(this.eggs).sort((a,b)=>cmp(a.key,b.key)),progress:this.progress,edits:this.terrain.snapshot(),fluid:this.terrain.water.snapshot(),terrainState:{editSerial:this.terrain.editSerial,physicsRevisions:[...this.terrain.physicsRevisions.entries()].sort(([a],[b])=>cmp(a,b))},nextSpawn:this.nextSpawn,physics:this.physics.metadata()};}
  save(){this.physics.flushTerrainChanges();const json=new TextEncoder().encode(JSON.stringify(this.meta())),phys=this.physics.snapshot(),out=new Uint8Array(12+json.length+phys.length),v=new DataView(out.buffer);v.setUint32(0,0x424C4D41,true);v.setUint32(4,json.length,true);v.setUint32(8,phys.length,true);out.set(json,12);out.set(phys,12+json.length);return out;}
+ // One-time save migration, idempotent on current saves. Retired hostile kinds (<=0.27) and the 0.28-0.32 species
+ // (shell, leaf) become the nearest new species (LEGACY_SPECIES); the old altar-summoned warden boss and the old
+ // neutral-candidate field are retired. Owned units keep their ID and placement and become adults of grade 1.
  migrateLegacyActors(meta){
-   const retained=[];for(const actor of meta.actors){
+   const retained=[],retiredBodies=[];for(const actor of meta.actors){
     if(actor.dead&&(actor.boss||actor.enemy&&!actor.speciesId))continue;
-    const speciesId=SPECIES[actor.candidateCompanion]?actor.candidateCompanion:actor.boss&&!actor.speciesId?'warden':actor.enemy&&!actor.speciesId?(LEGACY_SPECIES[actor.kind]||'shell'):null;
-    if(speciesId){const def=SPECIES[speciesId].wild,ratio=actor.maxHp>0?clamp(actor.hp/actor.maxHp,0,1):1;actor.speciesId=speciesId;actor.kind=speciesId;actor.wildState='neutral';actor.enemy=false;actor.boss=actor.boss&&speciesId==='warden';actor.targetId=null;actor.homePos=actor.homePos||{...actor.pos};actor.rpg=null;actor.combat=Combat.state();actor.hp=def.hp*ratio;actor.maxHp=def.hp;delete actor.candidateCompanion;}
+    if(actor.boss&&!SPECIES[actor.speciesId]?.boss){if(actor.body!==null&&actor.body!==undefined)retiredBodies.push(actor);continue;}
+    const legacy=!SPECIES[actor.speciesId]&&(actor.speciesId||actor.candidateCompanion||actor.enemy),speciesId=legacy?LEGACY_SPECIES[actor.speciesId]||LEGACY_SPECIES[actor.candidateCompanion]||LEGACY_SPECIES[actor.kind]||'rock-chick':null;
+    if(speciesId){const def=SPECIES[speciesId].wild,ratio=actor.maxHp>0?clamp(actor.hp/actor.maxHp,0,1):1;actor.speciesId=speciesId;actor.kind=speciesId;actor.wildState='neutral';actor.enemy=false;actor.targetId=null;actor.homePos=actor.homePos||{...actor.pos};actor.rpg=null;actor.combat=Combat.state();actor.hp=def.hp*ratio;actor.maxHp=def.hp;}
+    delete actor.candidateCompanion;
+    // An owned unit's in-progress strike was described with the retired species; restart it from idle.
+    if(actor.combat?.action?.companionId&&!SPECIES[actor.combat.action.companionKind]){Combat.resetCombo(actor.combat);actor.combat.state='idle';actor.combat.elapsed=0;actor.combat.action=null;}
     retained.push(actor);
    }
+   for(const u of Object.values(meta.companions?.units||{})){if(!SPECIES[u.kind])u.kind=LEGACY_SPECIES[u.kind]||'root';u.stage??='adult';u.grade??=1;u.yaw??=0;
+    // The new species' gather list may not contain an old target block: drop the target and search again.
+    if(u.target&&!SPECIES[u.kind].capabilities.gather.blocks.includes(BLOCKS[u.target.id]?.id)){u.target=null;u.progress=0;}}
+   for(const shot of meta.projectiles||[])if(shot.companionKind&&!SPECIES[shot.companionKind])shot.companionKind=LEGACY_SPECIES[shot.companionKind]||'rock-chick';
+   meta.retiredBodies=retiredBodies;meta.eggs??=[];
    meta.actors=retained;meta.progress||={};for(const [key,value]of Object.entries(meta.progress))if(key.startsWith('dungeon:')&&value==='active'&&!retained.some(a=>a.speciesId&&!a.dead&&a.structureKey===key.slice(8)))delete meta.progress[key];
   }
   // 0.29.0 removed charge, guard, stamina, poise, and weapon skills. Same-version saves may still
@@ -222,7 +265,7 @@ class Simulation {
   // leggings are gone. Same-version saves drop those stacks wherever they sit; retired drops and in-flight
   // player arrows are listed in meta.retiredBodies so load() can remove their physics bodies.
   retireEquipment(meta){
-   const retired=id=>RETIRED_ITEM_IDS.has(id),keep=s=>s&&retired(s.id)?null:s,retiredBodies=[];
+   const retired=id=>RETIRED_ITEM_IDS.has(id),keep=s=>s&&retired(s.id)?null:s,retiredBodies=meta.retiredBodies||[];
    for(const actor of meta.actors||[]){const i=actor.inventory;
     if(i){for(const area of ['slots','grid'])if(Array.isArray(i[area]))i[area]=i[area].map(keep);i.cursor=keep(i.cursor??null);
      if(i.armor){delete i.armor.legs;for(const k of ARMOR_SLOTS)i.armor[k]=keep(i.armor[k]??null);}}
@@ -237,7 +280,7 @@ class Simulation {
   }
   parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));this.migrateLegacyActors(m);this.retireCombatResources(m);this.retireEquipment(m);
   if(m.version!==SNAPSHOT_VERSION)throw Error('현재 '+SNAPSHOT_VERSION+' 저장만 지원합니다. 이전 버전은 새 월드가 필요합니다.');
-  if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');for(const a of m.actors)if(a.candidateCompanion&&SPECIES[a.candidateCompanion]){const kind=a.candidateCompanion,def=SPECIES[kind].wild,ratio=a.maxHp>0?a.hp/a.maxHp:1;a.speciesId=kind;a.kind=kind;a.wildState='neutral';a.enemy=false;a.targetId=null;a.homePos=a.homePos||{...a.pos};a.rpg=null;a.hp=def.hp*ratio;a.maxHp=def.hp;delete a.candidateCompanion;}const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
+  if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');if(!Array.isArray(m.eggs)||m.eggs.length>64||m.eggs.some(e=>!e||!['x','y','z','placedTick','hatchTick'].every(k=>Number.isInteger(e[k]))||e.key!==blockKey(e.x,e.y,e.z)||!SPECIES[e.species]||typeof e.owner!=='string'))throw Error('알 상태 손상');const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
  }
  load(bytes){const {meta:m,physics:payload}=this.parse(bytes),terrain=VoxelWorld.restore(m.seed,m.edits);
   terrain.editSerial=m.terrainState?.editSerial??m.edits.length;terrain.physicsRevisions=new Map(m.terrainState?.physicsRevisions||[]);
@@ -252,7 +295,7 @@ class Simulation {
    physics.lastPrefetchTick=toTick(physics.lastPrefetchTick);for(const entry of physics.loaded.values())entry.until=toTick(entry.until);
    physics.world.timestep=CFG.stepMs/1000;
   }
-  this.physics.free();this.terrain=terrain;this.physics=physics;this.tick=m.tick;this.epoch=m.epoch;this.sequence=m.sequence;this.actionSequence=m.actionSequence;this.actors=Object.fromEntries(m.actors.map(a=>[a.id,a]));this.drops=Object.fromEntries(m.drops.map(a=>[a.id,a]));this.projectiles=Object.fromEntries(m.projectiles.map(a=>[a.id,a]));this.furnaces=Object.fromEntries(m.furnaces);this.progress=m.progress;this.nextSpawn=m.nextSpawn??(this.tick+CFG.creatures.encounterCheckTicks);this.companions=new Companions(this,m.companions);for(const a of Object.values(this.actors))a.companionSlot??=-1;this.effects=[];this.revision++;
+  this.physics.free();this.terrain=terrain;this.physics=physics;this.tick=m.tick;this.epoch=m.epoch;this.sequence=m.sequence;this.actionSequence=m.actionSequence;this.actors=Object.fromEntries(m.actors.map(a=>[a.id,a]));this.drops=Object.fromEntries(m.drops.map(a=>[a.id,a]));this.projectiles=Object.fromEntries(m.projectiles.map(a=>[a.id,a]));this.furnaces=Object.fromEntries(m.furnaces);this.eggs=Object.fromEntries(m.eggs.map(e=>[e.key,e]));this.progress=m.progress;this.nextSpawn=m.nextSpawn??(this.tick+CFG.creatures.encounterCheckTicks);this.companions=new Companions(this,m.companions);for(const a of Object.values(this.actors))a.companionSlot??=-1;this.effects=[];this.revision++;
  }
  adapter(){return{save:()=>this.save(),load:b=>this.load(b),validateSnapshot:(b,c)=>{try{const m=this.parse(b).meta;return(c.tick===undefined||m.tick===c.tick)&&(!c.players||JSON.stringify(m.actors.filter(a=>!a.enemy&&!a.speciesId&&!a.boss).map(a=>a.id).sort())===JSON.stringify([...c.players].sort()));}catch{return false;}},step:c=>this.step(c),applyMembership:c=>this.applyMembership(c)};}
  free(){this.physics.free();}

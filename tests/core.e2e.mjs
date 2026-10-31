@@ -100,23 +100,10 @@ try {
  const mobileUI=await mobile.evaluate(()=>{const el=document.querySelector('#journal .panel'),r=el.getBoundingClientRect();return{visible:!document.querySelector('#journal').hidden,left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};});
  assert(mobileUI.visible&&mobileUI.left>=0&&mobileUI.top>=0&&mobileUI.right<=mobileUI.width+1&&mobileUI.bottom<=mobileUI.height+1);
  await mobile.waitForLoadState('networkidle');await mobile.close();
- const preview=await browser.newPage({viewport:{width:1280,height:800}});
- preview.on('pageerror',error=>errors.push(error.message));
- await preview.goto(new URL('previews/companion-combat/',url).href);
- await preview.waitForFunction(()=>window.symbioticPreview?.frames>1||document.getElementById('error').textContent,null,{timeout:30000});
- report.previewStartup=await preview.evaluate(()=>({state:document.getElementById('state').textContent,error:document.getElementById('error').textContent,frames:window.symbioticPreview?.frames||0}));
- if(process.env.TEST_PREVIEW_SCREENSHOT)await preview.screenshot({path:process.env.TEST_PREVIEW_SCREENSHOT});
- assert.equal(report.previewStartup.error,'',JSON.stringify(report.previewStartup));
- await preview.click('#b');
- await preview.waitForFunction(()=>window.symbioticPreview?.combatMode==='sword');
- await preview.click('#a');
- await preview.waitForFunction(()=>window.symbioticPreview?.combatMode==='ball');
- report.preview=await preview.evaluate(()=>({frames:window.symbioticPreview.frames,glError:window.symbioticPreview.glError,mode:window.symbioticPreview.combatMode,error:document.getElementById('error').textContent}));
- assert.equal(report.preview.glError,0);assert.equal(report.preview.error,'');
- if(process.env.TEST_PREVIEW_SCREENSHOT)await preview.screenshot({path:process.env.TEST_PREVIEW_SCREENSHOT});
- await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,8);assert.deepEqual(errors,[]);
+ // 0.33.0 removed the companion-combat design preview (it only compared the retired pebble-mole SVG); the unit-rig preview has its own test.
+ await Promise.all(pending);assert.equal(new Set(responses.map(r=>r.file)).size,6);assert.deepEqual(errors,[]);
  Object.assign(report,{result:'PASS',elapsedMs:Date.now()-started,gameVersion:diagnostic.version,gamekitDist:sdkSHA,sdk:responses,flow:{initial,moved,target,mined,collected,placed,saved,restored},mobileJournal:mobileUI,errors,limitations:[...(deploymentScope?['Strict intermediate interpolation observation and cave traversal excluded from deployment scope; full-core checks retained']:[]),'No external NAT multiplayer','No physical mobile device','No exhaustive dungeon/combat or long-term performance test'],inputMethod:'UI keyboard/buttons and browser touch-drag, long-press mining, tap placement; read-only state observations; no mocked SDK or game-state fixture'});
- console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:8,errors:0}));
+ console.log(JSON.stringify({result:report.result,elapsedMs:report.elapsedMs,browser:report.browser,sdkFiles:6,errors:0}));
 } catch(error){if(page&&process.env.TEST_SCREENSHOT)await page.screenshot({path:process.env.TEST_SCREENSHOT.replace(/\.png$/,'.failure.png')}).catch(()=>{});if(page)report.failureState=await page.evaluate(()=>{const b=window.Bloom,a=b?.app;return{diagnostics:window.BloomDiagnostics?.format(),pos:a?.actor()?.pos,aim:a?.sim.aim(a.actor()),buttons:a?.controls.buttons,tick:a?.sim.tick,inputPrevious:a?.actor()?.inputPrevious,combat:a?.actor()?.combat,mine:a?.actor()?.mine,enemy:a?.sim.physics.aimEnemy(a.actor(),b.Combat.weapon(a.actor(),a.sim).reach),camera:a?.renderer.camera,pointerLock:document.pointerLockElement?.id,active:document.activeElement?.id,modal:a?.modal()};}).catch(()=>null);console.error(JSON.stringify(report.failureState));Object.assign(report,{result:'FAIL',elapsedMs:Date.now()-started,error:error.stack,errors});console.error(error);process.exitCode=1;}
 finally{if(output)fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');await browser?.close();server?.close();clearTimeout(timeout);}
 

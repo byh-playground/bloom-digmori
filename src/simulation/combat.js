@@ -8,7 +8,7 @@ const BASIC_CHAIN=Object.freeze([
 ]);
 const OVERHEAD_ARC=Object.freeze({from:1.02,to:-.72});
 function attackMotion(action){
- if(isClawAction(action))return 'clamp';
+ if(isMeleeAction(action))return 'clamp';
  if(action.motion)return action.motion;
  if(action.kind==='overhead'||action.kind==='slam')return 'overhead';
  if(action.kind==='lunge'||action.weapon==='spear')return 'thrust';
@@ -28,8 +28,8 @@ const IDENTITY_ROTATION=Object.freeze({x:0,y:0,z:0,w:1}),ZERO_VECTOR=Object.free
 function rotateByQuaternion(v,q){const tx=2*(q.y*v.z-q.z*v.y),ty=2*(q.z*v.x-q.x*v.z),tz=2*(q.x*v.y-q.y*v.x);return{x:v.x+q.w*tx+q.y*tz-q.z*ty,y:v.y+q.w*ty+q.z*tx-q.x*tz,z:v.z+q.w*tz+q.x*ty-q.y*tx};}
 function weaponHitRadius(action,scale=1){const widths={fist:.30,spear:.18,axe:.29};return (widths[action.weapon]||CFG.combat.hit.radius)*Math.min(scale,2);}
 function attackSamples(actor,action,from,to){
- if(isClawAction(action)){const out=[],count=Math.max(1,Math.ceil(Math.abs(to-from)*12));for(let n=1;n<=count;n++){
-  const previous=clawWorldPose(actor,action,action.wind+lerp(from,to,(n-1)/count)*action.active),pose=clawWorldPose(actor,action,action.wind+lerp(from,to,n/count)*action.active);
+ if(isMeleeAction(action)){const out=[],count=Math.max(1,Math.ceil(Math.abs(to-from)*12));for(let n=1;n<=count;n++){
+  const previous=meleeWorldPose(actor,action,action.wind+lerp(from,to,(n-1)/count)*action.active),pose=meleeWorldPose(actor,action,action.wind+lerp(from,to,n/count)*action.active);
   for(let i=0;i<pose.tips.length;i++)out.push({phase:lerp(from,to,n/count),pose:{origin:pose.origin},from:previous.tips[i],to:pose.tips[i],radius:.16});}return out;}
  const radius=weaponHitRadius(action,actor.scale||1),span=Math.abs(to-from),angle=(attackMotion(action)==='overhead'?OVERHEAD_ARC.from-OVERHEAD_ARC.to:Math.abs(action.arc||0))*span,
   step=Math.min(CFG.combat.hit.angularStep,radius/Math.max(.1,action.reach)*.85),count=clamp(Math.ceil(angle/step),1,CFG.combat.hit.maxSamples),out=[];
@@ -55,7 +55,7 @@ function knockbackResponse(target,power,heavy=false){
 class Combat {
  static state(){return {state:'idle',elapsed:0,action:null,left:false,combo:0,comboUntil:0,comboWeapon:null,queued:false,airRollUsed:false,invul:0};}
  static canAct(c){return c.state==='idle'||(c.state==='attack'&&c.elapsed>=c.action.wind+c.action.active+c.action.recovery*.68);}
- static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=SPECIES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.art==='ball'?80:280,recovery:350,arc:1.9};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,reach:3.0,arc:1.25,weight:0,wind:200,active:100,recovery:350};}
+ static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=SPECIES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.capabilities.attack.mode==='ball'?80:280,recovery:350,arc:1.9};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,reach:3.0,arc:1.25,weight:0,wind:200,active:100,recovery:350};}
  static resetCombo(c){c.combo=0;c.comboUntil=0;c.comboWeapon=null;c.queued=false;}
  static equipmentKey(a,sim=null){return sim?.companions.equipped(a)?.id||Inventory.stats(a).item?.id||'fist';}
  // The only player action is the basic chain: three melee stages for fists, sword, spear and axe.
