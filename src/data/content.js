@@ -1,10 +1,18 @@
 'use strict';
 const BIOMES=Object.freeze({
- meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-.13,.10]},maxSlope:1,maxExposure:2.5},vegetation:{density:18,canopy:'leaves'},resources:{ore:'coalOre',bonus:0,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[-.13,.10]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-.13,.10]}}},wildlife:['shell','leaf']},
- forest:{name:'포자 수림',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,16],climate:{heat:[-.15,.15],wet:[.10,1]},maxSlope:1,maxExposure:2},vegetation:{density:82,canopy:'leaves'},resources:{ore:'coalOre',bonus:.025,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[.10,1]}},decorations:{caveBloom:{chance:.055,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[.10,1]}}},wildlife:['shell','leaf']},
- fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',habitat:{surfaces:['mycelium'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-1,-.13]},maxSlope:1,maxExposure:2.5},vegetation:{density:64,canopy:'cap'},resources:{ore:'ironOre',bonus:.015,substrate:'stone',minDepth:3,surface:'mycelium',climate:{heat:[-.15,.15],wet:[-1,-.13]}},decorations:{caveBloom:{chance:.08,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-1,-.13]}}},wildlife:['leaf']},
- dry:{name:'모래 구릉',surface:'sand',soil:'sand',habitat:{surfaces:['sand'],elevation:[3,12],climate:{heat:[.15,1],wet:[-1,1]},maxSlope:0,maxExposure:1},vegetation:{density:0,canopy:'leaves'},resources:{ore:'goldOre',bonus:.025,substrate:'stone',minDepth:3,surface:'sand',climate:{heat:[.15,1],wet:[-1,1]}},decorations:{caveBloom:{chance:.005,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[.15,1],wet:[-1,1]}}},wildlife:['shell']},
- cold:{name:'서리 고원',surface:'snow',soil:'dirt',habitat:{surfaces:['snow'],elevation:[3,10],climate:{heat:[-1,-.15],wet:[-1,1]},maxSlope:.75,maxExposure:1},vegetation:{density:8,canopy:'leaves'},resources:{ore:'ironOre',bonus:.025,substrate:'stone',minDepth:3,surface:'snow',climate:{heat:[-1,-.15],wet:[-1,1]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-1,-.15],wet:[-1,1]}}},wildlife:['shell','leaf']}
+ meadow:{name:'꽃잎 초원',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-.13,.10]},maxSlope:1,maxExposure:2.5},vegetation:{density:18,canopy:'leaves'},resources:{ore:'coalOre',bonus:0,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[-.13,.10]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-.13,.10]}}},realm:'grassland'},
+ forest:{name:'포자 수림',surface:'grass',soil:'dirt',habitat:{surfaces:['grass'],elevation:[3,16],climate:{heat:[-.15,.15],wet:[.10,1]},maxSlope:1,maxExposure:2},vegetation:{density:82,canopy:'leaves'},resources:{ore:'coalOre',bonus:.025,substrate:'stone',minDepth:3,surface:'grass',climate:{heat:[-.15,.15],wet:[.10,1]}},decorations:{caveBloom:{chance:.055,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[.10,1]}}},realm:'fungal'},
+ fungal:{name:'균사 정원',surface:'mycelium',soil:'dirt',habitat:{surfaces:['mycelium'],elevation:[3,15],climate:{heat:[-.15,.15],wet:[-1,-.13]},maxSlope:1,maxExposure:2.5},vegetation:{density:64,canopy:'cap'},resources:{ore:'ironOre',bonus:.015,substrate:'stone',minDepth:3,surface:'mycelium',climate:{heat:[-.15,.15],wet:[-1,-.13]}},decorations:{caveBloom:{chance:.08,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-.15,.15],wet:[-1,-.13]}}},realm:'fungal'},
+ dry:{name:'모래 구릉',surface:'sand',soil:'sand',habitat:{surfaces:['sand'],elevation:[3,12],climate:{heat:[.15,1],wet:[-1,1]},maxSlope:0,maxExposure:1},vegetation:{density:0,canopy:'leaves'},resources:{ore:'goldOre',bonus:.025,substrate:'stone',minDepth:3,surface:'sand',climate:{heat:[.15,1],wet:[-1,1]}},decorations:{caveBloom:{chance:.005,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[.15,1],wet:[-1,1]}}},realm:null},
+ cold:{name:'서리 고원',surface:'snow',soil:'dirt',habitat:{surfaces:['snow'],elevation:[3,10],climate:{heat:[-1,-.15],wet:[-1,1]},maxSlope:.75,maxExposure:1},vegetation:{density:8,canopy:'leaves'},resources:{ore:'ironOre',bonus:.025,substrate:'stone',minDepth:3,surface:'snow',climate:{heat:[-1,-.15],wet:[-1,1]}},decorations:{caveBloom:{chance:.035,host:'stone',y:[CFG.bottom+4,-8],climate:{heat:[-1,-.15],wet:[-1,1]}}},realm:null}
+});
+// G2 gameplay biomes (D-100/D-101) mapped onto the terrain biomes above: terrain keeps its climate generator,
+// only companion species, boss structures and gather placement follow the realm. 모래 구릉·서리 고원 have none.
+// The cave realm is everything carved underground (natural caves, mines and the dungeon) below the surface.
+const REALMS=Object.freeze({
+ grassland:Object.freeze({name:'초원',species:'root',structure:'grove'}),
+ fungal:Object.freeze({name:'균류 숲',species:'mushroom-snail',structure:'ring'}),
+ cave:Object.freeze({name:'동굴',species:'rock-chick',structure:'dungeon'})
 });
 const BLOCKS=[
  {id:'air',name:'공기',color:'#ffffff',solid:false},
@@ -25,14 +33,19 @@ const BLOCKS=[
  {id:'obsidian',name:'흑요석',color:'#48415f',hardness:8000,tool:'pick',tier:4},
  {id:'bedrock',name:'기반암',color:'#394548',hardness:Infinity,tier:99},
  {id:'cobble',name:'조약돌',color:'#879391',hardness:1600,tool:'pick',tier:1},
- {id:'altar',name:'오래된 꽃 제단',color:'#bd91bd',hardness:Infinity,tier:99,station:'altar',light:8},
+ {id:'altar',name:'오래된 꽃 제단',color:'#bd91bd',hardness:Infinity,tier:99,light:8},
  {id:'cap',name:'버섯 갓',color:'#c184a9',hardness:450,drop:'food',tier:0},
  {id:'stem',name:'버섯 줄기',color:'#e8d9b8',hardness:900,drop:'log',tool:'axe',tier:0},
  {id:'trophy',name:'화원 수호의 증표',color:'#eec565',hardness:800,tier:0,light:12},
  {id:'crystalBloom',name:'공명 수정',color:'#8eddeb',hardness:1400,tool:'pick',tier:2,drop:'crystalShard',light:9},
  {id:'snow',name:'눈덮인 흙',color:'#dae9ed',hardness:650,drop:'dirt',tool:'pick',tier:0},
  {id:'mycelium',name:'균사 흙',color:'#b79bc4',hardness:650,drop:'dirt',tool:'pick',tier:0},
- {id:'lootChest',name:'봉인된 보물함',color:'#bf935d',hardness:Infinity,tier:99,station:'loot'}
+ {id:'lootChest',name:'봉인된 보물함',color:'#bf935d',hardness:Infinity,tier:99,station:'loot'},
+ // Companion eggs (D-103): an item that places as a non-solid block, drawn with the species' egg PNG instead of a cube.
+ // Appended only: block ids are saved terrain edits, so existing indices never move.
+ {id:'rootEgg',name:'뿌리 알',color:'#d8c79a',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'root'},
+ {id:'rockChickEgg',name:'바위 병아리 알',color:'#c8c2b4',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'rock-chick'},
+ {id:'mushroomSnailEgg',name:'버섯 달팽이 알',color:'#e0c4cf',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'mushroom-snail'}
 ];
 const BID=Object.fromEntries(BLOCKS.map((b,i)=>[b.id,i]));
 const RESOURCE_DEFS=Object.freeze([
@@ -55,7 +68,7 @@ const WEAPONS={
 const ITEMS={};
 function defineItem(id,name,icon,opts={}){ITEMS[id]={id,name,icon,stack:64,...opts};}
 for(const b of BLOCKS)if(!['air','grass','bedrock','altar','coalOre','ironOre','goldOre','diamondOre','lootChest'].includes(b.id))defineItem(b.id,b.name,({log:'▥',leaves:'✿',stone:'◆',dirt:'■',planks:'▤',workbench:'▦',furnace:'▣',torch:'♨',cap:'🍄',stem:'▥',trophy:'✧'})[b.id]||'◆',{block:BID[b.id]});
-for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['leather','가죽','▱'],['sigil','수호자 소환 문양','✵'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚'],['relic','고대의 유물','✧']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
+for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['leather','가죽','▱'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚'],['relic','고대의 유물','✧']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
 for(const [mat,m]of Object.entries(MATERIALS)){
  defineItem(mat+'_pick',m.name+' 곡괭이','⛏',{stack:1,material:mat,tool:'pick',tier:m.tier,miningSpeed:m.speed,weight:4});
  for(const [type,w]of Object.entries(WEAPONS))
@@ -67,8 +80,9 @@ const ARMOR_SLOTS=Object.freeze(['helmet','chest','boots']);
 for(const [mat,name,defense,weight]of [['leather','가죽',5,2],['iron','철',10,5],['diamond','다이아몬드',15,4]])
  for(const [part,pn,k]of [['helmet','투구',1],['chest','흉갑',3],['boots','장화',1]])
   defineItem(mat+'_'+part,name+' '+pn,'♜',{stack:1,armor:part,defense:defense*k,weight:weight*k,material:mat});
-// Item ids removed in 0.31.0; Simulation.retireEquipment drops them from older saves.
-const RETIRED_ITEM_IDS=new Set(['arrow',
+// Item ids removed in 0.31.0 and 0.33.0; Simulation.retireEquipment drops them from older saves.
+// 0.33.0 retired the warden summoning sigil together with the altar summon (bosses now live in structures).
+const RETIRED_ITEM_IDS=new Set(['arrow','sigil',
  ...['wood','stone','iron','diamond','gold'].flatMap(m=>['shovel','greatsword','dagger','bow','shield'].map(t=>m+'_'+t)),
  ...['pick','sword','spear','axe','helmet','chest','boots'].map(t=>'gold_'+t),
  ...['leather','iron','gold','diamond'].map(m=>m+'_legs')]);
@@ -87,7 +101,6 @@ for(const mat of ['leather','iron','diamond']){
  recipe(mat+'_helmet',mat+'_helmet',1,['MMM','M M'],{M:mat},3);recipe(mat+'_chest',mat+'_chest',1,['M M','MMM','MMM'],{M:mat},3);recipe(mat+'_boots',mat+'_boots',1,['M M','M M'],{M:mat},3);
 }
 recipe('healingSalve','healingSalve',1,['FF','CS'],{F:'food',C:'crystalShard',S:'fiber'},2);
-recipe('sigil','sigil',1,['SIS','IDI','SIS'],{S:'seed',I:'iron',D:'diamond'},3);
 recipe('trophy','trophy',1,[' D ','IHI','PPP'],{D:'diamond',I:'iron',H:'heart',P:'planks'},3,'boss');
 const FUELS={coal:48000,charcoal:48000,log:9000,planks:9000,stick:3000};
 const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:'charcoal',ms:6000},cobble:{out:'stone',ms:6000}};
@@ -98,6 +111,7 @@ const QUESTS=Object.freeze([
  Object.freeze({id:'crystalShard',title:'동굴 속 푸른빛',hint:'Y -10 아래 공명 수정을 채광하세요.'}),
  Object.freeze({id:'chests',title:'고대의 보물',hint:'폐광 또는 유적의 보물함을 F로 여세요.'}),
  Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 적대 생물을 모두 쓰러뜨리세요.'}),
- Object.freeze({id:'boss',title:'잠든 화원의 수호자',hint:'꽃 제단에서 수호자 보스에 도전하세요.'})
+ Object.freeze({id:'boss',title:'보스 구조물',hint:'초원의 꽃 고리, 균류 숲의 버섯 고리, 동굴 유적 최심부에서 보스를 쓰러뜨리세요.'}),
+ Object.freeze({id:'hatched',title:'첫 부화',hint:'보스가 남긴 알을 땅에 놓고 부화를 기다리세요.'})
 ]);
 

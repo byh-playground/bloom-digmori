@@ -39,7 +39,7 @@ class DynamicGeometry {
 }
 function interleavedGeometry(T,layout,vertices){const stride=layout.reduce((n,[,size])=>n+size,0),buffer=new T.InterleavedBuffer(vertices,stride),geometry=new T.BufferGeometry();let offset=0;for(const [name,size]of layout){geometry.setAttribute(name,new T.InterleavedBufferAttribute(buffer,size,offset));offset+=size;}return geometry;}
 class Renderer {
- constructor(canvas,gamekit,companionVector,THREE,playerRig,unitRigs){
+ constructor(canvas,THREE,playerRig,unitRigs){
   if(typeof THREE?.WebGLRenderer!=='function')throw Error('three.js 모듈이 필요한 게임입니다.');
   const T=this.T=THREE;T.ColorManagement.enabled=false;this.canvas=canvas;
   // An opaque drawing buffer (three.js would otherwise request alpha:true), so straight-alpha
@@ -52,19 +52,21 @@ class Renderer {
   this.atlas=createSpriteAtlas(this.three.capabilities.maxTextureSize);this.atlas.texture=this.canvasTexture(this.atlas.canvas);
   this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.fog=new Float32Array([.69,.85,.86]);this.frameLights=NO_LIGHTS;this.stats={drawCalls:0,vertices:0};
   const blockAtlas=buildBlockAtlas(),blockTexture=new T.DataTexture(blockAtlas.data,blockAtlas.width,blockAtlas.height,T.RGBAFormat,T.UnsignedByteType);this.pixelTexture(blockTexture,false);this.blockAtlas={...blockAtlas,texture:blockTexture};
-  this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
+  this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.eggIcons(unitRigs);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
   this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
   this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture}});
   this.waterMaterial=this.material(RENDER_GLSL.waterVertex,RENDER_GLSL.waterFragment,{vp:{value:new Float32Array(16)},phase:{value:0}},{blend:'alpha',depthWrite:false});this.waterMeshes=new Map();this.waterDrawList=[];
   const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
   this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
-  this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);this.playerRig=new PlayerRigRenderer(this,playerRig);
-  // New species cut-out rig (0.32.0): loaded and drawn by the same three.js path, but no actor is routed to it yet.
-  this.unitRig=new UnitRigRenderer(this,unitRigs);
+  this.playerRig=new PlayerRigRenderer(this,playerRig);
+  // Companion species (wild, boss, owned, eggs) are the cut-out unit rig; UnitPresenter maps display state to looks.
+  this.unitRig=new UnitRigRenderer(this,unitRigs);this.units=new UnitPresenter(this);
  }
- // Players are the cut-out PNG rig; enemies, NPCs and companions keep their GameKit SVG meshes.
- hasCharacter(kind){return kind==='player'||this.companionRenderer.hasCharacter(kind);}
- queueCharacter(item){if(item.kind==='player')this.playerRig.queue(item);else this.companionRenderer.queueCharacter(item);}
+ // Egg items, drops and inventory slots show the species' authored egg PNG instead of a textured cube.
+ eggIcons(unitRigs){for(const block of BLOCKS){if(!block.egg)continue;const id=BID[block.id],image=unitRigs[block.egg].images.egg,c=document.createElement('canvas');c.width=40;c.height=44;const ctx=c.getContext('2d'),k=Math.min(36/image.width,40/image.height);ctx.drawImage(image,(40-image.width*k)/2,42-image.height*k,image.width*k,image.height*k);this.blockIcons[id]=c.toDataURL('image/png');this.iconCanvases.set('block:'+id,c);}}
+ // Players are the cut-out player rig; companion species go through UnitPresenter (this.units).
+ hasCharacter(kind){return kind==='player';}
+ queueCharacter(item){this.playerRig.queue(item);}
  // Nearest-filtered, unmipmapped, clamped textures exactly like the legacy atlases.
  pixelTexture(texture,flipY){const T=this.T;texture.flipY=flipY;texture.generateMipmaps=false;texture.minFilter=texture.magFilter=T.NearestFilter;texture.wrapS=texture.wrapT=T.ClampToEdgeWrapping;texture.needsUpdate=true;return texture;}
  canvasTexture(canvas){return this.pixelTexture(new this.T.CanvasTexture(canvas),true);}
@@ -79,8 +81,8 @@ class Renderer {
  // a shared placeholder sphere keeps it from scanning every streamed buffer.
  submit(object){object.visible=true;object.renderOrder=this.drawOrder++;this.stats.drawCalls++;object.geometry.boundingSphere??=this.unusedBounds;}
  beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values())m.object.visible=false;for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
-  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.companionRenderer.beginFrame();this.playerRig.beginFrame();this.unitRig.beginFrame();}
- endFrame(){this.three.render(this.scene,this.view);this.companionRenderer.endFrame();this.playerRig.endFrame();this.unitRig.endFrame();}
+  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.playerRig.beginFrame();this.unitRig.beginFrame();}
+ endFrame(){this.three.render(this.scene,this.view);this.playerRig.endFrame();this.unitRig.endFrame();}
  dynamic(kind,layout,uniforms,options){return this.pooled(kind,()=>{const geometry=new DynamicGeometry(this.T,layout),[vertex,fragment]=layout===RENDER_LAYOUT.mesh?[RENDER_GLSL.meshVertex,RENDER_GLSL.meshFragment]:layout===RENDER_LAYOUT.sprite?[RENDER_GLSL.spriteVertex,RENDER_GLSL.spriteFragment]:[RENDER_GLSL.vfxVertex,RENDER_GLSL.vfxFragment];return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(vertex,fragment,uniforms(),options))};});}
  submitDynamic(item,vertices,stride){item.object.geometry=item.geometry.upload(vertices);this.submit(item.object);this.stats.vertices+=vertices.length/stride;}
  // Lit vertex-colored boxes and beams; overlay draws (view arms) skip depth.
@@ -188,21 +190,21 @@ class Renderer {
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
   this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.updateCamera(actor,sim,viewPos);this.stream(sim,authority);const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
   this.ambient=.20+.80*daylight;
-  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);this.beginFrame(this.fog);this.companionRenderer.beginCharacterFrame();
+  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);this.beginFrame(this.fog);
   this.drawSky(daylight,phase,alt,twilight);
   const lights=this.lights(sim,actor);this.frameLights=lights;this.drawTerrain(lights);
   const dyn=[],sprites=[];
   // Fluid volumes are submitted separately after solid terrain; no global sea plane.
   this.animationSamples={};
   for(const a of Object.values(view.actors)){
-   if(a.speciesId==='shell'||a.dead||this.camera.first&&a.id===actor.id||a.id!==actor.id&&!this.entityVisualReady(a))continue;
+   if(a.dead||this.camera.first&&a.id===actor.id||a.id!==actor.id&&!this.entityVisualReady(a))continue;
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
    // Players keep their authored colours; co-op players are told apart by the name tag in EnemyHealthHUD.
-   let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
+   let tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
    const whiteFlash=!!(reaction&&reaction.age<CFG.combat.feedback.flash&&reaction.age<45);
    if(reaction&&reaction.age<CFG.combat.feedback.flash&&!whiteFlash)tint=[1.75,.65,.5,1];
-   const rp=a.pos;this.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,actor:visual,reaction,pos:rp,scale,tint,alpha:1,whiteFlash});
+   const rp=a.pos;if(a.speciesId)this.units.actor(visual,sim,reaction,tint,whiteFlash);else this.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,actor:visual,reaction,pos:rp,scale,tint,alpha:1,whiteFlash});
    const raw=sim.actors[a.id],hit=raw?sim.physics.ground(raw,rp,2.5):null;if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}
   }
   const dropSprites=[];for(const d of Object.values(view.drops)){const dp=d.pos,frame=this.dropAtlas.frames[d.item];if(!frame||!this.worldVisualReady(dp,.16))continue;
@@ -246,12 +248,12 @@ class Renderer {
    fx.time+=dt;if(fx.time>=fx.duration)this.blockFx=null;
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
-  this.companionRenderer.prepare(view,sim,actor,dyn);
+  this.units.prepare(view,sim,actor,dyn);
   this.drawColored(dyn);
-  this.companionRenderer.drawCharacters('world');this.playerRig.draw('world');this.unitRig.draw('world');this.companionRenderer.draw(false);
+  this.playerRig.draw('world');this.unitRig.draw('world');
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
-  this.companionRenderer.draw(true);this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
-  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.companionRenderer.drawCharacters('late');this.playerRig.draw('late');this.unitRig.draw('late');this.combatFx.ui(sim);
+  this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
+  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.playerRig.draw('late');this.unitRig.draw('late');this.combatFx.ui(sim);
   if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
  }
  // Reusable per-section water meshes. World streaming controls the same 3D readyChunks
@@ -339,7 +341,7 @@ class Renderer {
   // Drawn *after* world+sprites with depth disabled so it never clips through local terrain.
   this.drawColored(geom,{overlay:true,lights:NO_LIGHTS,vp:matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])),eye:[0,0,0],ambient:Math.max(.6,this.ambient),fog:[.69,.85,.86]});
  }
- free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.companionRenderer.dispose();this.playerRig.dispose();this.unitRig.dispose();
+ free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.playerRig.dispose();this.unitRig.dispose();
   for(const pool of this.pools.values())for(const item of pool.items){item.geometry?.dispose();item.object.material.dispose();}this.pools.clear();
   for(const m of [this.terrainMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
   this.combatFx.reset();this.healthHud.reset();this.three.dispose();}

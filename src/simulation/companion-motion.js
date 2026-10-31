@@ -1,7 +1,8 @@
 'use strict';
-/* Local articulated attack points. The authored atlas and Rapier sweeps share these poses. */
+/* Local articulated strike points of an owned melee unit (뿌리 slam, 버섯 달팽이 spore). Rapier sweeps use these poses;
+ * the cut-out rig draws the unit at meleeWorldPose().root playing its signature anim on the same timing. */
 const companionEase=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
-function clawPose(action,elapsed){
+function meleePose(action,elapsed){
  const wind=elapsed<action.wind,active=!wind&&elapsed<action.wind+action.active;
  const stage=wind?'wind':active?'active':'recover',p=clamp(wind?elapsed/action.wind:active?(elapsed-action.wind)/action.active:(elapsed-action.wind-action.active)/action.recovery,0,1);
  const reach=wind?.05:active?companionEase(p/.48):1-companionEase(p),open=wind?lerp(.14,1,companionEase(p)):active?1-.94*companionEase((p-.08)/.50):lerp(.06,.72,companionEase(p));
@@ -11,9 +12,9 @@ function clawPose(action,elapsed){
  return{stage,p,body,arms,crouch,reach,open,feet:[{x:-.25-reach*.1,y:.06,z:-.12+reach*.15},{x:.25+reach*.1,y:.06,z:-.12-reach*.1}]};
 }
 function companionRoot(actor,dir=actor.facing,lateral=.63){const f=V.norm({x:dir.x,y:0,z:dir.z}),side={x:-f.z,y:0,z:f.x};return V.add(actor.pos,V.add(V.scale(f,.72),V.scale(side,lateral)));}
-function clawWorldPose(actor,action,elapsed){const local=clawPose(action,elapsed),root=companionRoot(actor,action.dir,1.1),f=V.norm({x:action.dir.x,y:0,z:action.dir.z}),side={x:-f.z,y:0,z:f.x};
+function meleeWorldPose(actor,action,elapsed){const local=meleePose(action,elapsed),root=companionRoot(actor,action.dir,1.1),f=V.norm({x:action.dir.x,y:0,z:action.dir.z}),side={x:-f.z,y:0,z:f.x};
  const point=p=>V.add(root,{x:side.x*p.x+f.x*p.z,y:p.y,z:side.z*p.x+f.z*p.z});
  return{root,origin:point({x:0,y:.65,z:.1}),tips:local.arms.flatMap(a=>a.tips.map(point)),local};
 }
-function isClawAction(action){return !!action?.companionId&&SPECIES[action.companionKind]?.capabilities.attack.mode==='claw';}
+function isMeleeAction(action){return !!action?.companionId&&SPECIES[action.companionKind]?.capabilities.attack.mode==='melee';}
 

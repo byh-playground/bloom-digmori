@@ -1,6 +1,7 @@
+// 0.33.0: the companion species render path is the PNG cut-out unit rig (the GameKit SVG species path is retired).
+// The script name is kept for the CI/npm contract; it now checks the live unit-rig routing, view mapping and depth.
 import {serveStatic} from '../scripts/static-server.mjs';
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -35,54 +36,32 @@ function roiDelta(a,b,x,y,radiusX,radiusY){
 const root=fileURLToPath(new URL('../',import.meta.url)),dist=root,out=path.join(root,'artifacts/companion-svg');
 fs.mkdirSync(out,{recursive:true});
 const config=fs.readFileSync(path.join(root,'src/core/config.js'),'utf8');
-const expectedSha=config.match(/pebbleMole:Object\.freeze\(\{url:'[^']+',sourcePath:'[^']+',sha256:'([a-f0-9]{64})'/)?.[1];
-assert(expectedSha,'The pinned pebble-mole source digest is missing');
-const source=fs.readFileSync(path.join(root,'src/assets/companions/pebble-mole.svg'));
-assert.equal(createHash('sha256').update(source).digest('hex'),expectedSha,'the authored SVG must match its pinned digest');
+// 0.33.0 retired the GameKit SVG species path: the authored SVGs, their pinned digests and the vector-asset modules are gone.
+for(const file of ['src/assets/companions/pebble-mole.svg',...['sprout','fungus','bug','flower','bee'].map(k=>'src/assets/characters/'+k+'.svg'),'src/presentation/companion-art.js','previews/companion-combat/index.html'])assert(!fs.existsSync(path.join(root,file)),'retired file still present: '+file);
+assert(!/vectorAssets|pebbleMole|vector-assets/.test(config),'config must not pin the retired SVG assets or vector-asset modules');
 const html=fs.readFileSync(path.join(dist,'index.html'),'utf8');
-assert(!html.includes('DIGMORI_VECTOR_RUNTIME'),'the build must not inline a generated vector runtime');
-assert(!html.includes('compile-companion-assets'),'the deployed page must not carry the build-time compiler');
-for(const kind of ['sprout','fungus','bug','flower','bee']){
- const asset=fs.readFileSync(path.join(root,'src/assets/characters/'+kind+'.svg'));
- const expected=config.match(new RegExp(kind+":Object\\.freeze\\(\\{url:'[^']+',sourcePath:'[^']+',sha256:'([a-f0-9]{64})'"))?.[1];
- assert(expected);assert.equal(createHash('sha256').update(asset).digest('hex'),expected);
- const source=asset.toString('utf8'),metadata=JSON.parse(source.match(/<metadata id="vector-asset">([\s\S]*?)<\/metadata>/)[1]);
- assert.equal(metadata.parts.length,14);assert.deepEqual(Object.keys(metadata.expressions),['view0','view1','view2','view3','view4']);assert.equal(metadata.clips.roll.durationMs,360);assert.equal(metadata.clips.roll.keyframes.length,12);
-}
-
-const evidence={browser:null,sourceSha256:expectedSha,sourceBytes:source.byteLength,cacheRequests:0,checks:[],camera:null,animation:null,depthPixels:null,screenshots:[]};
+assert(!html.includes('companion-art.js')&&html.includes('src/presentation/unit-looks.js'),'the page loads the unit-rig presenter instead of the SVG companion renderer');
+const evidence={browser:null,checks:[],camera:null,animation:null,depthPixels:null,screenshots:[]};
 const pass=(name,data)=>{evidence.checks.push({name,data});console.log('PASS '+name);};
 let server,browser,assetRequests=0;
 try{
- server=http.createServer((req,res)=>{if(new URL(req.url,'http://localhost').pathname==='/src/assets/companions/pebble-mole.svg')assetRequests++;serveStatic(req,res);});
+ server=http.createServer((req,res)=>{if(new URL(req.url,'http://localhost').pathname.endsWith('.svg'))assetRequests++;serveStatic(req,res);});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({headless:true});evidence.browser=browser.version();
  const page=await browser.newPage({viewport:{width:1280,height:800},deviceScaleFactor:1});
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('http://127.0.0.1:'+server.address().port+'/');
  await page.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:60000});
- await page.waitForFunction(()=>window.Bloom?.companionVector?.geometry?.vertices?.length>0,null,{timeout:10000});
- const loaded=await page.evaluate(async()=>{
-  const b=window.Bloom,d=b.DEPENDENCIES.vectorAssets.pebbleMole;
-  const cached=await b.vectorAssetLoader.load(new URL(d.url,location.href),{sourcePath:d.sourcePath,expectedSha256:d.sha256,maxBytes:d.maxBytes,curveSegments:d.curveSegments,includeSourcePaths:false});
-  const characters=await Promise.all(Object.entries(b.DEPENDENCIES.vectorAssets.characters).map(async([id,definition])=>{const compiled=b.vectorAssets.characters[id],again=await b.vectorAssetLoader.load(new URL(definition.url,location.href),{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});return{id,sameObject:compiled===again,parts:compiled.metadata.parts.length,views:Object.keys(compiled.metadata.expressions),rollDuration:compiled.metadata.clips.roll.durationMs};}));
-  return{sameObject:cached===b.companionVector,sha256:b.companionVector.sourceSha256,viewBox:b.companionVector.viewBox,vertices:b.companionVector.geometry.vertices.length,parts:b.companionVector.metadata.parts.length,clips:Object.keys(b.companionVector.metadata.clips),characters,rendererCharacterCount:b.app.renderer.companionRenderer.characterAssets.size};
- });
- assert.equal(loaded.sameObject,true,'the startup loader should return its cached compiled result');
- assert.equal(loaded.sha256,expectedSha);assert.deepEqual(loaded.viewBox,[0,0,256,256]);assert(loaded.vertices>0&&loaded.parts===8);
- assert.deepEqual(loaded.characters.map(c=>c.id).sort(),['bee','bug','flower','fungus']);assert(loaded.characters.every(c=>c.sameObject&&c.parts===14&&c.views.length===5&&c.rollDuration===360));assert.equal(loaded.rendererCharacterCount,4);
- assert.equal(assetRequests,1,'one startup fetch and a same-key load must produce only one source request');evidence.cacheRequests=assetRequests;
- pass('byte-identical SVG is fetched once, SHA-verified, compiled through the shared startup loader, and cache-reused',loaded);
+ const loaded=await page.evaluate(()=>({modules:Object.keys(Bloom.DEPENDENCIES.gamekit.modules),gamekitVector:!!Bloom.app.gamekit.vectorAssets,renderer:Object.keys(Bloom.app.renderer).filter(k=>/companion|vector/i.test(k)),rigs:Object.keys(Bloom.app.renderer.unitRig.rigs).sort()}));
+ assert(!loaded.modules.some(m=>/vector/i.test(m))&&!loaded.gamekitVector&&loaded.renderer.length===0,JSON.stringify(loaded));assert.deepEqual(loaded.rigs,['mushroom-snail','rock-chick','root']);assert.equal(assetRequests,0,'no SVG is requested at boot');
+ pass('boot loads no SVG and no GameKit vector-asset module; the renderer owns only the player and unit cut-out rigs',loaded);
 
  const playerId=await page.evaluate(()=>Bloom.app.localId);
- // The player is the PNG cut-out rig (src/assets/player); only enemies/NPCs/companions stay SVG.
+ // The player is the PNG cut-out rig (src/assets/player); companion species are the unit rig (checked below).
  await page.waitForFunction(id=>Bloom.app.renderer.playerRig.samples.some(s=>s.key===id),playerId,{timeout:10000});
- const playerIdle=await page.evaluate(id=>{const r=Bloom.app.renderer,s=r.playerRig.samples.find(s=>s.key===id);return s&&{mode:s.mode,kind:s.kind,anim:s.anim,view:s.view,flip:s.flip,head:s.head,depthTest:s.depthTest,depthWrite:s.depthWrite,svgPlayer:r.companionRenderer.characterSamples.some(v=>v.key===id)};},playerId);
- assert.equal(playerIdle.mode,'rig');assert.equal(playerIdle.kind,'player');assert.equal(playerIdle.depthTest,true);assert.equal(playerIdle.depthWrite,false);assert.equal(playerIdle.svgPlayer,false,'the player must not also be drawn through the SVG mesh path');
+ const playerIdle=await page.evaluate(id=>{const r=Bloom.app.renderer,s=r.playerRig.samples.find(s=>s.key===id);return s&&{mode:s.mode,kind:s.kind,anim:s.anim,view:s.view,flip:s.flip,head:s.head,depthTest:s.depthTest,depthWrite:s.depthWrite,unitPlayer:r.unitRig.samples.some(v=>v.key===id)};},playerId);
+ assert.equal(playerIdle.mode,'rig');assert.equal(playerIdle.kind,'player');assert.equal(playerIdle.depthTest,true);assert.equal(playerIdle.depthWrite,false);assert.equal(playerIdle.unitPlayer,false,'the player must not also be drawn through the unit rig');
  pass('the live player is drawn as the PNG cut-out rig in the existing world pass',playerIdle);
- const units=await page.evaluate(()=>{const r=Bloom.app.renderer.unitRig;return{species:Object.keys(r.rigs).sort(),samples:r.samples.length};});
- assert.deepEqual(units.species,['mushroom-snail','rock-chick','root']);assert.equal(units.samples,0,'0.32.0 loads the new species rig but routes no actor to it');
- pass('the new species cut-out rig loads at boot with the renderer and no actor is routed to it yet',units);
  const playerShot=path.join(out,'player-rig-live-webgl.png');await page.locator('#world').screenshot({path:playerShot});evidence.screenshots.push(path.relative(root,playerShot));
  await page.keyboard.down('KeyW');
  await page.waitForFunction(id=>Bloom.app.renderer.playerRig.samples.some(s=>s.key===id&&s.anim==='walk'),playerId,{timeout:5000});
@@ -103,87 +82,51 @@ try{
   variants.push(await page.evaluate(id=>{const s=Bloom.app.renderer.playerRig.samples.find(s=>s.key===id);return{view:s.view,flip:s.flip};},playerId));
  } assert.equal(new Set(variants.map(v=>v.view+':'+v.flip)).size,4,'the live player camera mapping should cover front, back and both mirrored side drawings');
  pass('camera sampling maps all eight facings onto the rig front/back/side drawings and the side mirror',variants);
+ // Wild individuals, a boss and an egg block all route through the unit rig in the world pass with depth testing.
  const fixture=await page.evaluate(()=>{
-  const app=Bloom.app,sim=app.sim,p=app.actor(),terrain=sim.terrain;
-  const eye={x:p.pos.x,y:p.pos.y+Bloom.CFG.player.eyeHeight,z:p.pos.z};
-  const normalize=v=>{const n=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/n,y:v.y/n,z:v.z/n};};
-  let candidate=null,details=null;
-  outer:for(let radius=8;radius<=13;radius++)for(let n=0;n<48;n++){
-   const angle=2*Math.PI*n/48,x=p.pos.x+Math.cos(angle)*radius,z=p.pos.z+Math.sin(angle)*radius,cx=Math.floor(x),cz=Math.floor(z),h=terrain.height(cx,cz);
-   if(h<Bloom.CFG.sea+1||h>19)continue;
-   let low=h,high=h;for(const[dx,dz]of [[1,0],[-1,0],[0,1],[0,-1]]){const y=terrain.height(cx+dx,cz+dz);low=Math.min(low,y);high=Math.max(high,y);}
-   if(high-low>1||!terrain.isSolid(terrain.get(cx,h,cz))||terrain.get(cx,h+1,cz)!==0||terrain.get(cx,h+2,cz)!==0||terrain.get(cx,h+3,cz)!==0)continue;
-   if(Object.values(sim.actors).some(a=>!a.dead&&Math.hypot(a.pos.x-(cx+.5),a.pos.z-(cz+.5))<5.5))continue;
-   const pos={x:cx+.5,y:h+1.1,z:cz+.5},target={x:pos.x,y:pos.y+1.1,z:pos.z},delta={x:target.x-eye.x,y:target.y-eye.y,z:target.z-eye.z},distance=Math.hypot(delta.x,delta.y,delta.z),dir=normalize(delta);
-   if(terrain.ray(eye,dir,Math.max(.1,distance-.15)))continue;
-   const bx=Math.floor(eye.x+delta.x*.5),by=Math.floor(eye.y+delta.y*.5),bz=Math.floor(eye.z+delta.z*.5);
-   if(terrain.get(bx,by,bz)!==0)continue;
-   candidate=sim.addCreature('shell',pos);if(!candidate)continue;
-   candidate.velocity={x:0,y:0,z:0};candidate.anim=0;candidate.facing=normalize({x:eye.x-target.x,y:0,z:eye.z-target.z});
-   details={id:candidate.id,pos:{...candidate.pos},target,eye,block:{x:bx,y:by,z:bz},distance,dir};break outer;
-  }
-  if(!candidate)throw Error('Could not find a flat, directly visible fixture site with a clear block cell in the camera ray');
-  const wild=Object.values(sim.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead);if(wild.length>=Bloom.CFG.creatures.maxWild){const removable=wild.filter(a=>a.id!==candidate.id).sort((a,b)=>Math.hypot(b.pos.x-candidate.pos.x,b.pos.z-candidate.pos.z)-Math.hypot(a.pos.x-candidate.pos.x,a.pos.z-candidate.pos.z))[0];if(removable){sim.physics.removeBody(removable);delete sim.actors[removable.id];}}
-  const nx=Math.floor(candidate.pos.x)+4,nz=Math.floor(candidate.pos.z),ny=terrain.height(nx,nz),npc=sim.addCreature('leaf',{x:nx+.5,y:ny+1.1,z:nz+.5});if(!npc)throw Error('Could not create a live leaf NPC SVG fixture');details.npcId=npc.id;
-  app.localScheduler.stop();app.scene.reset();app.renderer.camera.first=true;details.cameraYaw=Math.atan2(-details.dir.x,-details.dir.z);details.cameraPitch=-Math.asin(details.dir.y);app.renderer.camera.yaw=details.cameraYaw;app.renderer.camera.pitch=details.cameraPitch;app.renderer.camera.distance=0;
-  return details;
- });
- await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.samples.some(s=>s.mode==='svg'&&s.key===id),fixture.id,{timeout:15000});
- await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.characterSamples.some(s=>s.key===id&&s.kind==='fungus'),fixture.npcId,{timeout:10000});
- const npcSample=await page.evaluate(id=>{const s=Bloom.app.renderer.companionRenderer.characterSamples.find(s=>s.key===id);return s&&{kind:s.kind,clip:s.clip,depthTest:s.depthTest,worldMatrixLength:s.worldMatrix.length};},fixture.npcId);
- assert.equal(npcSample.kind,'fungus');assert.equal(npcSample.depthTest,true);assert.equal(npcSample.worldMatrixLength,16);
- pass('a live wild leaf NPC routes through its original fungus SVG mesh in the same 3D world pass',npcSample); const front=await page.evaluate(id=>{
-  const app=Bloom.app,r=app.renderer,c=app.sim.actors[id],sample=r.companionRenderer.samples.find(s=>s.mode==='svg'&&s.key===id);
-  const state=r.companionRenderer.players.get(id),parts=state.player.partPoses(),metadata=r.companionRenderer.asset.metadata;
-  return{sample,frontVisible:parts[metadata.parts.findIndex(p=>p.id==='face-front')].visible,backVisible:parts[metadata.parts.findIndex(p=>p.id==='face-back')].visible,viewProjectionLength:r.vp.length,worldReady:r.worldVisualReady(c.pos,.3)};
- },fixture.id);
- assert.equal(front.sample.expression,'front');assert.equal(front.frontVisible,true);assert.equal(front.backVisible,false);assert.equal(front.viewProjectionLength,16);assert(front.worldReady);
- assert.equal(front.sample.depthTest,true);assert.equal(front.sample.depthWrite,false);assert.equal(front.sample.worldMatrix.length,16);
- pass('the original SVG renders as a retained mesh in the live 3D camera/depth pass with its front expression',front);
-
+  const app=Bloom.app,sim=app.sim,p=app.actor(),terrain=sim.terrain;for(const a of Object.values(sim.actors).filter(a=>a.speciesId)){sim.physics.removeBody(a);delete sim.actors[a.id];}
+  const eye={x:p.pos.x,y:p.pos.y+Bloom.CFG.player.eyeHeight,z:p.pos.z},normalize=v=>{const n=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/n,y:v.y/n,z:v.z/n};};let candidate=null,details=null;
+  outer:for(let radius=6;radius<=10;radius++)for(let n=0;n<48;n++){
+   const angle=2*Math.PI*n/48,cx=Math.floor(p.pos.x+Math.cos(angle)*radius),cz=Math.floor(p.pos.z+Math.sin(angle)*radius),h=terrain.height(cx,cz);if(h<Bloom.CFG.sea+1||h>19)continue;
+   let low=h,high=h;for(const[dx,dz]of [[1,0],[-1,0],[0,1],[0,-1]]){const y=terrain.height(cx+dx,cz+dz);low=Math.min(low,y);high=Math.max(high,y);}if(high-low>1||!terrain.isSolid(terrain.get(cx,h,cz))||[1,2,3].some(k=>terrain.get(cx,h+k,cz)!==0))continue;
+   const pos={x:cx+.5,y:h+1.1,z:cz+.5},target={x:pos.x,y:pos.y+.5,z:pos.z},delta={x:target.x-eye.x,y:target.y-eye.y,z:target.z-eye.z},distance=Math.hypot(delta.x,delta.y,delta.z),dir=normalize(delta);
+   if(terrain.ray(eye,dir,Math.max(.1,distance-.15)))continue;const bx=Math.floor(eye.x+delta.x*.5),by=Math.floor(eye.y+delta.y*.5),bz=Math.floor(eye.z+delta.z*.5);if(terrain.get(bx,by,bz)!==0)continue;
+   candidate=sim.addCreature('rock-chick',pos);if(!candidate)continue;candidate.ai.cooldown=1e9;candidate.homePos={...pos};candidate.facing=normalize({x:eye.x-target.x,y:0,z:eye.z-target.z});details={id:candidate.id,pos:{...candidate.pos},target,eye,block:{x:bx,y:by,z:bz},distance,dir};break outer;}
+  if(!candidate)throw Error('no flat, directly visible fixture site');
+  const boss=sim.addBoss('root',{x:p.pos.x-6,y:p.pos.y+.4,z:p.pos.z+6},null);boss.ai.cooldown=1e9;details.bossId=boss.id;
+  const ex=Math.floor(p.pos.x)+2,ez=Math.floor(p.pos.z)+2,ey=terrain.height(ex,ez)+1;terrain.set(ex,ey,ez,Bloom.BID.mushroomSnailEgg);sim.eggs[ex+','+ey+','+ez]={key:ex+','+ey+','+ez,x:ex,y:ey,z:ez,species:'mushroom-snail',owner:p.id,placedTick:sim.tick,hatchTick:sim.tick+1e6};details.egg=ex+','+ey+','+ez;
+  app.localScheduler.stop();app.scene.reset();app.renderer.camera.first=true;details.cameraYaw=Math.atan2(-details.dir.x,-details.dir.z);details.cameraPitch=-Math.asin(details.dir.y);app.renderer.camera.yaw=details.cameraYaw;app.renderer.camera.pitch=details.cameraPitch;app.renderer.camera.distance=0;return details;});
+ await page.waitForFunction(({id,bossId})=>{const s=Bloom.app.renderer.unitRig.samples;return s.some(v=>v.key===id&&v.role==='wild')&&s.some(v=>v.key===bossId&&v.role==='boss');},fixture,{timeout:15000});
+ await page.waitForFunction(key=>Bloom.app.renderer.unitRig.samples.some(v=>v.key==='egg/'+key&&v.egg),fixture.egg,{timeout:15000});
+ const routed=await page.evaluate(({id,bossId,egg})=>{const r=Bloom.app.renderer,s=r.unitRig.samples,pick=k=>{const v=s.find(v=>v.key===k);return v&&{mode:v.mode,role:v.role,species:v.species,stage:v.stage,anim:v.anim,view:v.view,depthTest:v.depthTest,depthWrite:v.depthWrite,parts:v.parts};};return{wild:pick(id),boss:pick(bossId),egg:pick('egg/'+egg),player:r.playerRig.samples.filter(v=>v.key===Bloom.app.localId).length};},fixture);
+ assert.equal(routed.wild.species,'rock-chick');assert.equal(routed.wild.stage,'adult');assert.equal(routed.wild.depthTest,true);assert.equal(routed.wild.depthWrite,false);assert.equal(routed.wild.view,'front');
+ assert.equal(routed.boss.species,'root');assert.equal(routed.boss.stage,'boss');assert.equal(routed.egg.species,'mushroom-snail');assert.equal(routed.egg.anim,'egg');
+ pass('a wild rock chick, a root boss (stage boss, ×3 with hat) and a placed egg block are drawn by the cut-out unit rig in the 3D depth-tested pass',routed);
  await page.evaluate(()=>{Bloom.app.renderer.camera.yaw+=Math.PI;});
- await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.samples.some(s=>s.mode==='svg'&&s.key===id&&s.expression==='back'),fixture.id,{timeout:5000});
- const back=await page.evaluate(id=>{const r=Bloom.app.renderer,state=r.companionRenderer.players.get(id),parts=state.player.partPoses(),metadata=r.companionRenderer.asset.metadata;return{expression:r.companionRenderer.samples.find(s=>s.mode==='svg'&&s.key===id).expression,frontVisible:parts[metadata.parts.findIndex(p=>p.id==='face-front')].visible,backVisible:parts[metadata.parts.findIndex(p=>p.id==='face-back')].visible};},fixture.id);
- assert.equal(back.expression,'back');assert.equal(back.frontVisible,false);assert.equal(back.backVisible,true);evidence.camera={front,back};
- await page.evaluate(({yaw,pitch})=>{Bloom.app.renderer.camera.yaw=yaw;Bloom.app.renderer.camera.pitch=pitch;},{yaw:fixture.cameraYaw,pitch:fixture.cameraPitch});
- await page.waitForFunction(id=>Bloom.app.renderer.companionRenderer.samples.some(s=>s.mode==='svg'&&s.key===id&&s.expression==='front'),fixture.id,{timeout:5000});
- pass('camera reversal switches the SVG expression and authored face visibility, then returns to the front view',evidence.camera);
-
- const animation=await page.evaluate(id=>{
-  const r=Bloom.app.renderer,asset=r.companionRenderer.asset,state=r.companionRenderer.players.get(id),player=state.player,body=asset.metadata.parts.findIndex(p=>p.id==='body');
-  player.play('walk',0);const start=player.partPoses()[body].transform.slice();player.seek(250);const mid=player.partPoses()[body].transform.slice();
-  const changed=Math.hypot(start[4]-mid[4],start[5]-mid[5],start[0]-mid[0],start[3]-mid[3]);
-  const sample=r.companionRenderer.samples.find(s=>s.mode==='svg'&&s.key===id);player.play(sample.clip,0);player.seek(sample.timeMs);
-  return{clip:'walk',start,mid,changed,sourceTimeMs:sample.timeMs};
- },fixture.id);
- assert(animation.changed>1,'seeking the source-authored animation must move the SVG body mesh');evidence.animation=animation;
- pass('source-authored SVG animation changes retained part transforms at absolute display times',animation);
-
+ await page.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.view==='back'),fixture.id,{timeout:5000});
+ await page.evaluate(({cameraYaw,cameraPitch})=>{Bloom.app.renderer.camera.yaw=cameraYaw;Bloom.app.renderer.camera.pitch=cameraPitch;},fixture);
+ await page.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.view==='front'),fixture.id,{timeout:5000});
+ evidence.camera={front:'front',back:'back'};pass('camera reversal switches the rig between its front and back drawings, then returns to the front',evidence.camera);
+ const animation=await page.evaluate(id=>{const sim=Bloom.app.sim,a=sim.actors[id];a.combat.state='attack';a.combat.elapsed=0;a.combat.action={name:'enemy',kind:'swing',weapon:'rock-chick',wind:700,active:125,recovery:1000,reach:1.8,arc:1.7,damage:0,dir:{...a.facing},hits:[],fired:false,sequence:999};const look=Bloom.speciesActorLook({...a,velocity:{x:0,y:0,z:0}},null,false).look;a.combat.state='idle';a.combat.action=null;return look;},fixture.id);
+ assert.equal(animation.anim,'headbutt');evidence.animation=animation;pass('a wild attack plays the species signature anim (rock chick headbutt)',animation);
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- const worldShot=path.join(out,'pebble-mole-live-webgl.png'),worldPng=await page.locator('#world').screenshot({path:worldShot});evidence.screenshots.push(path.relative(root,worldShot));
-
- const ray=await page.evaluate(({id,block})=>{
-  const app=Bloom.app,terrain=app.sim.terrain,actor=app.actor(),c=app.sim.actors[id],target={x:c.pos.x,y:c.pos.y+1.1,z:c.pos.z},eye={x:actor.pos.x,y:actor.pos.y+Bloom.CFG.player.eyeHeight,z:actor.pos.z},d={x:target.x-eye.x,y:target.y-eye.y,z:target.z-eye.z},length=Math.hypot(d.x,d.y,d.z),dir={x:d.x/length,y:d.y/length,z:d.z/length};
-  const placed=terrain.set(block.x,block.y,block.z,Bloom.BID.diamondOre);if(placed===false)throw Error('Depth fixture voxel could not be placed');
-  return{block,ray:terrain.ray(eye,dir,length+1),target,eye};
- },{id:fixture.id,block:fixture.block});
- assert.deepEqual({x:ray.ray?.x,y:ray.ray?.y,z:ray.ray?.z},fixture.block,'the block must be directly on the live camera ray in front of the SVG');
+ const worldShot=path.join(out,'unit-rig-live-webgl.png'),worldPng=await page.locator('#world').screenshot({path:worldShot});evidence.screenshots.push(path.relative(root,worldShot));
+ const ray=await page.evaluate(({id,block})=>{const app=Bloom.app,terrain=app.sim.terrain,actor=app.actor(),c=app.sim.actors[id],target={x:c.pos.x,y:c.pos.y+.5,z:c.pos.z},eye={x:actor.pos.x,y:actor.pos.y+Bloom.CFG.player.eyeHeight,z:actor.pos.z},d={x:target.x-eye.x,y:target.y-eye.y,z:target.z-eye.z},length=Math.hypot(d.x,d.y,d.z),dir={x:d.x/length,y:d.y/length,z:d.z/length};
+  if(terrain.set(block.x,block.y,block.z,Bloom.BID.diamondOre)===false)throw Error('Depth fixture voxel could not be placed');return{block,ray:terrain.ray(eye,dir,length+1)};},{id:fixture.id,block:fixture.block});
+ assert.deepEqual({x:ray.ray?.x,y:ray.ray?.y,z:ray.ray?.z},fixture.block,'the block must be directly on the live camera ray in front of the unit');
  await page.waitForFunction(({x,y,z})=>Bloom.app.renderer.readyChunks.has(Math.floor(x/16)+':'+Math.floor(y/16)+':'+Math.floor(z/16)),fixture.block,{timeout:5000});
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- const occlusionShot=path.join(out,'pebble-mole-world-depth-occlusion.png'),occludedPng=await page.locator('#world').screenshot({path:occlusionShot});evidence.screenshots.push(path.relative(root,occlusionShot));
- const depthOff=await page.evaluate(()=>{
-  const meshes=Bloom.app.renderer.companionRenderer.meshes,original=meshes.drawMesh.bind(meshes);
-  meshes.drawMesh=(mesh,options)=>original(mesh,{...options,depthTest:false});
-  return true;
- });assert(depthOff);
+ const occlusionShot=path.join(out,'unit-rig-world-depth-occlusion.png'),occludedPng=await page.locator('#world').screenshot({path:occlusionShot});evidence.screenshots.push(path.relative(root,occlusionShot));
+ const depthOff=await page.evaluate(()=>{const pool=Bloom.app.renderer.pools.get('unit-rig');for(const item of pool.items)item.object.material.depthTest=false;return pool.items.length;});assert(depthOff>0);
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- const noDepthShot=path.join(out,'pebble-mole-depth-disabled.png'),noDepthPng=await page.locator('#world').screenshot({path:noDepthShot});evidence.screenshots.push(path.relative(root,noDepthShot));
+ const noDepthShot=path.join(out,'unit-rig-depth-disabled.png'),noDepthPng=await page.locator('#world').screenshot({path:noDepthShot});evidence.screenshots.push(path.relative(root,noDepthShot));
  const beforeImage=decodePng(worldPng),occludedImage=decodePng(occludedPng),depthDisabledImage=decodePng(noDepthPng),center={x:beforeImage.width>>1,y:beforeImage.height>>1};
- const hidden=roiDelta(beforeImage,occludedImage,center.x,center.y+28,42,42),revealed=roiDelta(occludedImage,depthDisabledImage,center.x,center.y+28,42,42);
- assert(hidden.changed>40&&hidden.total>3000,'the foreground voxel should hide part of the SVG in the actual browser screenshot: '+JSON.stringify({hidden,center,canvas:[beforeImage.width,beforeImage.height]}));
- assert(revealed.changed>40&&revealed.total>3000,'disabling depth in the same live draw should reveal the SVG over the voxel in the actual browser screenshot: '+JSON.stringify({revealed,center,canvas:[beforeImage.width,beforeImage.height]}));
- evidence.depthPixels={center,roi:{width:84,height:84,yOffset:28},depthTestEnabledScreenshotDelta:hidden,depthTestDisabledScreenshotDelta:revealed,block:ray.block,ray:ray.ray};
- pass('the actual WebGL world depth buffer occludes the SVG mesh; the same mesh is visible over the block when depth testing is disabled',evidence.depthPixels);
+ const hidden=roiDelta(beforeImage,occludedImage,center.x,center.y+20,42,42),revealed=roiDelta(occludedImage,depthDisabledImage,center.x,center.y+20,42,42);
+ assert(hidden.changed>40&&hidden.total>3000,'the foreground voxel should hide part of the unit: '+JSON.stringify({hidden,center}));
+ assert(revealed.changed>40&&revealed.total>3000,'disabling depth in the same live draw should reveal the unit over the voxel: '+JSON.stringify({revealed,center}));
+ evidence.depthPixels={center,depthTestEnabledScreenshotDelta:hidden,depthTestDisabledScreenshotDelta:revealed,block:ray.block};
+ pass('the WebGL world depth buffer occludes the unit rig quad; the same quad shows over the block when depth testing is disabled',evidence.depthPixels);
+
  assert.deepEqual(errors,[],'page errors: '+errors.join('; '));await page.waitForLoadState('networkidle');await page.close();
  const mobileContext=await browser.newContext({viewport:{width:844,height:390},deviceScaleFactor:1,isMobile:true,hasTouch:true}),mobile=await mobileContext.newPage(),mobileErrors=[];mobile.on('pageerror',error=>mobileErrors.push(error.message));await mobile.goto('http://127.0.0.1:'+server.address().port+'/');
  await mobile.waitForFunction(()=>window.Bloom?.app?.started&&window.Bloom.app.renderer.playerRig.samples.some(s=>s.key===Bloom.app.localId),null,{timeout:60000});const mobileId=await mobile.evaluate(()=>Bloom.app.localId),mobileInitial=await mobile.evaluate(id=>{const r=Bloom.app.renderer,s=r.playerRig.samples.find(v=>v.key===id);return{mode:s?.mode,kind:s?.kind,anim:s?.anim,depthTest:s?.depthTest,canvas:[r.canvas.clientWidth,r.canvas.clientHeight]};},mobileId);assert.equal(mobileInitial.mode,'rig');assert.equal(mobileInitial.kind,'player');assert.equal(mobileInitial.depthTest,true);assert(mobileInitial.canvas[0]>mobileInitial.canvas[1]);
@@ -193,7 +136,7 @@ try{
  assert.deepEqual(errors,[],'page errors: '+errors.join('; '));
  evidence.result='PASS';evidence.elapsedMs=Date.now();
  fs.writeFileSync(path.join(out,'validation.json'),JSON.stringify(evidence,null,2)+'\n');
- console.log(JSON.stringify({result:evidence.result,browser:evidence.browser,sourceSha256:expectedSha,checks:evidence.checks.length,screenshots:evidence.screenshots}));
+ console.log(JSON.stringify({result:evidence.result,browser:evidence.browser,checks:evidence.checks.length,screenshots:evidence.screenshots}));
 }catch(error){evidence.result='FAIL';evidence.error=error.stack||String(error);fs.writeFileSync(path.join(out,'validation.json'),JSON.stringify(evidence,null,2)+'\n');console.error(error);process.exitCode=1;}
 finally{await browser?.close();await new Promise(resolve=>server?.close(resolve));}
 

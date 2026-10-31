@@ -2,7 +2,7 @@
 
 **[브라우저로 보기](https://byh-playground.github.io/bloom-digmori/previews/unit-rig/)**
 
-뿌리 · 바위 병아리 · 버섯 달팽이의 부품 PNG(`src/assets/units/`)를 제품 리그 `src/presentation/unit-rig.js`로 실행 중에 조립해 그리는 결정적 프리뷰입니다. 0.32.0에서는 리그와 에셋만 추가했고 게임 액터에는 아직 연결하지 않았습니다. 시뮬레이션·three.js·저장을 실행하지 않고 2D 캔버스에 같은 `UnitRig.draw`를 부릅니다.
+뿌리 · 바위 병아리 · 버섯 달팽이의 부품 PNG(`src/assets/units/`)를 제품 리그 `src/presentation/unit-rig.js`로 실행 중에 조립해 그리는 결정적 프리뷰입니다. 0.33.0부터 게임의 야생 개체·보스·보유 동료·놓인 알이 같은 리그로 그려집니다(`src/presentation/unit-looks.js`가 시뮬레이션 상태를 look으로 바꿉니다). 이 프리뷰는 시뮬레이션·three.js·저장을 실행하지 않고 2D 캔버스에 같은 `UnitRig.draw`를 부릅니다.
 
 종마다 다음을 한 화면에 보여 줍니다.
 

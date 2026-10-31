@@ -5,13 +5,10 @@ const DEPENDENCIES=Object.freeze({
  rapier:{package:'@dimforge/rapier3d-deterministic-compat',version:'0.21.0',url:'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs',mirrors:['https://unpkg.com/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs'],timeoutMs:15000},
  gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'dd59a57fcf66409cef16632ffb433c0b760324fa',distCommit:'418e17c455db56d6ed073d82d115191d9dd8bf04',manifestSha256:'20244c2beeee33719f407a9baa92c55a4bd55a0e4eb9f094590bb0eed652296e',timeoutMs:15000,
   networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'cb509226a9644e86857f12e137943bf0cc04c5f4bace4dbdf4137efa6240fc3a'}),rollback:Object.freeze({file:'rollback.js',sha256:'071fb0f82521d212d00f112abd90fc149616d80b79d4628db0008637ce102596'})}),
-  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'b2abc40a6e5ca59b0b24b6c7fefa7492ea13b17686da86f61a8fff16be146ac5'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'061960f311ad57894914186baa01f6b257269637353056ac93f86d34265a4ef8'}),input:Object.freeze({file:'input.js',sha256:'a969755a39702723b35b6a1503e9b2e53a431ea91845017474c979752fdfb51f'}),simloop:Object.freeze({file:'simloop.js',sha256:'c25a8f7f4999e4fe8beb6b08167fa4d0934c34098db2bf912335e81db53c4ef8'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'f7ef72116be78d348a6e45a5e47a23aad8d2f0be8c1401c69b9dea7e51d4ea55'}),audio:Object.freeze({file:'audio.js',sha256:'f792c0b56b4829d20dfecb03f087bc435e377d9e772a7c5caa3611afef281d20'}),vectorAssets:Object.freeze({file:'vector-assets.js',sha256:'288eadf3830df2836f0b103dc513a906b5b9dbd58660885c18b2a0941d0e877a'}),vectorAssetLoader:Object.freeze({file:'vector-assets-loader.js',sha256:'56042179b1b669d69d4791c5a1ad7bbd1927d8686fa4e9192504fb248c2170e2'})})},
- vectorAssets:Object.freeze({pebbleMole:Object.freeze({url:'src/assets/companions/pebble-mole.svg',sourcePath:'src/assets/companions/pebble-mole.svg',sha256:'f2dfee77c89084741620974a40d1eb3e49fc9d8c9f813776280d2da7bcdc3cb4',maxBytes:65536,curveSegments:16}),characters:Object.freeze({fungus:Object.freeze({url:'src/assets/characters/fungus.svg',sourcePath:'src/assets/characters/fungus.svg',sha256:'20cb39fd53cf911ab21508e4a61c880657cdc164fd33949b94ec7beb878fbc4c',maxBytes:65536,curveSegments:16}),bug:Object.freeze({url:'src/assets/characters/bug.svg',sourcePath:'src/assets/characters/bug.svg',sha256:'9dbb87c71786dc7ba17eeb6067a9e1c0a2c39c6addd8acc0e60f72cf92243c30',maxBytes:65536,curveSegments:16}),flower:Object.freeze({url:'src/assets/characters/flower.svg',sourcePath:'src/assets/characters/flower.svg',sha256:'5a2c23f23eb6cd13ef2cc5a8629448d48064d828d4fc2cb54dbc8b4b30d762bb',maxBytes:65536,curveSegments:16}),bee:Object.freeze({url:'src/assets/characters/bee.svg',sourcePath:'src/assets/characters/bee.svg',sha256:'7ac381dab18eeb79e83514ec1983259e4de68bc321f011ba0b528160283f651c',maxBytes:65536,curveSegments:16})}),
-  // The old sprout player SVG now only feeds the preserved companion-combat preview; the game draws players with the PNG rig.
-  preview:Object.freeze({sprout:Object.freeze({url:'src/assets/characters/sprout.svg',sourcePath:'src/assets/characters/sprout.svg',sha256:'59aaac5cd245cd19321a529681f58880e7634fa0c991465719dc8bf9c88de032',maxBytes:65536,curveSegments:16})})}),
+  modules:Object.freeze({debug:Object.freeze({file:'debug-tools.js',sha256:'b2abc40a6e5ca59b0b24b6c7fefa7492ea13b17686da86f61a8fff16be146ac5'}),interpolation:Object.freeze({file:'interpolation.js',sha256:'061960f311ad57894914186baa01f6b257269637353056ac93f86d34265a4ef8'}),input:Object.freeze({file:'input.js',sha256:'a969755a39702723b35b6a1503e9b2e53a431ea91845017474c979752fdfb51f'}),simloop:Object.freeze({file:'simloop.js',sha256:'c25a8f7f4999e4fe8beb6b08167fa4d0934c34098db2bf912335e81db53c4ef8'}),presentation:Object.freeze({file:'presentation-events.js',sha256:'f7ef72116be78d348a6e45a5e47a23aad8d2f0be8c1401c69b9dea7e51d4ea55'}),audio:Object.freeze({file:'audio.js',sha256:'f792c0b56b4829d20dfecb03f087bc435e377d9e772a7c5caa3611afef281d20'})})},
  // Authored cut-out player parts (PNG) and weapon grip points, assembled at runtime by PlayerRig.
  playerArt:Object.freeze({base:'src/assets/player/'}),
- // Authored cut-out parts (PNG) of the three new companion species, assembled at runtime by UnitRig (not routed to actors yet).
+ // Authored cut-out parts (PNG) of the three companion species, assembled at runtime by UnitRig for wild, boss and owned units.
  unitArt:Object.freeze({base:'src/assets/units/'})
 });
 /* Digmori — 게임별 스탯 프로필의 SSOT. 시간=ms, 거리=m, HP=생명력. */
@@ -20,7 +17,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.32.1',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.33.0',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -37,10 +34,10 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   combat:{combo:{window:650,chainRecovery:.45,minRecovery:75},hit:{radius:.26,angularStep:.11,maxSamples:40,skin:.008},
    knockback:{drag:3.5,maxSpeed:14,duration:340,bossResistance:.26,playerResistance:.76,
     weapons:{fist:4.2,sword:6.2,spear:5.6,axe:7.5},
-    creatures:{shell:1,leaf:1.1,boss:.26}},
+    creatures:{root:1.1,'rock-chick':.9,'mushroom-snail':1,boss:.26}},
    feedback:{particles:220,bursts:32,numbers:24,flash:130,poseHold:45,heavyHold:70,shake:.045,volume:.20,afterimages:3}},
   textures:{enabled:true,minifyStart:.8,minifyEnd:2.5},
-  creatures:{initialEncounterTicks:ticksForMs(6000),encounterCheckTicks:ticksForMs(2000),spawnTicks:ticksForMs(6000),maxWild:6,perPlayer:3,encounterRadius:32,despawnRadius:64,leash:26,dungeonPackSize:4},
+  creatures:{initialEncounterTicks:ticksForMs(6000),encounterCheckTicks:ticksForMs(2000),spawnTicks:ticksForMs(6000),maxWild:6,perPlayer:3,encounterRadius:32,despawnRadius:64,leash:26,dungeonPackSize:3,bossTrigger:22,bossAggro:14,bossLeash:24},
   worldgen:{caveSpacing:48,caveLength:34,mineSpacing:64,dungeonSpacing:112,resourceGuideRadius:128,rooms:6},rpg:{maxLevel:25,xp:{boss:250},mining:{coalOre:3,ironOre:5,goldOre:8,diamondOre:15,crystalBloom:12},dungeonClear:120,chest:18},
   camera:{initialDistance:{desktop:7.5,mobile:11},minDistance:2.5,maxDistance:11},
   timing:{maxCatchUp:ticksForMs(100),maxBacklogTicks:ticksForMs(800)},worldSeed:190725,presentation:{maxBuffered:2048,retentionTicks:ticksForMs(4000)},net:{maxPlayers:4,inputSize:20,inputDelayTicks:Math.ceil(50*SIMULATION_TPS/1000),checksumTicks:ticksForMs(1000),historyTicks:ticksForMs(2000)}});
