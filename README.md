@@ -81,9 +81,10 @@ CI는 빌드 없이 원본 JS 문법과 필수 파일 존재만 확인합니다.
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
 | Bloom GameKit | v0.14.3 · dist `418e17c455db56d6ed073d82d115191d9dd8bf04` |
 | Pebble Mole vector art | `src/assets/companions/pebble-mole.svg` is copied byte-for-byte to Pages and SHA-256 checked; the startup loader fetches, compiles once, and caches it as an in-memory retained mesh |
-| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio, rendering, vector-assets, vector-assets-loader |
+| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio, rendering(고정 목록·해시 검증용으로 로드, 3D 그리기는 three.js), vector-assets, vector-assets-loader |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
-| 그래픽·저장 | WebGL, 청크 Worker, IndexedDB 및 월드 파일 |
+| 3D 렌더 | `three@0.160.0` 고정 ESM(`build/three.module.js`), WebGL2. 지형·물·하늘·효과·SVG 캐릭터를 기존 셰이더와 같은 순서로 그림 |
+| 그래픽·저장 | 청크 Worker, IndexedDB 및 월드 파일 |
 
 SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.js)입니다. `main`/`latest` 같은 가변 SDK 참조는 사용하지 않습니다.
 

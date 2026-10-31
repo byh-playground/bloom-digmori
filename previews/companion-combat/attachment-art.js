@@ -66,7 +66,7 @@ function companionConnectorGeometry(r,out,actor,contract){
  for(const socket of contract.sockets){const p=companionAtlasPointWorld(r,actor,socket,socket.layer);r.box(out,{...p,y:p.y-.045},{x:.11,y:.09,z:.035},socket.id==='claw'?[.48,.61,.48]:[.30,.48,.27]);}
 }
 
-function createCompanionAtlas(gl){
+function createCompanionAtlas(){
  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;const dest=canvas.getContext('2d'),frames={};
  for(const mode of ['ball','sword'])for(let type=0;type<3;type++)for(let phase=0;phase<8;phase++){
   const density=COMPANION_ART[type].scale,extent=type===0?96:64,pixels=Math.ceil(extent*density),x=phase*64,y=(type+(mode==='sword'?3:0))*64,k=phase/7;
@@ -98,6 +98,6 @@ function createCompanionAtlas(gl){
   const rgba=c.getImageData(0,0,pixels,pixels);for(let i=3;i<rgba.data.length;i+=4)rgba.data[i]=rgba.data[i]>=128?255:0;const native=tile.getContext('2d');native.setTransform(1,0,0,1,0,0);native.putImageData(rgba,0,0);dest.drawImage(tile,x,y);
   frames[mode+'/'+type+'/'+phase]={u0:x/512,u1:(x+pixels)/512,v0:1-y/512,v1:1-(y+pixels)/512,sourceExtent:pixels/density,pixels,density};
  }
- const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);for(const p of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,p,gl.NEAREST);for(const p of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,p,gl.CLAMP_TO_EDGE);return{tex,frames};
+ return{canvas,frames};
 }
-function drawCompanionSprites(r,vertices,tex){if(!vertices.length)return;const gl=r.gl,p=r.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,r.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),r.ambient??1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,r.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);r.attrib(p,'p',3,36,0);r.attrib(p,'uv',2,36,12);r.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,vertices.length/9);}
+function drawCompanionSprites(r,vertices,texture,depthWrite=true){r.drawSprites(vertices,texture,{ambient:r.ambient??1,blend:true,depthWrite});}

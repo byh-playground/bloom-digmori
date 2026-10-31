@@ -1,8 +1,8 @@
 'use strict';
 (async()=>{
 const dependency=DEPENDENCIES.gamekit,base=`https://cdn.jsdelivr.net/gh/${dependency.repository}@${dependency.distCommit}/`;
-const [rendering,vectorAssets,loader]=await Promise.all(['rendering','vectorAssets','vectorAssetLoader'].map(name=>import(base+dependency.modules[name].file)));
-const previewGamekit={rendering,vectorAssets};
+const [vectorAssets,loader,THREE]=await Promise.all([...['vectorAssets','vectorAssetLoader'].map(name=>import(base+dependency.modules[name].file)),import(DEPENDENCIES.three.url)]);
+const previewGamekit={vectorAssets};
 const definition=DEPENDENCIES.vectorAssets.pebbleMole;
 const previewLoader=loader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:2});
 const previewVector=await previewLoader.load(new URL('../../'+definition.url,location.href),{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});
@@ -25,7 +25,8 @@ previewUI.device.value=matchMedia('(max-width:700px)').matches?'mobile':'pc';
 previewUI.timeline.oninput=()=>{playing=false;clock=Number(previewUI.timeline.value);previewUI.play.textContent='재생';drawFrame(clock);};
 previewUI.play.onclick=()=>{playing=!playing;previewUI.play.textContent=playing?'일시정지':'재생';};
 previewUI.exact.onchange=()=>previewUI.stage.classList.toggle('exact',previewUI.exact.checked);
-function drawGeometry(r,vertices){r.meshState(new Float32Array(32));const gl=r.gl;gl.bindBuffer(gl.ARRAY_BUFFER,r.dynamic);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);r.attrib(r.meshProgram,'p',3,24,0);r.attrib(r.meshProgram,'c',3,24,12);gl.drawArrays(gl.TRIANGLES,0,vertices.length/6);}
+// Geometry and sprites drawn after the SVG character keep depth writes off (legacy pass state).
+function drawGeometry(r,vertices,depthWrite=true){r.drawColored(vertices,{lights:new Float32Array(32),depthWrite});}
 function combatBeat(t){
  const cycle=((t%2.8)+2.8)%2.8;
  const phase=cycle<.35?'attached':cycle<.85?'prepare':cycle<1.15?'strike':cycle<1.32?'impact':cycle<1.9?'return':cycle<2.3?'recover':'attached';
@@ -55,9 +56,7 @@ function drawFrame(t){
  if(r.canvas.width!==width||r.canvas.height!==height){r.canvas.width=width;r.canvas.height=height;}
  r.camera.distance=previewUI.close.checked?4.2:7.5;r.camera.pitch=Number(previewUI.pitch.value);previewUI.pitchOut.textContent=r.camera.pitch.toFixed(2);
  const state=fixture(t),{actor,action,sample,pose,deploy,cycle,beat}=state;
- r.companionRenderer.beginFrame([.48,.67,.72]);gl.viewport(0,0,width,height);
- r.updateCamera(actor,{terrain:{ray:wallRay}});r.fog=new Float32Array([.48,.67,.72]);r.ambient=1;
- gl.clearColor(.48,.67,.72,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+ r.updateCamera(actor,{terrain:{ray:wallRay}});r.fog=new Float32Array([.48,.67,.72]);r.ambient=1;r.beginFrame(r.fog);
  const scene=[],reach=combatMode==='ball'?2:1.2;
  for(let z=-9;z<=9;z++)for(let x=-9;x<=9;x++)r.box(scene,{x,y:-.26,z},{x:1,y:.25,z:1},(x+z)%2?[.39,.51,.32]:[.43,.55,.35]);
  // A visible target and a side wall keep scale and occlusion legible.
@@ -87,19 +86,18 @@ function drawFrame(t){
   }else attachedQuad(r,verts,actor,socket,art,frame,layout);
   (socket.layer==='back'?behind:front).push(verts);
  }
- for(const verts of behind)drawSprites(r,verts,r.companions.tex);
+ for(const verts of behind)drawSprites(r,verts,r.companions.texture);
  r.companionRenderer.drawCharacter({key:'preview-player',kind:'sprout',sample,pos:actor.pos,scale:1,tint:[1,1,1,1],alpha:1});
- if(previewUI.gear.checked){const cuffs=[];connectorGeometry(r,cuffs,actor,contract);drawGeometry(r,cuffs);}
- for(const verts of front)drawSprites(r,verts,r.companions.tex);
- gl.disable(gl.BLEND);
+ if(previewUI.gear.checked){const cuffs=[];connectorGeometry(r,cuffs,actor,contract);drawGeometry(r,cuffs,false);}
+ for(const verts of front)drawSprites(r,verts,r.companions.texture,false);
+ r.endFrame();
  const labels={attached:'손에 붙어 대기',prepare:'함께 웅크려 준비',strike:combatMode==='ball'?'공으로 발사':'몸을 굳혀 휘두르기',impact:'명중 · 동료 반응',return:combatMode==='ball'?'손으로 복귀':'팔과 함께 회수',recover:'긴장 풀기'};
  previewUI.state.textContent=(combatMode==='ball'?'① 공 발사':'② 생물 검')+' · '+(action==='combat'?labels[beat.phase]:action)+' · '+sample.view*45+'°';
  if(playing)previewUI.timeline.value=String(cycle);
  previewUI.scale.textContent=`표시 ${Math.round(cssWidth)}×${Math.round(cssHeight)} · DPR ${dpr} · 캔버스 ${width}×${height} · 거리 ${r.camera.distance}m`;
- r.companionRenderer.endFrame();
  window.symbioticPreview={revision:4,combatMode,beat,previewOnly:true,pixelContract:{...PIXEL_CONTRACT,dpr,cssSize:[cssWidth,cssHeight],equipment:ATTACHMENT_ART.map((a,i)=>({id:a.id,pixels:r.companions.frames[combatMode+'/'+i+'/0'].pixels,worldPerPixelX:PIXEL_CONTRACT.worldPerPixelX,worldPerPixelY:PIXEL_CONTRACT.worldPerPixelY}))},layout,action,sample,positions,deploy,sockets:contract.sockets,hand:contract.hand,elbow:contract.elbow,camera:{...r.camera},renderSize:[width,height],glError:gl.getError(),frames:(window.symbioticPreview?.frames||0)+1};
 }
-try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector,characters:{sprout:previewCharacter}});renderer.companions=companionAtlas(renderer.gl);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
+try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector,characters:{sprout:previewCharacter}},THREE);renderer.companions=companionAtlas();renderer.companions.texture=renderer.canvasTexture(renderer.companions.canvas);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
 function showError(e){previewUI.error.style.display='block';previewUI.error.textContent='미리보기를 렌더하지 못했습니다: '+e.message+' · WebGL을 사용할 수 있는 브라우저에서 열어 주세요.';previewUI.state.textContent='렌더 실패';console.error(e);}
 
 // Deterministic browser review entry point; same live fixture, no alternative rendering path.

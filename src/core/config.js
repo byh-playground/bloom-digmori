@@ -1,6 +1,7 @@
 'use strict';
 
 const DEPENDENCIES=Object.freeze({
+ three:{package:'three',version:'0.160.0',revision:'160',url:'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',timeoutMs:15000},
  rapier:{package:'@dimforge/rapier3d-deterministic-compat',version:'0.21.0',url:'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs',mirrors:['https://unpkg.com/@dimforge/rapier3d-deterministic-compat@0.21.0/dist/rapier.mjs'],timeoutMs:15000},
  gamekit:{repository:'byh-playground/bloom-gamekit',sourceCommit:'dd59a57fcf66409cef16632ffb433c0b760324fa',distCommit:'418e17c455db56d6ed073d82d115191d9dd8bf04',manifestSha256:'20244c2beeee33719f407a9baa92c55a4bd55a0e4eb9f094590bb0eed652296e',timeoutMs:15000,
   networkModules:Object.freeze({transport:Object.freeze({file:'transport.js',sha256:'cb509226a9644e86857f12e137943bf0cc04c5f4bace4dbdf4137efa6240fc3a'}),rollback:Object.freeze({file:'rollback.js',sha256:'071fb0f82521d212d00f112abd90fc149616d80b79d4628db0008637ce102596'})}),

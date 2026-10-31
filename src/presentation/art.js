@@ -1,6 +1,6 @@
 'use strict';
 /* 0.9.2 승인 스프라우틀링 아트를 유지. world physics와 무관한 생성 아틀라스. */
-function createSpriteAtlas(gl){let c=document.createElement('canvas');c.width=2048;c.height=4096;let ctx=c.getContext('2d',{alpha:true});ctx.imageSmoothingEnabled=false;let textures={},index=0;const cols=32,CW=64,CH=64,out='#322b39';
+function createSpriteAtlas(maxTextureSize){let c=document.createElement('canvas');c.width=2048;c.height=4096;let ctx=c.getContext('2d',{alpha:true});ctx.imageSmoothingEnabled=false;let textures={},index=0;const cols=32,CW=64,CH=64,out='#322b39';
 function fill(col){ctx.fillStyle=col}function poly(points,color,stroke=out,width=2){ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);ctx.closePath();ctx.fillStyle=color;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.lineJoin='round';ctx.stroke()}}function rect(x,y,w,h,c){fill(c);ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}function dotc(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fillStyle=c;ctx.fill()}
 function addEffect(name,draw){let x=(index%cols)*CW,y=Math.floor(index/cols)*CH;ctx.save();ctx.translate(x,y);if(!name.startsWith('slash-'))ctx.translate(8,4);draw();ctx.restore();textures['fx/'+name]={x,y,w:CW,h:CH};index++}
 addEffect('spark',()=>{poly([[24,9],[27,22],[39,15],[32,28],[45,31],[31,36],[28,49],[21,37],[8,42],[17,30],[7,22],[21,24]],'#ffffff',null)});
@@ -27,10 +27,10 @@ for(const style of ['light','heavy','thrust','overhead'])for(let frame=0;frame<A
  const tile=document.createElement('canvas');tile.width=tile.height=64;tile.getContext('2d').putImageData(image,0,0);ctx.drawImage(tile,0,0);
 });
 
-const usedHeight=2**Math.ceil(Math.log2(Math.ceil(index/cols)*CH));if(usedHeight>gl.getParameter(gl.MAX_TEXTURE_SIZE))throw Error('스프라이트 아틀라스 크기를 지원하지 않는 GPU');
+const usedHeight=2**Math.ceil(Math.log2(Math.ceil(index/cols)*CH));if(usedHeight>maxTextureSize)throw Error('스프라이트 아틀라스 크기를 지원하지 않는 GPU');
 const trimmed=document.createElement('canvas');trimmed.width=c.width;trimmed.height=usedHeight;trimmed.getContext('2d').drawImage(c,0,0);c=trimmed;
 for(const f of Object.values(textures))Object.assign(f,{u0:f.x/c.width,v0:1-f.y/c.height,u1:(f.x+f.w)/c.width,v1:1-(f.y+f.h)/c.height});
-const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return {tex,frames:textures,count:index,canvas:c}}
+return {frames:textures,count:index,canvas:c}}
 
 
 const c3=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
@@ -108,11 +108,6 @@ function buildBlockAtlas(){
  }
  return {width,height,data,averages};
 }
-function createBlockAtlas(gl){
- const atlas=buildBlockAtlas(),tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,atlas.width,atlas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,atlas.data);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
- return {...atlas,tex};
-}
 
 /* Client-only feedback: never changes time step, snapshots, aim input or Rapier state. */
 class CombatVisuals {
@@ -165,13 +160,12 @@ function createBlockIcons(atlas,iconCanvases){
 }
 function createItemIcons(iconCanvases){const out={},S=2,size=16,materialColor=id=>MATERIALS[ITEMS[id]?.material]?.color||'#d9c79b',dark=hex=>{const n=parseInt(hex.slice(1),16),r=Math.max(0,(n>>16)-55),g=Math.max(0,((n>>8)&255)-55),b=Math.max(0,(n&255)-55);return'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');};for(const [id,it] of Object.entries(ITEMS)){if(it.block)continue;const c=document.createElement('canvas');c.width=c.height=size*S;const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;const px=(x,y,w,h,col)=>{ctx.fillStyle=col;ctx.fillRect(x*S,y*S,w*S,h*S);},mat=materialColor(id),edge=dark(mat),wood='#7a5237';ctx.clearRect(0,0,c.width,c.height);if(id==='bucket'||id==='waterBucket'){px(3,3,10,2,'#bfd4d9');px(3,4,2,8,'#9ca8a4');px(11,4,2,8,'#9ca8a4');px(5,11,6,2,'#bfc8c4');if(id==='waterBucket'){px(5,6,6,5,'#3e9fe2');px(6,6,4,2,'#79d7ef');}}else if(it.weapon||it.tool){const type=it.weapon||it.tool;if(type==='bow'){px(3,2,2,12,wood);px(5,1,1,2,mat);px(5,13,1,2,mat);px(5,3,1,10,'#dbc99b');}else if(type==='shield'){px(3,2,10,11,edge);px(4,2,8,9,mat);px(7,4,2,7,'#f0deb0');}else{px(7,7,2,8,wood);if(type==='pick'){px(3,3,10,2,edge);px(4,2,8,2,mat);}else if(type==='shovel'){px(5,2,6,5,edge);px(6,2,4,4,mat);}else if(type==='axe'){px(3,2,8,5,edge);px(4,2,6,4,mat);}else if(type==='spear'){px(7,1,2,8,mat);px(6,1,4,3,edge);}else if(type==='dagger'){px(7,2,2,7,mat);px(6,2,4,2,edge);px(5,8,6,2,'#d9b765');}else{px(7,type==='greatsword'?1:2,2,type==='greatsword'?10:8,mat);px(6,type==='greatsword'?1:2,4,3,edge);px(5,10,6,2,'#d9b765');}}}else if(it.armor){const shapes={helmet:[[3,3,10,3],[3,6,2,5],[11,6,2,5]],chest:[[4,2,8,3],[2,5,12,3],[4,8,8,6]],legs:[[4,2,8,6],[4,8,3,6],[9,8,3,6]],boots:[[3,5,4,7],[9,5,4,7],[2,11,5,3],[9,11,5,3]]}[it.armor];for(const [x,y,w,h]of shapes)px(x,y,w,h,edge);for(const [x,y,w,h]of shapes)if(w>2&&h>2)px(x+1,y+1,w-2,h-2,mat);}else{switch(id){case'coal':case'charcoal':px(5,4,6,7,'#282a2e');px(4,6,2,4,'#3d4246');break;case'rawIron':case'rawGold':px(4,4,8,8,id==='rawGold'?'#c99e39':'#b18d72');px(6,2,4,3,'#d8c09b');break;case'iron':case'gold':px(3,6,10,6,edge);px(4,4,8,7,mat);px(5,5,6,2,'#fff2bd');break;case'diamond':px(8,1,5,5,'#c9ffff');px(3,5,10,5,'#5ee0d9');px(6,10,4,5,'#45aaa8');break;case'stick':px(7,2,2,12,wood);break;case'fiber':for(let k=0;k<4;k++)px(3+k*2,3+k,2,10-k*2,'#8fc47d');break;case'leather':px(3,3,10,10,'#9d6847');px(5,2,6,2,'#c08a61');break;case'arrow':px(2,7,10,2,'#d4c398');px(11,5,3,6,'#d9dde0');px(2,5,3,6,'#8da969');break;case'seed':px(5,5,6,7,'#9c7a42');px(9,3,3,4,'#78b65a');break;case'food':px(4,4,8,9,'#d85d6f');px(6,2,4,3,'#82b85d');break;case'sigil':px(6,1,4,14,'#d6a95b');px(1,6,14,4,'#d6a95b');px(4,4,8,8,'#7766aa');px(6,6,4,4,'#ead48a');break;case'heart':px(3,4,4,4,'#e76573');px(9,4,4,4,'#e76573');px(5,7,6,6,'#c9445b');break;default:px(4,4,8,8,mat);px(6,2,4,4,edge);break;}}out[id]=c.toDataURL('image/png');iconCanvases.set(id,c);}return out;}
 
-function createDropAtlas(gl,iconCanvases){
+function createDropAtlas(iconCanvases){
  const CELL=64,SIZE=1024,c=document.createElement('canvas');c.width=c.height=SIZE;const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;const frames={};let n=0;
  for(const [id,item]of Object.entries(ITEMS)){const sprite=item.block?iconCanvases.get('block:'+item.block):iconCanvases.get(id);if(!sprite)throw Error('아이템 텍스처 없음: '+id);
   const x=(n%16)*CELL,y=Math.floor(n/16)*CELL;if(y+CELL>SIZE)throw Error('드롭 텍스처 아틀라스 용량 초과');ctx.drawImage(sprite,x+8,y+8,48,48);
   frames[id]={u0:(x+7)/SIZE,u1:(x+57)/SIZE,v0:1-(y+7)/SIZE,v1:1-(y+57)/SIZE};n++;}
- const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return{tex,frames};
+ return{canvas:c,frames};
 }
 
 
