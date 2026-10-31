@@ -9,11 +9,15 @@ const BIOMES=Object.freeze({
 // G2 gameplay biomes (D-100/D-101) mapped onto the terrain biomes above: terrain keeps its climate generator,
 // only companion species, boss structures and gather placement follow the realm. 모래 구릉·서리 고원 have none.
 // The cave realm is everything carved underground (natural caves, mines and the dungeon) below the surface.
+// gear/hazard (0.35.1, doc §3.3): the recommended equipment tier of the realm (GEAR_TIERS) and the hazard that drains HP
+// when the worn armor is below it. 초원 asks for nothing, 동굴 for 철, 균류 숲 for 다이아몬드(기획의 청수정 단계).
 const REALMS=Object.freeze({
- grassland:Object.freeze({name:'초원',species:'root',structure:'grove'}),
- fungal:Object.freeze({name:'균류 숲',species:'mushroom-snail',structure:'ring'}),
- cave:Object.freeze({name:'동굴',species:'rock-chick',structure:'dungeon'})
+ grassland:Object.freeze({name:'초원',species:'root',structure:'grove',gear:0,hazard:null}),
+ fungal:Object.freeze({name:'균류 숲',species:'mushroom-snail',structure:'ring',gear:4,hazard:'spore'}),
+ cave:Object.freeze({name:'동굴',species:'rock-chick',structure:'dungeon',gear:3,hazard:'cold'})
 });
+// The realm order of the slice: each later realm's gear recipes take one resource of the realm before it (doc §3.5 ①).
+const REALM_ORDER=Object.freeze(['grassland','cave','fungal']);
 const BLOCKS=[
  {id:'air',name:'공기',color:'#ffffff',solid:false},
  {id:'grass',name:'풀흙',color:'#80b966',hardness:650,drop:'dirt',tool:'pick',tier:0},
@@ -34,8 +38,10 @@ const BLOCKS=[
  {id:'bedrock',name:'기반암',color:'#394548',hardness:Infinity,tier:99},
  {id:'cobble',name:'조약돌',color:'#879391',hardness:1600,tool:'pick',tier:1},
  {id:'altar',name:'오래된 꽃 제단',color:'#bd91bd',hardness:Infinity,tier:99,light:8},
- {id:'cap',name:'버섯 갓',color:'#c184a9',hardness:450,drop:'food',tier:0},
- {id:'stem',name:'버섯 줄기',color:'#e8d9b8',hardness:900,drop:'log',tool:'axe',tier:0},
+ // 0.35.1: a cap drops itself (plus a fruit by chance, Simulation.blockDrops) and a stem drops itself, so mushroom blocks
+ // can be carried and placed: a snail farm works anywhere. A stem crafts into planks like a log.
+ {id:'cap',name:'버섯 갓',color:'#c184a9',hardness:450,tier:0},
+ {id:'stem',name:'버섯 줄기',color:'#e8d9b8',hardness:900,tool:'axe',tier:0},
  {id:'trophy',name:'화원 수호의 증표',color:'#eec565',hardness:800,tier:0,light:12},
  {id:'crystalBloom',name:'공명 수정',color:'#8eddeb',hardness:1400,tool:'pick',tier:2,drop:'crystalShard',light:9},
  {id:'snow',name:'눈덮인 흙',color:'#dae9ed',hardness:650,drop:'dirt',tool:'pick',tier:0},
@@ -46,8 +52,10 @@ const BLOCKS=[
  {id:'rootEgg',name:'뿌리 알',color:'#d8c79a',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'root'},
  {id:'rockChickEgg',name:'바위 병아리 알',color:'#c8c2b4',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'rock-chick'},
  {id:'mushroomSnailEgg',name:'버섯 달팽이 알',color:'#e0c4cf',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'mushroom-snail'},
- // Ranching (D-103/D-106, 0.34.0). A fence and a closed gate are one solid voxel for players and physics, but owned units
- // treat them as 1.5 blocks high (Ranch.passable/standable): never crossed, climbed or stood on. Both are drawn as posts
+ // Ranching (D-103/D-106, 0.34.0). A fence and a closed gate are one solid voxel in the collider, but count as 1.5 blocks
+ // high: owned units never cross, climb or stand on them (Ranch.passable/standable) and, since 0.35.1, a body (player or
+ // creature) whose feet are below its top (1.5, lifted just over the 1.52 jump apex) cannot move into one or auto-step it
+ // (Physics.fenceClamp). Both are drawn as posts
  // and rails (Renderer.drawFences), not as cubes. The open gate is its own non-solid block so the voxel collider opens.
  {id:'fence',name:'나무 울타리',color:'#b48552',hardness:1000,tool:'axe',tier:0,mesh:false,fence:true},
  {id:'fenceGate',name:'울타리 문',color:'#c39762',hardness:1000,tool:'axe',tier:0,mesh:false,fence:true,gate:'closed'},
@@ -78,6 +86,9 @@ for(const b of BLOCKS)if(!['air','grass','bedrock','altar','coalOre','ironOre','
 for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['leather','가죽','▱'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚'],['relic','고대의 유물','✧']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
 // D-104 merge potion: thrown like a splash potion (right-click), merges owned adults hit by the splash (Simulation.splashPotion).
 defineItem('mergePotion','합성 물약','⚗',{stack:16,throwable:true});
+// 0.35.1 boss crowns (doc §3.0 "보스는 재료와 왕관을 떨군다"): every structure boss drops its own crown (SPECIES.boss.crown).
+// The cave boss's crown goes into the diamond helmet, so the fungal tier needs the cave boss killed (doc §3.3).
+for(const [id,name]of [['rootCrown','금빛 꽃 왕관'],['rockChickCrown','금광석 왕관'],['mushroomSnailCrown','금빛 버섯 왕관']])defineItem(id,name,'♛',{stack:16,crown:true});
 for(const [mat,m]of Object.entries(MATERIALS)){
  defineItem(mat+'_pick',m.name+' 곡괭이','⛏',{stack:1,material:mat,tool:'pick',tier:m.tier,miningSpeed:m.speed,weight:4});
  for(const [type,w]of Object.entries(WEAPONS))
@@ -100,21 +111,52 @@ function recipe(id,out,count,pattern,keys,station=2,unlock=null){RECIPES.push({i
 recipe('planks','planks',4,['L'],{L:'log'});recipe('sticks','stick',4,['P','P'],{P:'planks'});recipe('workbench','workbench',1,['PP','PP'],{P:'planks'});
 recipe('bucket','bucket',1,['I I',' I '],{I:'iron'},3);recipe('furnace','furnace',1,['CCC','C C','CCC'],{C:'cobble'},3);recipe('torch','torch',4,['C','S'],{C:['coal','charcoal'],S:'stick'});
 recipe('fiber','fiber',4,['LL'],{L:'leaves'});
-for(const [mat,ingredient]of [['wood','planks'],['stone','cobble'],['iron','iron'],['diamond','diamond']]){
- const keys={M:ingredient,S:'stick'};
+// Circular resources (0.35.1, doc §3.5 ① and §3.3): every gear recipe of a later realm's tier takes one resource of the
+// realm before it (REALM_ORDER, ITEM_REALMS). 철(동굴 단계): tools and weapons keep the 초원 wood stick, armor gets a 초원
+// fibre lining. 다이아몬드(균류 숲 단계): the handle is a 동굴 iron ingot instead of a stick, the chestplate and boots take
+// one iron ingot, the helmet takes the 동굴 boss's 금광석 왕관 (so the boss must fall before the fungal tier).
+for(const [mat,ingredient,handle]of [['wood','planks','stick'],['stone','cobble','stick'],['iron','iron','stick'],['diamond','diamond','iron']]){
+ const keys={M:ingredient,S:handle};
  recipe(mat+'_pick',mat+'_pick',1,['MMM',' S ',' S '],keys,3);
  recipe(mat+'_sword',mat+'_sword',1,['M','M','S'],keys,3);
  recipe(mat+'_spear',mat+'_spear',1,['  M',' S ','S  '],keys,3);recipe(mat+'_axe',mat+'_axe',1,['MM','MS',' S'],keys,3);
 }
-for(const mat of ['leather','iron','diamond']){
- recipe(mat+'_helmet',mat+'_helmet',1,['MMM','M M'],{M:mat},3);recipe(mat+'_chest',mat+'_chest',1,['M M','MMM','MMM'],{M:mat},3);recipe(mat+'_boots',mat+'_boots',1,['M M','M M'],{M:mat},3);
-}
+recipe('leather_helmet','leather_helmet',1,['MMM','M M'],{M:'leather'},3);recipe('leather_chest','leather_chest',1,['M M','MMM','MMM'],{M:'leather'},3);recipe('leather_boots','leather_boots',1,['M M','M M'],{M:'leather'},3);
+recipe('iron_helmet','iron_helmet',1,['MMM','MFM'],{M:'iron',F:'fiber'},3);recipe('iron_chest','iron_chest',1,['MFM','MMM','MMM'],{M:'iron',F:'fiber'},3);recipe('iron_boots','iron_boots',1,['MFM','M M'],{M:'iron',F:'fiber'},3);
+recipe('diamond_helmet','diamond_helmet',1,['MMM','MCM'],{M:'diamond',C:'rockChickCrown'},3);recipe('diamond_chest','diamond_chest',1,['MIM','MMM','MMM'],{M:'diamond',I:'iron'},3);recipe('diamond_boots','diamond_boots',1,['MIM','M M'],{M:'diamond',I:'iron'},3);
+recipe('stemPlanks','planks',4,['S'],{S:'stem'});
 recipe('healingSalve','healingSalve',1,['FF','CS'],{F:'food',C:'crystalShard',S:'fiber'},2);
 recipe('trophy','trophy',1,[' D ','IHI','PPP'],{D:'diamond',I:'iron',H:'heart',P:'planks'},3,'boss');
 // Ranch (0.34.0), Minecraft-shaped: fence = planks/stick/planks ×2 rows → 3, gate = stick/planks/stick ×2 rows, chest = planks ring.
 // Merge potion = 공명 수정 조각 over 열매 (crystal + fruit, the healing salve's ingredients without the fiber) → 1 in the 2×2 grid.
 recipe('fence','fence',3,['PSP','PSP'],{P:'planks',S:'stick'},3);recipe('fenceGate','fenceGate',1,['SPS','SPS'],{P:'planks',S:'stick'},3);
 recipe('storageChest','storageChest',1,['PPP','P P','PPP'],{P:'planks'},3);recipe('mergePotion','mergePotion',1,['C','F'],{C:'crystalShard',F:'food'},2);
+// Equipment progression (0.35.1, doc §3.3 draft numbers). A slot's tier is a material step (GEAR_TIERS); a realm asks for
+// REALMS[realm].gear. Factors are integer per-mille (1000 = ×1):
+//  below the realm's tier  곡괭이 → gathering ×0.35, 무기 → attack ×0.4, 방어구 → damage taken ×2 and the realm hazard
+//                          (동굴 추위 · 균류 숲 포자 독: −1 HP every second, never below 1 HP, so it presses but never kills);
+//  at or above it          ×1, and diamond (bonusTier, 기획의 청수정) gives the bonus column — gathering ×1.5, attack ×1.6,
+//                          taken ×0.6 — wherever the realm asks for less than diamond (초원, 동굴; in 균류 숲 it is the norm).
+const GEAR_TIERS=Object.freeze({leather:1,wood:1,stone:2,iron:3,diamond:4});
+const GEAR_TIER_NAMES=Object.freeze(['맨손','나무','돌','철','다이아몬드']);
+const GEAR_RULES=Object.freeze({
+ slots:Object.freeze({
+  pick:Object.freeze({name:'곡괭이',icon:'⛏',effect:'gather',label:'채집'}),
+  weapon:Object.freeze({name:'무기',icon:'⚔',effect:'attack',label:'공격'}),
+  armor:Object.freeze({name:'방어구',icon:'🛡',effect:'taken',label:'받는 피해'})}),
+ below:Object.freeze({gather:350,attack:400,taken:2000}),
+ bonus:Object.freeze({gather:1500,attack:1600,taken:600}),bonusTier:4,
+ hazards:Object.freeze({
+  cold:Object.freeze({name:'추위',everyTicks:ticksForMs(1000),damage:1,floor:1}),
+  spore:Object.freeze({name:'포자 독',everyTicks:ticksForMs(1000),damage:1,floor:1})})
+});
+// Where a recipe ingredient comes from, for the circular-resource rule and the recipe card: wood sticks and leaf fibre are
+// 초원 resources, iron ingots and the cave boss's crown are 동굴 resources. MATERIAL_REALMS: the realm a gear tier is for.
+const ITEM_REALMS=Object.freeze({stick:'grassland',fiber:'grassland',iron:'cave',rockChickCrown:'cave'});
+const MATERIAL_REALMS=Object.freeze({wood:'grassland',stone:'grassland',leather:'grassland',iron:'cave',diamond:'fungal'});
+// The previous-realm ingredients of a recipe: [{key, item, realm}] (empty for 초원 tiers and non-gear recipes).
+function recipePriorIngredients(r){const realm=MATERIAL_REALMS[ITEMS[r.out]?.material],i=REALM_ORDER.indexOf(realm);if(i<1)return[];const prior=REALM_ORDER[i-1];
+ return Object.entries(r.keys).flatMap(([key,val])=>(Array.isArray(val)?val:[val]).filter(id=>ITEM_REALMS[id]===prior).map(item=>({key,item,realm:prior})));}
 const FUELS={coal:48000,charcoal:48000,log:9000,planks:9000,stick:3000};
 const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:'charcoal',ms:6000},cobble:{out:'stone',ms:6000}};
 const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'})});

@@ -26,7 +26,7 @@ class Companions {
  stopShot(u){for(const p of Object.values(this.sim.projectiles))if(p.companionId===u.id){u.pos={...p.pos};this.sim.physics.removeBody(p);delete this.sim.projectiles[p.id];}}
  toRanch(u){u.location='ranch';u.slot=null;u.phase='idle';u.target=null;u.progress=0;Object.assign(u,Companions.ranchState(null));}
  // A unit called into a combat slot puts down what it carried (as a drop, never lost) and leaves the ranch walk.
- toCombat(u,slot){if(u.cargo){this.sim.spawnDrop(u.cargo.id,u.cargo.count,u.pos);u.cargo=null;}u.location='combat';u.slot=slot;u.phase='idle';u.target=null;u.progress=0;Object.assign(u,Companions.ranchState(null));}
+ toCombat(u,slot){this.dropCargo(u);u.location='combat';u.slot=slot;u.phase='idle';u.target=null;u.progress=0;Object.assign(u,Companions.ranchState(null));}
  assign(a,u,destination){if(!u||u.owner!==a.id||!['ranch','combat'].includes(destination.location))return false;
   if(u.pending&&destination.location===u.location&&(u.location!=='combat'||destination.slot===u.slot)){u.pending=null;return true;}
   // A baby stays on the ranch until it is an adult.
@@ -58,7 +58,7 @@ class Companions {
  activity(u){
   if(u.location==='ranch'){
    if(u.stage!=='adult')return '아기 · 먹이 '+u.fed+'/'+RANCH_RULES.feedToAdult+' · '+(u.phase==='eat'?'먹는 중':u.task==='eat'?'먹이로 가는 중':u.task==='lead'?'먹이를 든 주인을 따라감':'목장에서 돌아다님');
-   return u.phase==='gather'?'채집 중':u.cargo?(u.task==='full'?'상자가 가득 참':'상자로 운반'):u.task==='gather'?'채집하러 가는 중':u.task==='lead'?'먹이를 든 주인을 따라감':'목장에서 돌아다님';
+   return u.phase==='gather'?'채집 중':u.task==='full'?'상자가 가득 참 · 기다리는 중':u.cargo?'상자로 운반':u.task==='gather'?'채집하러 가는 중':u.task==='lead'?'먹이를 든 주인을 따라감':'목장에서 돌아다님';
   }
   if(u.phase==='flight'){const shot=Object.values(this.sim.projectiles).find(p=>p.companionId===u.id);return shot?.throwPhase==='ground'?'착지 · 잠깐 쉬는 중':shot?.spent?'낙하 중':'껍질 굴리기';}
   if(u.phase==='return')return '회수 중';
@@ -140,27 +140,38 @@ class Companions {
   if(--d.count<=0){sim.physics.removeBody(d);delete sim.drops[d.id];}
   u.fed++;sim.emit('unit-eat',a,{companionId:u.id,pos:{...u.pos},species:u.kind,fed:u.fed});
   if(u.fed>=R.feedToAdult){u.stage='adult';u.fed=0;sim.progress.grown=true;sim.emit('unit-grow',a,{companionId:u.id,pos:{...u.pos},species:u.kind,name:SPECIES[u.kind].name});}}
- chestsWithRoom(r,item){const sim=this.sim;return this.sim.ranch.sides(r).filter(b=>b.id===BID.storageChest&&sim.chests[b.key]&&Inventory.addTo(structuredClone(sim.chests[b.key].slots),item,1)===0);}
- // Labor: carry the cargo to a chest with room, else walk beside the nearest safe aptitude block and harvest it.
+ // Cargo (0.35.1) is the list of stacks one labor harvest yielded. Leaving the ranch or merging puts it down as drops.
+ dropCargo(u){for(const s of u.cargo||[])this.sim.spawnDrop(s.id,s.count,u.pos);u.cargo=null;}
+ // Chests beside the region that can take at least one item of `stacks`.
+ chestsWithRoom(r,stacks){const sim=this.sim;return this.sim.ranch.sides(r).filter(b=>b.id===BID.storageChest&&sim.chests[b.key]&&stacks.some(s=>Inventory.addTo(structuredClone(sim.chests[b.key].slots),s.id,1)===0));}
+ // Labor: carry the cargo to a chest with room, else walk beside the nearest safe aptitude block and harvest it. Every
+ // item of a harvest goes into the pen's chests; while none of them fits anywhere the unit stops and waits ('full'),
+ // holding it, and it does not start a harvest whose main drop no chest can take. Nothing is left on the floor.
  labor(u,a,r){const sim=this.sim,P=sim.ranch,sides=P.sides(r);if(!sides.some(b=>b.id===BID.storageChest))return false;
   const beside=list=>c=>list.some(b=>b.y===c.y&&Math.abs(b.x-c.x)+Math.abs(b.z-c.z)===1);
-  if(u.cargo){const chests=this.chestsWithRoom(r,u.cargo.id);if(!chests.length){u.task='full';u.path=[];return true;}
+  if(u.cargo){const chests=this.chestsWithRoom(r,u.cargo);if(!chests.length){u.task='full';u.path=[];return true;}
    const walk=this.go(u,'deposit',r,beside(chests));if(walk===null){u.task='full';return true;}if(!walk.arrived)return true;
-   const chest=chests.find(b=>beside([b])(u.cell)),slots=sim.chests[chest.key].slots,left=Inventory.addTo(slots,u.cargo.id,u.cargo.count);
-   if(left<u.cargo.count){sim.markItem(u.cargo.id);sim.progress.labor=true;sim.emit('labor-deliver',a,{companionId:u.id,item:u.cargo.id,count:u.cargo.count-left,chest:chest.key,pos:{x:chest.x+.5,y:chest.y+1,z:chest.z+.5}});}
-   u.cargo=left?{...u.cargo,count:left}:null;this.face(u,chest.x-u.cell.x,chest.z-u.cell.z);u.task=null;return true;}
+   // Fill every chest beside this cell in key order, stack by stack; what does not fit stays in the cargo.
+   const here=chests.filter(b=>beside([b])(u.cell)),left=[];
+   for(const s of u.cargo){let rest=s.count;for(const chest of here){if(!rest)break;const before=rest;rest=Inventory.addTo(sim.chests[chest.key].slots,s.id,rest);
+     if(rest<before){sim.markItem(s.id);sim.progress.labor=true;sim.emit('labor-deliver',a,{companionId:u.id,item:s.id,count:before-rest,chest:chest.key,pos:{x:chest.x+.5,y:chest.y+1,z:chest.z+.5}});}}
+    if(rest)left.push({id:s.id,count:rest});}
+   u.cargo=left.length?left:null;this.face(u,here[0].x-u.cell.x,here[0].z-u.cell.z);u.task=null;return true;}
   const g=SPECIES[u.kind].capabilities.gather;if(!g)return false;const claimed=new Set(this.all().filter(v=>v!==u&&v.target).map(v=>v.target.key));
   const targets=sides.filter(b=>{const def=BLOCKS[b.id];return g.blocks.includes(def.id)&&Number.isFinite(def.hardness)&&def.tier<=g.tier&&!claimed.has(b.key)&&P.safe(r,b);});
   if(!targets.length){u.target=null;return false;}
+  if(!targets.some(b=>this.chestsWithRoom(r,[{id:BLOCKS[b.id].drop||BLOCKS[b.id].id,count:1}]).length)){u.target=null;u.task='full';u.path=[];return true;}
   const walk=this.go(u,'gather',r,beside(targets));if(walk===null){u.target=null;return false;}
   const t=targets.find(b=>beside([b])(walk.end));u.target={x:t.x,y:t.y,z:t.z,id:t.id,key:t.key};if(!walk.arrived)return true;
   u.target={x:t.x,y:t.y,z:t.z,id:t.id,key:t.key};u.phase='gather';u.progress=0;u.velocity={x:0,y:0,z:0};this.face(u,t.x-u.cell.x,t.z-u.cell.z);return true;}
  gather(u,a){const sim=this.sim,t=u.target;if(!t||sim.terrain.get(t.x,t.y,t.z)!==t.id){u.phase='idle';u.target=null;u.progress=0;return;}
-  u.progress+=CFG.stepMs*SPECIES[u.kind].capabilities.gather.speed;if(u.progress<BLOCKS[t.id].hardness||Object.keys(sim.drops).length>=CFG.maxDrops)return;
-  const before=new Set(Object.keys(sim.drops));
-  if(sim.harvest(a,{...t,normal:{x:0,y:1,z:0}},u.id)){const drop=Object.values(sim.drops).find(d=>!before.has(d.id));if(drop){u.cargo={id:drop.item,count:drop.count};sim.physics.removeBody(drop);delete sim.drops[drop.id];}
-   if(Object.keys(sim.regrow).length<512)sim.regrow[t.key]={key:t.key,x:t.x,y:t.y,z:t.z,id:t.id,tick:sim.tick+RANCH_RULES.regrowTicks};}
+  u.progress+=CFG.stepMs*SPECIES[u.kind].capabilities.gather.speed*Companions.laborFactor(u)/1000;if(u.progress<BLOCKS[t.id].hardness)return;
+  // The harvest's whole yield becomes the cargo (no floor drops); the cell regrows by LABOR_REGROW.
+  const yields=sim.harvest(a,{...t,normal:{x:0,y:1,z:0}},u.id);
+  if(yields){u.cargo=yields.length?yields:null;const g=laborRegrow(t.id);if(g&&Object.keys(sim.regrow).length<512)sim.regrow[t.key]={key:t.key,x:t.x,y:t.y,z:t.z,id:g.id,tick:sim.tick+g.ticks};}
   u.phase='idle';u.target=null;u.progress=0;u.task=null;}
+ // Integer per-mille labor speed of a unit's grade (RANCH_RULES.laborGrade: ×1.5 per grade above 1).
+ static laborFactor(u){const t=RANCH_RULES.laborGrade;return t[clamp(u.grade|0,1,t.length)-1];}
  // D-104: merge the splashed owned adults that share species and grade, in pairs by unit serial. The lower serial of each
  // pair keeps its id, place and slot and gains a grade (max 4); the other leaves. An odd one out is left as it is.
  merge(owner,units){const groups=new Map(),merged=[];
@@ -169,7 +180,7 @@ class Companions {
    for(let i=0;i+1<list.length;i+=2){const keep=list[i],gone=list[i+1],c=owner.combat;
     if(c.action?.companionId===gone.id){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}
     if(gone.location==='combat'&&owner.companionSlot===gone.slot)owner.companionSlot=-1;
-    if(gone.cargo)this.sim.spawnDrop(gone.cargo.id,gone.cargo.count,gone.pos);
+    this.dropCargo(gone);
     delete this.data.units[gone.id];keep.grade++;merged.push({companionId:keep.id,consumed:gone.id,species:keep.kind,grade:keep.grade,pos:{...keep.pos},from:{...gone.pos}});}}
   return merged;}
  tick(){const dt=CFG.stepMs,sim=this.sim,trail=new Map();
@@ -188,7 +199,7 @@ class Companions {
   for(const [id,u]of Object.entries(data.units)){
     // Hatched units are unit:N; companion:/creature:/enemy:/boss: ids are kept from saves of the retired recruitment.
     const serial=/^(?:companion|unit):([1-9]\d*)$/.exec(id),creatureId=/^creature:[1-9]\d*$/.test(id),legacyCandidateId=/^enemy:[1-9]\d*$/.test(id),bossSpeciesId=/^boss:([1-9]\d*)$/.exec(id);
-    if((!serial&&!creatureId&&!legacyCandidateId&&!bossSpeciesId)||serial&&Number(serial[1])>data.sequence||actors.some(a=>a.id===id)||!u||u.id!==id||!SPECIES[u.kind]||!UNIT_STAGES_OWNED.includes(u.stage)||!Number.isInteger(u.grade)||u.grade<1||u.grade>4||!Number.isInteger(u.fed)||u.fed<0||u.fed>=RANCH_RULES.feedToAdult||u.stage!=='adult'&&u.location!=='ranch'||!Number.isFinite(u.yaw)||!['ranch','combat'].includes(u.location)||!['idle','eat','gather','flight','return'].includes(u.phase)||![u.cooldown,u.progress].every(Number.isFinite)||u.cooldown<0||!u.pos||!['x','y','z'].every(k=>Number.isFinite(u.pos[k]))||u.cargo&&(!Inventory.validateStack(u.cargo)||!SPECIES[u.kind].capabilities.carry||u.cargo.count>SPECIES[u.kind].capabilities.carry.capacity)||u.body!==null||u.collider!==null)fail();
+    if((!serial&&!creatureId&&!legacyCandidateId&&!bossSpeciesId)||serial&&Number(serial[1])>data.sequence||actors.some(a=>a.id===id)||!u||u.id!==id||!SPECIES[u.kind]||!UNIT_STAGES_OWNED.includes(u.stage)||!Number.isInteger(u.grade)||u.grade<1||u.grade>4||!Number.isInteger(u.fed)||u.fed<0||u.fed>=RANCH_RULES.feedToAdult||u.stage!=='adult'&&u.location!=='ranch'||!Number.isFinite(u.yaw)||!['ranch','combat'].includes(u.location)||!['idle','eat','gather','flight','return'].includes(u.phase)||![u.cooldown,u.progress].every(Number.isFinite)||u.cooldown<0||!u.pos||!['x','y','z'].every(k=>Number.isFinite(u.pos[k]))||u.cargo!==null&&u.cargo!==undefined&&(!Array.isArray(u.cargo)||!u.cargo.length||u.cargo.length>SPECIES[u.kind].capabilities.carry.stacks||!u.cargo.every(s=>s&&Inventory.validateStack(s)))||u.body!==null||u.collider!==null)fail();
    if(u.cell!==null&&!cell(u.cell)||u.next!==null&&(!cell(u.next)||!u.cell||Math.abs(u.next.x-u.cell.x)+Math.abs(u.next.z-u.cell.z)!==1)||u.home!==null&&!cell(u.home)||!Number.isInteger(u.stepTick)||u.stepTick<0||!Number.isInteger(u.wait)||u.wait<0||!Array.isArray(u.path)||u.path.length>RANCH_RULES.pathMax||!u.path.every(cell)||u.task!==null&&!['eat','lead','gather','deposit','full','roam'].includes(u.task)||u.food!==null&&typeof u.food!=='string')fail();
    if(u.location==='combat'&&(u.cell!==null||u.path.length||u.cargo))fail();
    if(u.phase==='eat'&&(u.food===null||u.stage==='adult'))fail();

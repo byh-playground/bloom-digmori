@@ -14,3 +14,11 @@
 /* 0.34.0 storage chest view (inventory panel, like the furnace view): 3 x 3 slots. */
 #chest-view{width:260px}#chest-view h3{margin:0 0 4px}#chest-grid{display:grid;gap:3px;grid-template-columns:repeat(3,38px)}#chest-grid .slot{width:38px;height:38px}#chest-view small{display:block;margin-top:4px;font-size:10px;line-height:1.35}
 @media(pointer:coarse) and (orientation:landscape){#inventory #chest-view h3{font-size:11px;margin:0 0 3px}#chest-grid{grid-template-columns:repeat(3,28px);gap:2px}#chest-grid .slot{width:28px;height:28px}#chest-view small{display:none}}
+
+/* 0.35.1 equipment progression HUD: one line above the HP bar (realm · recommended tier, then the short slots and costs). */
+#gear-status{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:3px 6px;max-width:min(900px,94vw);pointer-events:none;font-size:11px;line-height:1.3;text-shadow:0 1px 3px #000;z-index:2}
+#gear-status b{font-weight:700;color:#d8e2c5;padding:2px 7px;border-radius:4px;background:#10271ed9;border:1px solid #5e765c}#gear-status b.warn{color:#ffd9b0;border-color:#b5745a}
+#gear-status span{padding:2px 7px;border-radius:4px;background:#10271ed9;border:1px solid #5e765c;color:#f6edd1;white-space:nowrap}#gear-status span.below{border-color:#c06a5a;color:#ffc8b8}#gear-status span.bonus{border-color:#cfb062;color:#ffe7aa}
+#hazard-tint{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:0;transition:opacity .6s}
+body.hazard-cold #hazard-tint{opacity:1;box-shadow:inset 0 0 7vw 1.5vw #6fb6e877}body.hazard-spore #hazard-tint{opacity:1;box-shadow:inset 0 0 7vw 1.5vw #b8d24a6e}
+@media(pointer:coarse){#gear-status{bottom:98px;font-size:9px;gap:2px 4px}#gear-status b,#gear-status span{padding:1px 5px}}

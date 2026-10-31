@@ -10,7 +10,8 @@ class Simulation {
  get ranch(){if(this.ranchCache?.terrain!==this.terrain)this.ranchCache=new Ranch(this.terrain);return this.ranchCache;}
  emit(type,actor,data={}){if(this.silent)return;if(this.effects.length>=CFG.presentation.maxBuffered)throw Error('표현 이벤트 버퍼 초과');const sequence=this.presentationSequence++;this.effects.push({id:this.epoch+':'+this.tick+':'+sequence,tick:this.tick,sequence,type,pos:{...actor.pos},actorId:actor.id,enemy:actor.enemy,...data});}
  drainEffects(){const events=this.effects;this.effects=[];return events;}
- markItem(id){this.progress[id]=true;}
+ // A mushroom stem is wood too (0.35.1: it drops itself and crafts into planks), so it completes the first-wood step.
+ markItem(id){this.progress[id]=true;if(id==='stem')this.progress.log=true;}
  // A thrown drop (Q, D-105 feeding) flies along `toss` and nobody picks it up for 1.5 s, so it lands where it was thrown.
  spawnDrop(item,count,pos,toss=null){if(!ITEMS[item]||count<=0||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id='drop:'+ ++this.sequence,h=hash3(this.sequence,0,this.tick,this.terrain.seed),drop={id,type:'drop',item,count,pos:{x:pos.x,y:pos.y+.35,z:pos.z},age:0,...(toss?{pickupMs:1500}:{})};this.drops[id]=drop;
   this.physics.addBall(drop,.16,toss?{x:toss.x*4.5,y:2.2+toss.y*3,z:toss.z*4.5}:{x:((h%99)/99-.5)*1.5,y:2.5,z:(((h>>>8)%99)/99-.5)*1.5});return true;}
@@ -82,18 +83,28 @@ class Simulation {
   if(actor.mine.target!==key){actor.mine.target=key;actor.mine.elapsed=0;}
   const proper=b.tool===item?.tool,speed=proper?item.miningSpeed||1:1;
   if(b.tier>0&&(!proper||item.tier<b.tier)){actor.mine.elapsed=0;return;}
-  actor.mine.elapsed+=CFG.stepMs*speed;if(actor.mine.elapsed<b.hardness)return;
+  // 0.35.1 equipment penalty: the realm's gathering factor (곡괭이 below its tier ×0.35, diamond bonus ×1.5), per-mille.
+  actor.mine.elapsed+=CFG.stepMs*speed*Gear.status(actor,this.terrain).gather/1000;if(actor.mine.elapsed<b.hardness)return;
   actor.mine.elapsed=0;this.harvest(actor,hit);
  }
- // `by`: the owned unit harvesting for its owner (chest labor); the owner still gets the mining experience.
+ // Everything one harvest of block `id` at (x,y,z) yields, as [[item,count]]: the block's drop (itself when it has none),
+ // and the extras — leaves add the leaf item and a fruit 1 in 4, a mushroom cap adds a fruit 1 in 3 (0.35.1: the cap
+ // itself is now the main drop, so a placed-cap farm still yields fruit). The rolls hash the cell and the tick, so a
+ // block that regrows in the same cell is rolled again each time.
+ blockDrops(id,x,y,z){const b=BLOCKS[id],out=[[b.drop||b.id,1]],roll=hash3(x*31+y,z,this.tick,this.terrain.seed+911);
+  if(id===BID.leaves){out.push(['leaves',1]);if(roll%4===0)out.push(['food',1]);}
+  if(id===BID.cap&&roll%3===0)out.push(['food',1]);
+  return out;}
+ // `by`: the owned unit harvesting for its owner (chest labor); the owner still gets the mining experience. A labor harvest
+ // spawns no drops: it returns the yield as stacks for the unit to carry, all of it, to the chest (0.35.1).
  harvest(actor,hit,by=null){
-  const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z);if(this.terrain.get(hit.x,hit.y,hit.z)!==hit.id||!Number.isFinite(b?.hardness)||Object.keys(this.drops).length>=CFG.maxDrops)return false;const id=this.terrain.set(hit.x,hit.y,hit.z,0);if(id===false)return false;
-  const pos={x:hit.x+.5,y:hit.y+.5,z:hit.z+.5};this.spawnDrop(b.drop||b.id,1,pos);if(b.egg)delete this.eggs[key];
+  const b=BLOCKS[hit.id],key=blockKey(hit.x,hit.y,hit.z);if(this.terrain.get(hit.x,hit.y,hit.z)!==hit.id||!Number.isFinite(b?.hardness)||!by&&Object.keys(this.drops).length>=CFG.maxDrops)return false;const id=this.terrain.set(hit.x,hit.y,hit.z,0);if(id===false)return false;
+  const pos={x:hit.x+.5,y:hit.y+.5,z:hit.z+.5},yields=[];for(const [item,count]of this.blockDrops(hit.id,hit.x,hit.y,hit.z)){const s=yields.find(s=>s.id===item);if(s)s.count+=count;else yields.push({id:item,count});}
+  if(!by)for(const s of yields)this.spawnDrop(s.id,s.count,pos);if(b.egg)delete this.eggs[key];
   if(CFG.rpg.mining[b.id])RPG.gain(actor,CFG.rpg.mining[b.id],this,'mine');
-   if(id===BID.leaves){this.spawnDrop('leaves',1,pos);if(hash3(hit.x,hit.y,hit.z,this.terrain.seed)%4===0)this.spawnDrop('food',1,pos);}
   const furnace=this.furnaces[key];if(furnace){for(const s of furnace.slots)if(s)this.spawnDrop(s.id,s.count,pos);delete this.furnaces[key];}
   const chest=this.chests[key];if(chest){for(const s of chest.slots)if(s)this.spawnDrop(s.id,s.count,pos);delete this.chests[key];}
-  this.emit('mine',actor,{pos,color:b.color,normal:hit.normal,blockId:hit.id,...(by?{by}:{})});return true;
+  this.emit('mine',actor,{pos,color:b.color,normal:hit.normal,blockId:hit.id,...(by?{by}:{})});return by?yields:true;
  }
  command(actor,c){if(!c||typeof c.op!=='string'||actor.dead||actor.suspended)return false;
   switch(c.op){
@@ -120,6 +131,8 @@ class Simulation {
  }
  // D-107 egg rule: a player's first kill of each boss species always drops its egg, later kills roll EGG_RULES.chance.
  completeBoss(actor,source){const killer=this.actors[source],player=killer&&!killer.enemy&&!killer.speciesId&&!killer.boss?killer:null,species=actor.speciesId,first=!this.progress.boss;if(player)RPG.gain(player,CFG.rpg.xp.boss,this,'combat');for(const [id,count]of BOSS_LOOT)this.spawnDrop(id,count,actor.pos);
+  // Every kill also drops the boss's crown (0.35.1); into the killer's bag if the drop cap is reached, like the egg.
+  const crown=SPECIES[species].boss.crown;if(crown&&!this.spawnDrop(crown,1,actor.pos)&&player)Inventory.addTo(player.inventory.slots,crown,1);
   const firstKey=player?'egg:'+player.id+':'+species:null,guaranteed=!!firstKey&&!this.progress[firstKey],egg=guaranteed||hash3(hashStr(actor.id),this.tick,this.terrain.seed,4127)%100<EGG_RULES.chance;
   if(guaranteed)this.progress[firstKey]=true;if(egg&&!this.spawnDrop(SPECIES[species].egg,1,actor.pos)&&player)Inventory.addTo(player.inventory.slots,SPECIES[species].egg,1);
   if(actor.structureKey)this.progress['boss:'+actor.structureKey]=this.tick;this.progress.boss=true;this.progress.victories=(this.progress.victories||0)+1;this.emit('victory',actor,{source,species,first,egg,guaranteed});}
@@ -209,6 +222,11 @@ class Simulation {
  tickRegrow(){for(const key of Object.keys(this.regrow).sort(cmp)){const g=this.regrow[key];if(this.tick<g.tick)continue;if(this.terrain.get(g.x,g.y,g.z)!==0){delete this.regrow[key];continue;}
   if(this.physics.overlapActors({x:g.x+.5,y:g.y+.5,z:g.z+.5},.49).length||this.companions.all().some(u=>u.location==='ranch'&&[u.cell,u.next].some(c=>c&&c.x===g.x&&c.y===g.y&&c.z===g.z)))continue;
   if(this.terrain.set(g.x,g.y,g.z,g.id)===false)continue;delete this.regrow[key];this.emit('regrow',{id:'regrow:'+key,pos:{x:g.x+.5,y:g.y,z:g.z+.5},enemy:false},{blockId:g.id,color:BLOCKS[g.id].color});}}
+ // 0.35.1 realm hazard (doc §3.3): armor below the realm's tier in 동굴(추위) or 균류 숲(포자 독) drains `damage` HP every
+ // `everyTicks` ticks of exposure, never below `floor`. Leaving the hazard (or wearing the tier) resets the count.
+ tickHazards(players){for(const p of players){const s=Gear.status(p,this.terrain),h=s.hazard?GEAR_RULES.hazards[s.hazard]:null;if(!h){p.hazardTicks=0;continue;}
+  p.hazardTicks=(p.hazardTicks||0)+1;if(p.hazardTicks<h.everyTicks)continue;p.hazardTicks=0;
+  if(p.hp>h.floor){const before=p.hp;p.hp=Math.max(h.floor,p.hp-h.damage);this.emit('hazard',p,{hazard:s.hazard,damage:before-p.hp});}}}
  tickCreatureEncounters(players){
   if(this.tick<this.nextSpawn)return;this.nextSpawn=this.tick+CFG.creatures.encounterCheckTicks;
   if(!this.night()&&this.tick>0&&this.tick%CFG.creatures.spawnTicks===0)this.spawnCreature(players);
@@ -247,7 +265,7 @@ class Simulation {
   for(const id of Object.keys(this.drops).sort(cmp)){const d=this.drops[id];d.age+=CFG.stepMs;for(const p of players){if(d.age<(d.pickupMs??350)||V.len(V.sub(V.add(p.pos,{x:0,y:.6,z:0}),d.pos))>1.8)continue;const old=d.count;d.count=Inventory.addTo(p.inventory.slots,d.item,d.count);if(d.count<old){this.markItem(d.item);this.emit('pickup',p,{item:d.item,count:old-d.count});}if(!d.count)break;}
    if(!d.count||d.age>CFG.dropLife||d.pos.y<CFG.bottom-10){this.physics.removeBody(d);delete this.drops[id];}}
   for(const [id,s]of Object.entries(this.projectiles)){s.age+=CFG.stepMs;if(s.companionId){this.companions.updateThrow(s);continue;}if(s.potion){if(s.age>s.lifetime||s.pos.y<CFG.bottom)this.splashPotion(s);continue;}if(s.age>(s.lifetime??5000)||s.pos.y<CFG.bottom){this.companions.returned(s);this.physics.removeBody(s);delete this.projectiles[id];}}
-  this.tickCreatureEncounters(players);
+  this.tickHazards(players);this.tickCreatureEncounters(players);
   this.tick=context.tick+1;this.revision++;this.silent=false;METRICS.add('simulation.tick',performance.now()-started);
  }
  dayPhase(){return ((this.tick*CFG.stepMs)%CFG.dayMs)/CFG.dayMs;}
@@ -303,7 +321,7 @@ class Simulation {
    }
    for(const [,f]of meta.furnaces||[])if(Array.isArray(f?.slots))f.slots=f.slots.map(keep);
    for(const b of Object.values(meta.companions?.bases||{}))if(Array.isArray(b.slots))b.slots=b.slots.map(keep);
-   for(const u of Object.values(meta.companions?.units||{}))if(u.cargo&&retired(u.cargo.id))u.cargo=null;
+   for(const u of Object.values(meta.companions?.units||{}))if(u.cargo){const list=(Array.isArray(u.cargo)?u.cargo:[u.cargo]).filter(s=>!retired(s?.id));u.cargo=list.length?list:null;}
    meta.drops=(meta.drops||[]).filter(d=>retired(d.item)?(retiredBodies.push(d),false):true);
    meta.projectiles=(meta.projectiles||[]).filter(shot=>{if(shot.weapon!=='bow')return true;if(shot.companionId){shot.weapon='ball';return true;}retiredBodies.push(shot);return false;});
    meta.retiredBodies=retiredBodies;
@@ -316,7 +334,9 @@ class Simulation {
    for(const [owner,b]of Object.entries(c.bases||{}).sort(([a],[b])=>cmp(a,b)))storage.push({owner,pos:b?.pos?{...b.pos}:null,stacks:(Array.isArray(b?.slots)?b.slots:[]).filter(s=>s&&ITEMS[s.id]&&Number.isInteger(s.count)&&s.count>0).map(s=>({id:s.id,count:s.count}))});
    delete c.bases;
    for(const u of Object.values(c.units||{}).sort((a,b)=>cmp(a.id,b.id))){
-    if(u.cargo&&!('cell' in u)){let entry=storage.find(s=>s.owner===u.owner);if(!entry)storage.push(entry={owner:u.owner,pos:null,stacks:[]});entry.stacks.push({...u.cargo});u.cargo=null;}
+    if(u.cargo&&!('cell' in u)){let entry=storage.find(s=>s.owner===u.owner);if(!entry)storage.push(entry={owner:u.owner,pos:null,stacks:[]});for(const s of [].concat(u.cargo))entry.stacks.push({...s});u.cargo=null;}
+    // 0.35.1: cargo is the list of stacks one labor harvest yielded; a 0.34 single stack becomes a one-stack list.
+    if(u.cargo&&!Array.isArray(u.cargo))u.cargo=[u.cargo];
     if(u.location==='reserve'||u.location==='work'){if(u.body!==null&&u.body!==undefined)retiredBodies.push({body:u.body,collider:u.collider});u.body=null;u.collider=null;
      u.location='ranch';u.slot=null;if(['travel','gather','carry'].includes(u.phase))u.phase='idle';u.target=null;u.progress=0;}
     if(u.pending&&['reserve','work'].includes(u.pending.location))u.pending={location:'ranch'};

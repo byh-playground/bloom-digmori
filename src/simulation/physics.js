@@ -80,11 +80,29 @@ class Physics {
   // A full footprint, not one central voxel: don't hop into diagonal corners or ceilings.
   const next={x:p.x+unit.x*look,y:p.y,z:p.z+unit.z*look},min={x:next.x-r+.01,y:feet+.01,z:next.z-r+.01},max={x:next.x+r-.01,y:feet+1-.01,z:next.z+r-.01};
   if(!t.boxSolid(min,max))return false;
+  // A fence or closed gate is 1.5 blocks high (0.35.1): never an auto step.
+  if(this.boxFence(min,max))return false;
   if(t.boxSolid({...min,y:feet+1+.01},{...max,y:feet+1+height+CFG.movement.ceilingGap}))return false;
   const rise=CFG.player.jump*CFG.player.jump/(2*CFG.player.gravity)+.03;
   for(const f of [0,.5,1]){const x=lerp(p.x,next.x,f),z=lerp(p.z,next.z,f);if(t.boxSolid({x:x-r+.01,y:p.y+height+.01,z:z-r+.01},{x:x+r-.01,y:p.y+height+rise,z:z+r-.01}))return false;}
   return true;
  }
+ boxFence(min,max){const t=this.terrain;for(let z=Math.floor(min.z);z<=Math.floor(max.z-1e-6);z++)for(let y=Math.floor(min.y);y<=Math.floor(max.y-1e-6);y++)for(let x=Math.floor(min.x);x<=Math.floor(max.x-1e-6);x++)if(BLOCKS[t.get(x,y,z)]?.fence)return true;return false;}
+ // Fences and closed gates are one voxel in the collider but 1.5 blocks high for every body (Minecraft rule, 0.35.1): a
+ // body whose feet are below a fence's 1.5 top cannot move into its column, so it can neither walk nor jump over it (the
+ // jump from level ground cannot clear it). This game's jump apex is 1.52 blocks (Minecraft's is 1.25), so the blocking
+ // top is lifted just over the apex — otherwise the 0.02 above 1.5 would let repeated jumps creep onto the fence. Each
+ // horizontal velocity component is cut to the gap before the first such fence cell along it; a body already overlapping
+ // one (it landed on top from higher up) is free to step off.
+ fenceClamp(actor,b){const t=this.terrain,v=b.linvel(),dt=CFG.stepMs/1000,r=CFG.player.radius*(actor.scale||1),p=actor.pos,top=p.y+actor.offset*2,H=Math.max(CFG.movement.fenceHeight,CFG.player.jump*CFG.player.jump/(2*CFG.player.gravity)+.05),eps=1e-6;
+  const blocks=(x,z)=>{for(let y=Math.floor(p.y-H+eps);y<=Math.floor(top-eps);y++)if(BLOCKS[t.get(x,y,z)]?.fence&&p.y<y+H-eps&&top>y+eps)return true;return false;};
+  const axis=(vel,lead,lo,hi,cell)=>{if(Math.abs(vel)<eps)return vel;const reach=lead+vel*dt;let allowed=vel;
+   const from=vel>0?Math.floor(lead+eps):Math.floor(reach),to=vel>0?Math.floor(reach):Math.floor(lead-eps);
+   for(let c=vel>0?from:to;vel>0?c<=to:c>=from;c+=vel>0?1:-1){let hit=false;for(let k=Math.floor(lo+eps);k<=Math.floor(hi-eps);k++)if(blocks(...cell(c,k))){hit=true;break;}if(!hit)continue;
+    const gap=vel>0?c-lead:lead-(c+1);if(gap< -eps)continue;allowed=Math.sign(vel)*Math.max(0,gap-.002)/dt;break;}
+   return Math.abs(allowed)<Math.abs(vel)?allowed:vel;};
+  const vx=axis(v.x,v.x>0?p.x+r:p.x-r,p.z-r,p.z+r,(c,k)=>[c,k]),vz=axis(v.z,v.z>0?p.z+r:p.z-r,p.x-r,p.x+r,(c,k)=>[k,c]);
+  if(vx!==v.x||vz!==v.z)b.setLinvel({x:vx,y:v.y,z:vz},true);}
  bankAhead(actor,move){const length=Math.hypot(move.x,move.z);if(length<.3)return false;
   const dir={x:move.x/length,z:move.z/length},r=CFG.player.radius*(actor.scale||1),pos=actor.pos;
   const cx=pos.x+dir.x*(r+.27),cz=pos.z+dir.z*(r+.27),floor=Math.floor(pos.y),t=this.terrain;
@@ -130,6 +148,7 @@ class Physics {
   const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(requestedMove.x,requestedMove.z)>.35&&this.autoJump(actor,requestedMove);
   if((jump||autoStep)&&actor.grounded){const vertical=autoStep?Math.sqrt(2*CFG.player.gravity*CFG.movement.autoStepRise):CFG.player.jump;
    b.applyImpulse({x:0,y:(vertical-vel.y)*m,z:0},true);actor.grounded=false;}
+  this.fenceClamp(actor,b);
  }
  impulse(actor,dir,power,profile=null){const b=this.world.getRigidBody(actor.body);if(!b)return;
   const velocity=b.linvel(),mass=b.mass(),limit=CFG.combat.knockback.maxSpeed,nx=velocity.x+dir.x*power,nz=velocity.z+dir.z*power,ratio=Math.min(1,limit/Math.max(.001,Math.hypot(nx,nz))),lift=profile?.lift??Math.max(.6,dir.y*power);

@@ -154,7 +154,7 @@ try{
  assert(world.grove.distance<=160&&world.ring.distance<=160&&world.dungeon.distance<=160,'boss structures out of reach: '+JSON.stringify(world));assert(world.anchorsIncluded&&world.sameSeed);assert(world.dungeon.stairsOpen>0,'the dungeon staircase must open at the surface so the cave boss is walkable');
  assert(world.grove.leaves>20&&world.grove.logs>=16&&world.grove.torches>=8);assert(world.ring.stems>=16&&world.ring.caps>=40);
  assert.deepEqual([world.woke.grove.species,world.woke.ring.species,world.woke.dungeon.species],['root','mushroom-snail','rock-chick']);
- assert.deepEqual(world.firstDrops,['diamond','heart','rootEgg']);assert(world.guaranteed&&world.respawnBlocked&&world.secondSpawned);
+ assert.deepEqual(world.firstDrops,['diamond','heart','rootCrown','rootEgg']);assert(world.guaranteed&&world.respawnBlocked&&world.secondSpawned);
  assert.equal(world.secondDrops.includes('rootEgg'),world.roll<world.chance);
  pass('seed 190725 builds a grove, a mushroom ring and the dungeon within reach of spawn; each wakes its species boss; the first kill drops a guaranteed egg, later kills roll after the respawn delay',world);
  const cave=await pc.evaluate(()=>{const base=Bloom.app.sim,test=new Bloom.Simulation(base.R,190725);try{const p=test.addPlayer('caver');test.physics.teleport(p,{x:0,y:-1,z:-56});const out=[];for(let i=0;i<40&&out.length<2;i++){test.spawnCaveCreature([p],p,hash3(i,3,9,1));out.push(...Object.values(test.actors).filter(a=>a.speciesId&&!out.includes(a.speciesId)).map(a=>a.speciesId));}const c=Object.values(test.actors).find(a=>a.speciesId);return{realm:test.terrain.realm(0,-1,-56),species:c?.speciesId,pos:c&&{...c.pos}};}finally{test.free();}});
