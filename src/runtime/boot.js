@@ -24,9 +24,16 @@ async function loadGamekit(dependency=DEPENDENCIES.gamekit,onProgress=()=>{}){
  for(const [name,module]of results)modules[name]=module;
  if(typeof modules.interpolation.RenderObject!=='function'||typeof modules.interpolation.PresentationRuntime!=='function')throw Error('GameKit display API mismatch');
  if(typeof modules.input.ActionState!=='function'||typeof modules.input.createDOMInput!=='function'||typeof modules.simloop.createLoop!=='function'||typeof modules.simloop.createDeadlineScheduler!=='function'||typeof modules.presentation.PresentationEventQueue!=='function'||typeof modules.audio.AudioPlayer!=='function')throw Error('Gamekit 공개 API 불일치');
- if(typeof modules.rendering.WebGLDevice!=='function'||typeof modules.rendering.MeshRenderer!=='function'||typeof modules.vectorAssets.createVectorAsset!=='function'||typeof modules.vectorAssetLoader.createVectorAssetLoader!=='function')throw Error('GameKit SVG 월드 렌더 API 불일치');
+ if(typeof modules.vectorAssets.createVectorAsset!=='function'||typeof modules.vectorAssetLoader.createVectorAssetLoader!=='function')throw Error('GameKit SVG 벡터 에셋 API 불일치');
  return Object.freeze(modules);
 }
+// three.js is the 3D world renderer: one pinned ESM build, checked by revision and public API.
+async function loadThree(dependency=DEPENDENCIES.three){try{
+ const THREE=await withTimeout(import(dependency.url),dependency.timeoutMs,'three.js '+dependency.version+' 로딩');
+ if(THREE.REVISION!==dependency.revision)throw Error('three.js 버전 불일치: r'+THREE.REVISION);
+ for(const name of ['WebGLRenderer','RawShaderMaterial','InterleavedBuffer','CanvasTexture','DataTexture'])if(typeof THREE[name]!=='function')throw Error('three.js 공개 API 누락: '+name);
+ return THREE;
+}catch(cause){const error=new Error('three.js 로딩 실패: '+(cause?.message||String(cause)));error.cause=cause;error.stage='three';throw error;}}
 async function loadCompanionVectorAsset(gamekit){
  if(!companionVectorPromise){
   companionVectorLoader=gamekit.vectorAssetLoader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:8});
@@ -69,13 +76,16 @@ async function boot(){
   window.BloomDiagnostics.setPhase('vector-art');
   $('load-status').textContent='원본 동료 SVG를 불러오고 있어요.';
   const companionVector=await loadCompanionVectorAsset(gamekit);
+  window.BloomDiagnostics.setPhase('three');
+  $('load-status').textContent='three.js 렌더러를 불러오고 있어요.';
+  const THREE=await loadThree();
   window.BloomDiagnostics.setPhase('rapier');
   const R=await loadExternalRapier(DEPENDENCIES.rapier,e=>{
    $('load-status').textContent=e.phase==='initialize'?'물리 엔진을 초기화하고 있어요.':(e.index?'다른 CDN에서 물리 엔진을 다시 불러오고 있어요.':'물리 엔진을 CDN에서 불러오고 있어요.');
    console.info('Bloom dependency',e.phase,e.url);
   },attempt);
   window.BloomDiagnostics.setPhase('simulation');
-  app=new App(R,gamekit,companionVector);
+  app=new App(R,gamekit,companionVector,THREE);
   window.Bloom={app,diagnostics:window.BloomDiagnostics,vectorAssetLoader:companionVectorLoader,companionVector:companionVector.pebbleMole,vectorAssets:companionVector,Simulation,Inventory,Combat,Physics,VoxelWorld,RPG,RPG_SKILLS,QUESTS,DUNGEON_ROOMS,ITEMS,RECIPES,CFG,BLOCKS,BID,RESOURCE_DEFS,DEPENDENCIES,createItemIcons,encodeInputObject,decodeInput,encodeCommand,neutralInput,Renderer,MeshBuilder,MetricWindow,METRICS,ScenePresentation,VERSION,SNAPSHOT_VERSION,buildBlockAtlas,blockTexturePixel,TEXTURE_STYLE,CombatVisuals,ANIMATION,actionTiming,actorSpritePose,BASIC_CHAIN,attackMotion,attackPose,attackClip,weaponVisualPose,EnemyHealthHUD,healthMeter,projectWorldToScreen,rollDirection,rollSpeed,attackPose,attackSamples,knockbackResponse};
   app.start();window.BloomDiagnostics.setPhase('playing');console.info('Bloom boot: ready');return app;
  }catch(e){console.error(e);window.BloomDiagnostics.report(e,{kind:'boot-error',visibility:'fatal',origin:e.stage||'boot'});$('load-title').textContent='화원을 불러오지 못했어요';$('load-status').textContent=e.message;$('loading').querySelector('.spinner').style.display='none';$('load-retry').hidden=false;$('load-retry').disabled=false;return null;

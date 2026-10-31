@@ -1,33 +1,94 @@
 'use strict';
+/* three.js world renderer. Presentation reads simulation/display state only.
+ * Every draw is submitted in the legacy pass order (sky → terrain → props → characters → sprites →
+ * drops → water → effects → late characters → view arms): one ordered list via renderOrder with
+ * explicit blend/depth state per material, so three.js never re-sorts the frame. */
+const RENDER_GLSL=Object.freeze({
+ terrainVertex:'in vec3 position;in vec3 n;in float material;uniform mat4 vp;out vec3 wp;out vec3 normal;out float mat;void main(){wp=position;normal=n;mat=material;gl_Position=vp*vec4(position,1.);}',
+ terrainFragment:`precision highp float;
+  in vec3 wp;in vec3 normal;in float mat;uniform sampler2D tiles;uniform vec3 eye;uniform vec3 fog;uniform vec4 lights[8];uniform float ambient;uniform float textured;out vec4 fragColor;
+  void main(){vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
+   float face=n.y>.5?0.:n.y<-.5?2.:1.;float tile=floor(mat+.5)*3.+face;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
+   vec2 coords=(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.);vec3 pixel=texture(tiles,coords).rgb,average=texture(tiles,(origin+31.5)/vec2(256.,512.)).rgb;
+   float footprint=max(length(dFdx(uv)),length(dFdy(uv)))*16.;
+   float blend=smoothstep(${CFG.textures.minifyStart.toFixed(2)},${CFG.textures.minifyEnd.toFixed(2)},footprint);
+   vec3 c=mix(average,mix(pixel,average,blend),textured);float shade=top?(n.y>.5?1.:.57):abs(n.x)>.5?.79:.90;
+   float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
+   c*=shade*clamp(light,.16,1.3);fragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);
+  }`,
+ vfxVertex:'in vec3 position;in vec4 tint;uniform mat4 vp;out vec4 t;void main(){t=tint;gl_Position=vp*vec4(position,1.);}',
+ vfxFragment:'precision mediump float;in vec4 t;out vec4 fragColor;void main(){fragColor=t;}',
+ meshVertex:'in vec3 position;in vec3 c;uniform mat4 vp;out vec3 col;out vec3 wp;void main(){wp=position;col=c;gl_Position=vp*vec4(position,1.);}',
+ meshFragment:'precision mediump float;in vec3 col;in vec3 wp;uniform vec3 eye;uniform float ambient;uniform vec3 fog;uniform vec4 lights[8];out vec4 fragColor;void main(){float l=ambient;for(int i=0;i<8;i++){l+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}vec3 c=col*clamp(l,.16,1.3);float grid=min(min(fract(wp.x+.002),fract(wp.y+.002)),fract(wp.z+.002));c*=.97+.03*step(.03,grid);fragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);}',
+ spriteVertex:'in vec3 position;in vec2 uv;in vec4 tint;uniform mat4 vp;out vec2 v;out vec4 t;void main(){v=uv;t=tint;gl_Position=vp*vec4(position,1.);}',
+ spriteFragment:'precision mediump float;uniform sampler2D tex;uniform float ambient;in vec2 v;in vec4 t;out vec4 fragColor;void main(){vec4 c=texture(tex,v)*t;if(c.a<.025)discard;fragColor=vec4(c.rgb*max(.5,ambient),c.a);}',
+ skyVertex:'in vec2 position;out vec2 uv;void main(){uv=position*.5+.5;gl_Position=vec4(position,1.,1.);}',
+ skyFragment:'precision mediump float;in vec2 uv;uniform float yaw;uniform float daylight;uniform float twilight;uniform vec3 sun;uniform vec3 moon;out vec4 fragColor;void main(){vec3 day=mix(vec3(.79,.9,.78),vec3(.32,.67,.89),uv.y);vec3 night=mix(vec3(.14,.19,.25),vec3(.025,.04,.1),uv.y);vec3 c=mix(night,day,daylight);float warm=twilight*(.32+.68*(1.-smoothstep(.30,.92,uv.y)));c=mix(c,vec3(1.,.47,.26),.75*warm);float ds=length((uv-sun.xy)*vec2(1.8,1.));float dm=length((uv-moon.xy)*vec2(1.8,1.));c+=sun.z*(vec3(1.,.63,.24)*.18*exp(-ds*13.)+vec3(1.,.89,.52)*.72*(1.-smoothstep(.019,.027,ds)));c+=moon.z*vec3(.55,.69,.84)*.22*(1.-smoothstep(.014,.022,dm));float cloud=smoothstep(.94,1.,sin((uv.x+yaw*.04)*17.+sin(uv.y*11.))*sin(uv.y*24.));c+=cloud*.08*daylight;fragColor=vec4(c,1.);}',
+ waterVertex:'in vec3 position;in vec4 c;uniform mat4 vp;out vec4 tint;out vec3 worldPos;void main(){tint=c;worldPos=position;gl_Position=vp*vec4(position,1.);}',
+ waterFragment:'precision mediump float;in vec4 tint;in vec3 worldPos;uniform float phase;out vec4 fragColor;void main(){vec2 xy=floor(worldPos.xz*6.);float line=step(.96,fract(sin(dot(xy,vec2(12.9898,78.233))+floor(phase*3.)*.41)*43758.5453));fragColor=vec4(tint.rgb*(1.+line*.075),tint.a);}'
+});
+const RENDER_LAYOUT=Object.freeze({mesh:[['position',3],['c',3]],sprite:[['position',3],['uv',2],['tint',4]],vfx:[['position',3],['tint',4]],water:[['position',3],['c',4]]});
+const NO_LIGHTS=new Float32Array(32);
+// One growable interleaved vertex stream for per-frame CPU geometry.
+class DynamicGeometry {
+ constructor(T,layout){this.T=T;this.layout=layout;this.stride=layout.reduce((n,[,size])=>n+size,0);this.capacity=0;this.buffer=null;this.geometry=new T.BufferGeometry();}
+ upload(vertices){const T=this.T,floats=vertices.length;
+  if(floats>this.capacity){this.capacity=Math.ceil(Math.max(4096,2**Math.ceil(Math.log2(floats)))/this.stride)*this.stride;this.geometry.dispose();this.geometry=new T.BufferGeometry();this.buffer=new T.InterleavedBuffer(new Float32Array(this.capacity),this.stride).setUsage(T.DynamicDrawUsage);let offset=0;for(const [name,size]of this.layout){this.geometry.setAttribute(name,new T.InterleavedBufferAttribute(this.buffer,size,offset));offset+=size;}}
+  this.buffer.array.set(vertices);this.buffer.clearUpdateRanges();this.buffer.addUpdateRange(0,floats);this.buffer.needsUpdate=true;this.geometry.setDrawRange(0,floats/this.stride);return this.geometry;}
+ dispose(){this.geometry.dispose();}
+}
+function interleavedGeometry(T,layout,vertices){const stride=layout.reduce((n,[,size])=>n+size,0),buffer=new T.InterleavedBuffer(vertices,stride),geometry=new T.BufferGeometry();let offset=0;for(const [name,size]of layout){geometry.setAttribute(name,new T.InterleavedBufferAttribute(buffer,size,offset));offset+=size;}return geometry;}
 class Renderer {
- constructor(canvas,gamekit,companionVector){this.canvas=canvas;this.gl=canvas.getContext('webgl',{alpha:false,antialias:true,depth:true});if(!this.gl)throw Error('WebGL이 필요한 게임입니다.');const gl=this.gl;this.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.viewRadius=new URLSearchParams(location.search).get('showcaseDemo')==='1'?1:matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;this.atlas=createSpriteAtlas(gl);this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.stats={drawCalls:0,vertices:0};
-  this.blockAtlas=createBlockAtlas(gl);this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(gl,this.iconCanvases);this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
-  const derivatives=!!gl.getExtension('OES_standard_derivatives');
-  this.terrainProgram=this.program('attribute vec3 p;attribute vec3 n;attribute float material;uniform mat4 vp;varying vec3 wp;varying vec3 normal;varying float mat;void main(){wp=p;normal=n;mat=material;gl_Position=vp*vec4(p,1.);}',
-   (derivatives?'#extension GL_OES_standard_derivatives : enable\n':'')+`precision highp float;
-   varying vec3 wp;varying vec3 normal;varying float mat;uniform sampler2D tiles;uniform vec3 eye;uniform vec3 fog;uniform vec4 lights[8];uniform float ambient;uniform float textured;
-   void main(){vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
-    float face=n.y>.5?0.:n.y<-.5?2.:1.;float tile=floor(mat+.5)*3.+face;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
-    vec2 coords=(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.);vec3 pixel=texture2D(tiles,coords).rgb,average=texture2D(tiles,(origin+31.5)/vec2(256.,512.)).rgb;
-    float footprint=${derivatives?'max(length(dFdx(uv)),length(dFdy(uv)))*16.':'distance(wp,eye)/24.'};
-    float blend=smoothstep(${CFG.textures.minifyStart.toFixed(2)},${CFG.textures.minifyEnd.toFixed(2)},footprint);
-    vec3 c=mix(average,mix(pixel,average,blend),textured);float shade=top?(n.y>.5?1.:.57):abs(n.x)>.5?.79:.90;
-    float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
-    c*=shade*clamp(light,.16,1.3);gl_FragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);
-   }`);
-  this.vfxProgram=this.program('attribute vec3 p;attribute vec4 tint;uniform mat4 vp;varying vec4 t;void main(){t=tint;gl_Position=vp*vec4(p,1.);}', 'precision mediump float;varying vec4 t;void main(){gl_FragColor=t;}');
-  this.vfxBuffer=gl.createBuffer();this.vfxSprites=gl.createBuffer();
-  this.meshProgram=this.program('attribute vec3 p;attribute vec3 c;uniform mat4 vp;varying vec3 col;varying vec3 wp;void main(){wp=p;col=c;gl_Position=vp*vec4(p,1.);}',
-   'precision mediump float;varying vec3 col;varying vec3 wp;uniform vec3 eye;uniform float ambient;uniform vec3 fog;uniform vec4 lights[8];void main(){float l=ambient;for(int i=0;i<8;i++){l+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}vec3 c=col*clamp(l,.16,1.3);float grid=min(min(fract(wp.x+.002),fract(wp.y+.002)),fract(wp.z+.002));c*=.97+.03*step(.03,grid);gl_FragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);}');
-  this.spriteProgram=this.program('attribute vec3 p;attribute vec2 uv;attribute vec4 tint;uniform mat4 vp;varying vec2 v;varying vec4 t;void main(){v=uv;t=tint;gl_Position=vp*vec4(p,1.);}',
-   'precision mediump float;uniform sampler2D tex;uniform float ambient;varying vec2 v;varying vec4 t;void main(){vec4 c=texture2D(tex,v)*t;if(c.a<.025)discard;gl_FragColor=vec4(c.rgb*max(.5,ambient),c.a);}');
-  this.skyProgram=this.program('attribute vec2 p;varying vec2 uv;void main(){uv=p*.5+.5;gl_Position=vec4(p,1.,1.);}',
-   'precision mediump float;varying vec2 uv;uniform float ambient;uniform float yaw;uniform float daylight;uniform float twilight;uniform vec3 sun;uniform vec3 moon;void main(){vec3 day=mix(vec3(.79,.9,.78),vec3(.32,.67,.89),uv.y);vec3 night=mix(vec3(.14,.19,.25),vec3(.025,.04,.1),uv.y);vec3 c=mix(night,day,daylight);float warm=twilight*(.32+.68*(1.-smoothstep(.30,.92,uv.y)));c=mix(c,vec3(1.,.47,.26),.75*warm);float ds=length((uv-sun.xy)*vec2(1.8,1.));float dm=length((uv-moon.xy)*vec2(1.8,1.));c+=sun.z*(vec3(1.,.63,.24)*.18*exp(-ds*13.)+vec3(1.,.89,.52)*.72*(1.-smoothstep(.019,.027,ds)));c+=moon.z*vec3(.55,.69,.84)*.22*(1.-smoothstep(.014,.022,dm));float cloud=smoothstep(.94,1.,sin((uv.x+yaw*.04)*17.+sin(uv.y*11.))*sin(uv.y*24.));c+=cloud*.08*daylight;gl_FragColor=vec4(c,1.);}');
-  this.uintIndices=gl.getExtension('OES_element_index_uint');this.waterProgram=this.program('attribute vec3 p;attribute vec4 c;uniform mat4 vp;varying vec4 tint;varying vec3 worldPos;void main(){tint=c;worldPos=p;gl_Position=vp*vec4(p,1.);}', 'precision mediump float;varying vec4 tint;varying vec3 worldPos;uniform float phase;void main(){vec2 xy=floor(worldPos.xz*6.);float line=step(.96,fract(sin(dot(xy,vec2(12.9898,78.233))+floor(phase*3.)*.41)*43758.5453));gl_FragColor=vec4(tint.rgb*(1.+line*.075),tint.a);}');this.waterMeshes=new Map();this.waterDrawList=[];this.dynamic=gl.createBuffer();this.spriteBuffer=gl.createBuffer();this.skyBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.skyBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);gl.enable(gl.DEPTH_TEST);
+ constructor(canvas,gamekit,companionVector,THREE){
+  if(typeof THREE?.WebGLRenderer!=='function')throw Error('three.js 모듈이 필요한 게임입니다.');
+  const T=this.T=THREE;T.ColorManagement.enabled=false;this.canvas=canvas;
+  // An opaque drawing buffer (three.js would otherwise request alpha:true), so straight-alpha
+  // water/effect blending cannot make the page show through the canvas.
+  const context=canvas.getContext('webgl2',{alpha:false,antialias:true,depth:true,stencil:false});if(!context)throw Error('WebGL2가 필요한 게임입니다.');
+  this.three=new T.WebGLRenderer({canvas,context});
+  this.three.outputColorSpace=T.LinearSRGBColorSpace;this.three.autoClear=true;this.gl=this.three.getContext();
+  this.scene=new T.Scene();this.scene.matrixWorldAutoUpdate=false;this.view=new T.Camera();this.view.matrixAutoUpdate=false;this.view.matrixWorldAutoUpdate=false;this.clearColor=new T.Color();this.unusedBounds=new T.Sphere();this.pools=new Map();this.drawOrder=0;
+  this.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.viewRadius=new URLSearchParams(location.search).get('showcaseDemo')==='1'?1:matchMedia('(pointer:coarse)').matches?Math.min(2,CFG.view):CFG.view;
+  this.atlas=createSpriteAtlas(this.three.capabilities.maxTextureSize);this.atlas.texture=this.canvasTexture(this.atlas.canvas);
+  this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.fog=new Float32Array([.69,.85,.86]);this.frameLights=NO_LIGHTS;this.stats={drawCalls:0,vertices:0};
+  const blockAtlas=buildBlockAtlas(),blockTexture=new T.DataTexture(blockAtlas.data,blockAtlas.width,blockAtlas.height,T.RGBAFormat,T.UnsignedByteType);this.pixelTexture(blockTexture,false);this.blockAtlas={...blockAtlas,texture:blockTexture};
+  this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
+  this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
+  this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture}});
+  this.waterMaterial=this.material(RENDER_GLSL.waterVertex,RENDER_GLSL.waterFragment,{vp:{value:new Float32Array(16)},phase:{value:0}},{blend:'alpha',depthWrite:false});this.waterMeshes=new Map();this.waterDrawList=[];
+  const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
+  this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
+  this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);
  }
- program(v,f){const gl=this.gl,p=gl.createProgram();for(const [type,src]of [[gl.VERTEX_SHADER,v],[gl.FRAGMENT_SHADER,f]]){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));gl.attachShader(p,s);gl.deleteShader(s);}gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));return p;}
- attrib(p,name,n,stride,offset){const gl=this.gl;if(this.attributeProgram!==p){for(let i=0;i<8;i++)gl.disableVertexAttribArray(i);this.attributeProgram=p;}const l=gl.getAttribLocation(p,name);if(l<0)return;gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,n,gl.FLOAT,false,stride,offset);}
- resize(){const ratio=Math.min(devicePixelRatio||1,1.5),w=Math.round(this.canvas.clientWidth*ratio),h=Math.round(this.canvas.clientHeight*ratio);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}this.gl.viewport(0,0,w,h);}
+ // Nearest-filtered, unmipmapped, clamped textures exactly like the legacy atlases.
+ pixelTexture(texture,flipY){const T=this.T;texture.flipY=flipY;texture.generateMipmaps=false;texture.minFilter=texture.magFilter=T.NearestFilter;texture.wrapS=texture.wrapT=T.ClampToEdgeWrapping;texture.needsUpdate=true;return texture;}
+ canvasTexture(canvas){return this.pixelTexture(new this.T.CanvasTexture(canvas),true);}
+ // LEQUAL everywhere: the legacy frame inherited GameKit's character depthFunc for all later passes,
+ // which decides coplanar water/terrain and equipment/cuff overlaps.
+ material(vertexShader,fragmentShader,uniforms,{blend=null,depthTest=true,depthWrite=true,depthFunc=this.T.LessEqualDepth}={}){const T=this.T,m=new T.RawShaderMaterial({glslVersion:T.GLSL3,vertexShader,fragmentShader,uniforms,side:T.DoubleSide,transparent:true,forceSinglePass:true,depthTest,depthWrite});m.depthFunc=depthFunc;this.setBlend(m,blend);return m;}
+ // blend: null (replace), 'alpha' (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) or 'premultiplied' (ONE, ONE_MINUS_SRC_ALPHA).
+ setBlend(m,blend){const T=this.T;if(!blend){m.blending=T.NoBlending;return;}m.blending=T.CustomBlending;m.blendEquation=T.AddEquation;m.blendSrc=blend==='premultiplied'?T.OneFactor:T.SrcAlphaFactor;m.blendDst=T.OneMinusSrcAlphaFactor;}
+ worldObject(object){object.frustumCulled=false;object.matrixAutoUpdate=false;object.visible=false;this.scene.add(object);return object;}
+ pooled(kind,create){let pool=this.pools.get(kind);if(!pool)this.pools.set(kind,pool={items:[],used:0});if(pool.used===pool.items.length){const item=create();this.worldObject(item.object);pool.items.push(item);}return pool.items[pool.used++];}
+ // Unique renderOrder fixes the draw order, so three.js's depth tie-break never needs real bounds;
+ // a shared placeholder sphere keeps it from scanning every streamed buffer.
+ submit(object){object.visible=true;object.renderOrder=this.drawOrder++;this.stats.drawCalls++;object.geometry.boundingSphere??=this.unusedBounds;}
+ beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values())m.object.visible=false;for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
+  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.companionRenderer.beginFrame();}
+ endFrame(){this.three.render(this.scene,this.view);this.companionRenderer.endFrame();}
+ dynamic(kind,layout,uniforms,options){return this.pooled(kind,()=>{const geometry=new DynamicGeometry(this.T,layout),[vertex,fragment]=layout===RENDER_LAYOUT.mesh?[RENDER_GLSL.meshVertex,RENDER_GLSL.meshFragment]:layout===RENDER_LAYOUT.sprite?[RENDER_GLSL.spriteVertex,RENDER_GLSL.spriteFragment]:[RENDER_GLSL.vfxVertex,RENDER_GLSL.vfxFragment];return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(vertex,fragment,uniforms(),options))};});}
+ submitDynamic(item,vertices,stride){item.object.geometry=item.geometry.upload(vertices);this.submit(item.object);this.stats.vertices+=vertices.length/stride;}
+ // Lit vertex-colored boxes and beams; overlay draws (view arms) skip depth.
+ drawColored(vertices,{lights=this.frameLights,vp=this.vp,eye=arr(this.eye),ambient=this.ambient,fog=this.fog,overlay=false,depthWrite=!overlay}={}){if(!vertices.length)return;
+  const item=this.dynamic(overlay?'mesh-overlay':'mesh',RENDER_LAYOUT.mesh,()=>({vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},ambient:{value:1},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)}}),overlay?{depthTest:false,depthWrite:false}:{}),u=item.object.material.uniforms;
+  item.object.material.depthWrite=depthWrite;u.vp.value.set(vp);u.eye.value.set(eye);u.ambient.value=ambient;u.fog.value.set(fog);u.lights.value.set(lights);this.submitDynamic(item,vertices,6);}
+ // Textured billboards; blend:true is straight-alpha blending (depth writes off unless requested).
+ // Every sprite pass after the SVG characters keeps depth writes off, as the legacy frame did.
+ drawSprites(vertices,texture,{ambient=this.ambient,blend=false,depthWrite=!blend}={}){if(!vertices.length)return;
+  const item=this.dynamic('sprite',RENDER_LAYOUT.sprite,()=>({vp:{value:new Float32Array(16)},ambient:{value:1},tex:{value:null}})),m=item.object.material,u=m.uniforms;
+  u.vp.value.set(this.vp);u.ambient.value=ambient;u.tex.value=texture;this.setBlend(m,blend?'alpha':null);m.depthWrite=depthWrite;this.submitDynamic(item,vertices,9);}
+ drawVfx(vertices){if(!vertices.length)return;const item=this.dynamic('vfx',RENDER_LAYOUT.vfx,()=>({vp:{value:new Float32Array(16)}}),{blend:'alpha',depthWrite:false});item.object.material.uniforms.vp.value.set(this.vp);this.submitDynamic(item,vertices,7);}
+ resize(){const ratio=Math.min(devicePixelRatio||1,1.5),w=Math.round(this.canvas.clientWidth*ratio),h=Math.round(this.canvas.clientHeight*ratio);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
  updateCamera(actor,sim,renderPos=actor.pos){const c=this.camera,forward=direction(c.yaw,c.pitch),eye=V.add(renderPos,{x:0,y:CFG.player.eyeHeight,z:0});let camera={...eye};this.fov=lerp(this.fov||65,actor.sprinting?71:65,actor.sprinting?.18:.12);
   if(!c.first){const right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)},back=V.add(V.scale(forward,-c.distance),V.scale(right,.55)),length=V.len(back),hit=sim.terrain.ray(eye,V.norm(back),length);camera=V.add(eye,V.scale(V.norm(back),hit?Math.max(.2,hit.distance-.25):length));}
   this.right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)};camera=V.add(camera,this.combatFx.cameraOffset());this.eye=camera;this.forward=forward;this.right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)};this.vp=matrixMul(projection(this.fov*Math.PI/180,this.canvas.width/this.canvas.height,.035,130),viewMatrix(arr(camera),arr(V.add(camera,forward))));
@@ -64,14 +125,14 @@ class Renderer {
   }
  }
  projected(pos){return projectWorldToScreen(this.vp,pos,this.canvas.clientWidth,this.canvas.clientHeight);}
- uploadMesh(m){const started=performance.now(),gl=this.gl,count=m.vertices.length/3,buf=new Float32Array(count*7);
+ uploadMesh(m){const started=performance.now(),T=this.T,count=m.vertices.length/3;
   if(!m.materials||m.materials.length!==count)throw Error('텍스처 재질 데이터 누락');
-  for(let i=0;i<count;i++){buf.set(m.vertices.subarray(i*3,i*3+3),i*7);buf.set(m.normals.subarray(i*3,i*3+3),i*7+3);buf[i*7+6]=m.materials[i];}
-  const indices=count<=65535?new Uint16Array(m.indices):m.indices;if(indices instanceof Uint32Array&&!this.uintIndices)throw Error('32비트 메시 인덱스 미지원');
-  const buffer=gl.createBuffer(),index=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,buf,gl.STATIC_DRAW);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);METRICS.add('render.upload',performance.now()-started);
-  return{buffer,index,count:indices.length,indexType:indices instanceof Uint16Array?gl.UNSIGNED_SHORT:gl.UNSIGNED_INT,revision:m.revision,bytes:buf.byteLength+indices.byteLength};
+  const indices=count<=65535?new Uint16Array(m.indices):m.indices,geometry=new T.BufferGeometry();
+  geometry.setAttribute('position',new T.BufferAttribute(m.vertices,3));geometry.setAttribute('n',new T.BufferAttribute(m.normals,3));geometry.setAttribute('material',new T.BufferAttribute(m.materials,1));geometry.setIndex(new T.BufferAttribute(indices,1));
+  const object=this.worldObject(new T.Mesh(geometry,this.terrainMaterial));METRICS.add('render.upload',performance.now()-started);
+  return{object,count:indices.length,revision:m.revision,bytes:m.vertices.byteLength+m.normals.byteLength+m.materials.byteLength+indices.byteLength};
  }
- deleteMesh(m){if(!m)return;this.gl.deleteBuffer(m.buffer);this.gl.deleteBuffer(m.index);}
+ deleteMesh(m){if(!m)return;this.scene.remove(m.object);m.object.geometry.dispose();}
  stream(sim,actor){const started=performance.now();if(this.worldRef!==sim.terrain){for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.worldRef=sim.terrain;this.meshBuilder.reset(sim.terrain);this.streamSignature=null;this.streamComplete=false;this.uploadReady=[];this.visibleChunks.clear();this.readyChunks.clear();this.visibleColumns.clear();this.clearWaterMeshes();this.particles.length=0;}
   this.meshBuilder.sync(sim.terrain);const C=CFG.chunk,cx=Math.floor(actor.pos.x/C),cy=Math.floor(actor.pos.y/C),cz=Math.floor(actor.pos.z/C),want=new Set(),columns=new Set(),todo=[],distances=new Map(),yMin=Math.max(Math.floor(CFG.bottom/C),cy-1),yMax=Math.min(Math.ceil(CFG.top/C)-1,cy+1);
   for(let dz=-this.viewRadius;dz<=this.viewRadius;dz++)for(let dx=-this.viewRadius;dx<=this.viewRadius;dx++){const column=columnKey(cx+dx,cz+dz);columns.add(column);for(let y=yMin;y<=yMax;y++){const key=chunkKey(cx+dx,y,cz+dz),old=this.meshes.get(key),rev=sim.terrain.revisions.get(key)||0,dist=dx*dx+dz*dz+Math.abs(y-cy);want.add(key);distances.set(key,dist);if(!old||old.revision!==rev)todo.push({key,revision:rev,dist,dirty:!!old});}}
@@ -92,8 +153,6 @@ class Renderer {
   return true;}
  entityVisualReady(entity){if(!entity)return false;return this.worldVisualReady(entity.pos,CFG.player.radius*(entity.scale||1));}
  lights(sim,actor){const out=new Float32Array(32),entries=sim.terrain.lightEntries(actor.pos);let n=0;for(const light of entries){if(n===8)break;out.set([light.x,light.y,light.z,1],n++*4);}if(V.len(V.sub(actor.pos,sim.terrain.altar))<20&&n<8)out.set([24.5,6,-13.5,1],n++*4);return out;}
- terrainState(lights){const gl=this.gl,p=this.terrainProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform3fv(gl.getUniformLocation(p,'eye'),arr(this.eye));gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.uniform3fv(gl.getUniformLocation(p,'fog'),this.fog);gl.uniform4fv(gl.getUniformLocation(p,'lights[0]'),lights);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.blockAtlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tiles'),1);gl.uniform1f(gl.getUniformLocation(p,'textured'),this.combatFx.options.textures?1:0);}
- meshState(lights){const gl=this.gl,p=this.meshProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform3fv(gl.getUniformLocation(p,'eye'),arr(this.eye));gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.uniform3fv(gl.getUniformLocation(p,'fog'),this.fog);gl.uniform4fv(gl.getUniformLocation(p,'lights[0]'),lights);}
  box(out,pos,scale,color,forward=null){const f=forward?normal([forward.x,0,forward.z]):[0,0,1],right=[f[2],0,-f[0]],p=(x,y,z)=>[pos.x+right[0]*x+f[0]*z,pos.y+y,pos.z+right[2]*x+f[2]*z],x=scale.x/2,z=scale.z/2,y=scale.y;
   const a=p(-x,0,-z),b=p(x,0,-z),c=p(x,y,-z),d=p(-x,y,-z),e=p(-x,0,z),f1=p(x,0,z),g=p(x,y,z),h=p(-x,y,z);
   for(const [quad,shade]of [[[a,d,c,b],.8],[[e,f1,g,h],1],[[a,e,h,d],.75],[[b,c,g,f1],.88],[[d,h,g,c],1.1],[[a,b,f1,e],.55]])for(const i of [0,1,2,0,2,3])out.push(...quad[i],...color.map(n=>n*shade));}
@@ -111,24 +170,22 @@ class Renderer {
   this.combatFx.event(event,sim,localActorId);
  }
  spritePlane(out,center,u,v,frame,tint,flip=false){const p=(x,y)=>arr(V.add(center,V.add(V.scale(u,x),V.scale(v,y)))),pts=[p(-.5,-.5),p(.5,-.5),p(.5,.5),p(-.5,.5)],u0=flip?frame.u1:frame.u0,u1=flip?frame.u0:frame.u1,uv=[[u0,frame.v1],[u1,frame.v1],[u1,frame.v0],[u0,frame.v0]];for(const i of [0,1,2,0,2,3])out.push(...pts[i],...uv[i],...tint);}
+ drawSky(daylight,phase,alt,twilight){const u=this.sky.material.uniforms;u.yaw.value=this.camera.yaw;u.daylight.value=daylight;u.twilight.value=twilight;
+  // Sun and moon share a continuous solar arc; camera yaw controls their screen azimuth.
+  const az=TAU*phase-this.camera.yaw;
+  const x=.5+.43*Math.sin(az),y=.30+.54*alt-.20*this.camera.pitch;
+  u.sun.value.set([x,y,Math.cos(az)>0?.95:0]);u.moon.value.set([.5-.43*Math.sin(az),.30-.54*alt-.20*this.camera.pitch,Math.cos(az)<0?1:0]);this.submit(this.sky);}
+ drawTerrain(lights){const u=this.terrainMaterial.uniforms;u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.ambient.value=this.ambient;u.fog.value.set(this.fog);u.lights.value.set(lights);u.textured.value=this.combatFx.options.textures?1:0;
+  for(const [key,m]of this.meshes){if(!m.count)continue;const [x,y,z]=key.split(':').map(Number),dx=(x+.5)*16-this.eye.x,dz=(z+.5)*16-this.eye.z;if(dx*this.forward.x+dz*this.forward.z<-18||Math.hypot(dx,dz)>75)continue;this.submit(m.object);this.stats.vertices+=m.count;}}
  render(sim,authority,dt,displayFrame){
   const view={actors:{},drops:{},projectiles:{},companions:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':model.displayKind==='companion'?'companions':'projectiles'][model.id]=value;});
   const actor=view.actors[authority.id];if(!actor)return;this.displayTimeMs=displayFrame.timeMs;
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
-  this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.updateCamera(actor,sim,viewPos);this.stream(sim,authority);const gl=this.gl;const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
+  this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.updateCamera(actor,sim,viewPos);this.stream(sim,authority);const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
   this.ambient=.20+.80*daylight;
-  this.fog=[lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight];this.stats={drawCalls:0,vertices:0};this.companionRenderer.beginFrame(this.fog);this.companionRenderer.beginCharacterFrame();gl.clearColor(...this.fog,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);
-  gl.useProgram(this.skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,this.skyBuffer);this.attrib(this.skyProgram,'p',2,8,0);gl.uniform1f(gl.getUniformLocation(this.skyProgram,'ambient'),this.ambient);gl.uniform1f(gl.getUniformLocation(this.skyProgram,'yaw'),this.camera.yaw);
-  gl.uniform1f(gl.getUniformLocation(this.skyProgram,'daylight'),daylight);
-  gl.uniform1f(gl.getUniformLocation(this.skyProgram,'twilight'),twilight);
-  // Sun and moon share a continuous solar arc; camera yaw controls their screen azimuth.
-  const az=TAU*phase-this.camera.yaw;
-  const x=.5+.43*Math.sin(az),y=.30+.54*alt-.20*this.camera.pitch;
-  gl.uniform3fv(gl.getUniformLocation(this.skyProgram,'sun'),new Float32Array([x,y,Math.cos(az)>0?.95:0]));
-  gl.uniform3fv(gl.getUniformLocation(this.skyProgram,'moon'),new Float32Array([.5-.43*Math.sin(az),.30-.54*alt-.20*this.camera.pitch,Math.cos(az)<0?1:0]));
-  gl.drawArrays(gl.TRIANGLES,0,6);gl.enable(gl.DEPTH_TEST);
-  const lights=this.lights(sim,actor);this.terrainState(lights);
-  for(const [key,m]of this.meshes){if(!m.count)continue;const [x,y,z]=key.split(':').map(Number),dx=(x+.5)*16-this.eye.x,dz=(z+.5)*16-this.eye.z;if(dx*this.forward.x+dz*this.forward.z<-18||Math.hypot(dx,dz)>75)continue;gl.bindBuffer(gl.ARRAY_BUFFER,m.buffer);this.attrib(this.terrainProgram,'p',3,28,0);this.attrib(this.terrainProgram,'n',3,28,12);this.attrib(this.terrainProgram,'material',1,28,24);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.index);gl.drawElements(gl.TRIANGLES,m.count,m.indexType,0);this.stats.drawCalls++;this.stats.vertices+=m.count;}
+  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);this.beginFrame(this.fog);this.companionRenderer.beginCharacterFrame();
+  this.drawSky(daylight,phase,alt,twilight);
+  const lights=this.lights(sim,actor);this.frameLights=lights;this.drawTerrain(lights);
   const dyn=[],sprites=[];
   // Fluid volumes are submitted separately after solid terrain; no global sea plane.
   this.animationSamples={};
@@ -199,43 +256,38 @@ class Renderer {
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
   this.companionRenderer.prepare(view,sim,actor,dyn);
-  this.meshState(lights);if(dyn.length){gl.bindBuffer(gl.ARRAY_BUFFER,this.dynamic);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(dyn),gl.DYNAMIC_DRAW);this.attrib(this.meshProgram,'p',3,24,0);this.attrib(this.meshProgram,'c',3,24,12);gl.drawArrays(gl.TRIANGLES,0,dyn.length/6);}
+  this.drawColored(dyn);
   this.companionRenderer.drawCharacters('world');this.companionRenderer.draw(false);
-  if(sprites.length){const p=this.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),this.ambient);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,this.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(sprites),gl.DYNAMIC_DRAW);this.attrib(p,'p',3,36,0);this.attrib(p,'uv',2,36,12);this.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,sprites.length/9);}
-  this.companionRenderer.draw(true);this.drawDropSprites(dropSprites);this.drawWater(sim,actor);
-  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawCombatEffects(effects,effectSprites);this.companionRenderer.drawCharacters('late');this.combatFx.ui(sim);
-  if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.companionRenderer.endFrame();
+  this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
+  this.companionRenderer.draw(true);this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
+  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.companionRenderer.drawCharacters('late');this.combatFx.ui(sim);
+  if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
  }
- drawDropSprites(vertices){if(!vertices.length)return;const gl=this.gl,p=this.spriteProgram;gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
-  gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),Math.max(.75,this.ambient));gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.dropAtlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);
-  gl.bindBuffer(gl.ARRAY_BUFFER,this.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);this.attrib(p,'p',3,36,0);this.attrib(p,'uv',2,36,12);this.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,vertices.length/9);this.stats.drawCalls++;gl.depthMask(true);gl.disable(gl.BLEND);}
  // Reusable per-section water meshes. World streaming controls the same 3D readyChunks
  // used by entities/HUD. A dirty section is rebuilt at most once per revision;
  // unchanged GPU buffers are drawn without any upload or terrain scan.
- clearWaterMeshes(){for(const m of this.waterMeshes.values())if(m.buffer)this.gl.deleteBuffer(m.buffer);this.waterMeshes.clear();this.waterDrawList=[];}
+ deleteWaterMesh(m){if(!m?.object)return;this.scene.remove(m.object);m.object.geometry.dispose();}
+ clearWaterMeshes(){for(const m of this.waterMeshes.values())this.deleteWaterMesh(m);this.waterMeshes.clear();this.waterDrawList=[];}
  waterBoundaryMask(key){const [x,y,z]=key.split(':').map(Number);
   let mask=0;for(let i=0;i<FACE_DIRS.length;i++){const d=FACE_DIRS[i];if(this.readyChunks.has(chunkKey(x+d[0],y+d[1],z+d[2])))mask|=1<<i;}return mask;}
- updateWaterMeshes(terrain,actor){const started=performance.now(),gl=this.gl,water=terrain.water,C=CFG.chunk;
-  for(const [key,m]of this.waterMeshes)if(!this.readyChunks.has(key)){if(m.buffer)gl.deleteBuffer(m.buffer);this.waterMeshes.delete(key);}
+ updateWaterMeshes(terrain,actor){const started=performance.now(),water=terrain.water,C=CFG.chunk;
+  for(const [key,m]of this.waterMeshes)if(!this.readyChunks.has(key)){this.deleteWaterMesh(m);this.waterMeshes.delete(key);}
   const cx=Math.floor(actor.pos.x/C),cy=Math.floor(actor.pos.y/C),cz=Math.floor(actor.pos.z/C),dirty=[];
   for(const key of this.readyChunks){const version=water.chunkRevisions.get(key)||0,mask=this.waterBoundaryMask(key),previous=this.waterMeshes.get(key);if(previous?.revision===version&&previous.boundaryMask===mask)continue;
    const [x,y,z]=key.split(':').map(Number),dist=sq(x-cx)+sq(y-cy)+sq(z-cz);dirty.push({key,version,mask,dist});}
   dirty.sort((a,b)=>a.dist-b.dist||cmp(a.key,b.key));let rebuilt=0;
   for(const item of dirty){if(rebuilt>=CFG.render.maxWaterMeshesPerFrame||rebuilt&&performance.now()-started>=CFG.render.waterMeshBudgetMs)break;
-   const before=performance.now(),vertices=this.waterGeometry(terrain,item.key),previous=this.waterMeshes.get(item.key);
-   let buffer=previous?.buffer||null;if(vertices.length){if(!buffer)buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);}
-   else if(buffer){gl.deleteBuffer(buffer);buffer=null;}
-   this.waterMeshes.set(item.key,{buffer,count:vertices.length/7,revision:item.version,boundaryMask:item.mask});
+   const before=performance.now(),vertices=this.waterGeometry(terrain,item.key);
+   this.deleteWaterMesh(this.waterMeshes.get(item.key));
+   const object=vertices.length?this.worldObject(new this.T.Mesh(interleavedGeometry(this.T,RENDER_LAYOUT.water,vertices),this.waterMaterial)):null;
+   this.waterMeshes.set(item.key,{object,count:vertices.length/7,revision:item.version,boundaryMask:item.mask});
    METRICS.add('render.waterMeshBuild',performance.now()-before);rebuilt++;
   }
-  this.waterDrawList=[];for(const [key,m]of this.waterMeshes){if(m.buffer&&m.count>0&&this.readyChunks.has(key)&&m.revision===(water.chunkRevisions.get(key)||0)&&m.boundaryMask===this.waterBoundaryMask(key))this.waterDrawList.push(m);}
+  this.waterDrawList=[];for(const [key,m]of this.waterMeshes){if(m.object&&m.count>0&&this.readyChunks.has(key)&&m.revision===(water.chunkRevisions.get(key)||0)&&m.boundaryMask===this.waterBoundaryMask(key))this.waterDrawList.push(m);}
   METRICS.add('render.waterMeshUpdate',performance.now()-started);
  }
- drawWater(sim,actor){const gl=this.gl,p=this.waterProgram;if(!this.waterDrawList.length)return;
-  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.useProgram(p);
-  gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'phase'),performance.now()/1000);
-  for(const m of this.waterDrawList){gl.bindBuffer(gl.ARRAY_BUFFER,m.buffer);this.attrib(p,'p',3,28,0);this.attrib(p,'c',4,28,12);gl.drawArrays(gl.TRIANGLES,0,m.count);this.stats.drawCalls++;}
-  gl.depthMask(true);gl.disable(gl.BLEND);
+ drawWater(){if(!this.waterDrawList.length)return;const u=this.waterMaterial.uniforms;u.vp.value.set(this.vp);u.phase.value=performance.now()/1000;
+  for(const m of this.waterDrawList){this.submit(m.object);this.stats.vertices+=m.count;}
  }
  waterGeometry(terrain,section){const water=terrain.water,out=[],seen=new Set(),cells=[],C=CFG.chunk,sides=[[1,0],[-1,0],[0,1],[0,-1]];
   const [cx,cy,cz]=section.split(':').map(Number),x0=cx*C,y0=cy*C,z0=cz*C,yMax=y0+C-1;
@@ -259,15 +311,10 @@ class Renderer {
     const pts=dx===1?[[x+1,top,z],[x+1,top,z+1],[x+1,bottom,z+1],[x+1,bottom,z]]:dx===-1?[[x,top,z+1],[x,top,z],[x,bottom,z],[x,bottom,z+1]]:dz===1?[[x+1,top,z+1],[x,top,z+1],[x,bottom,z+1],[x+1,bottom,z+1]]:[[x,top,z],[x+1,top,z],[x+1,bottom,z],[x,bottom,z]];faces(pts,[.14,.47,.76],.47);}}
   return new Float32Array(out);
  }
- drawCombatEffects(geometry,sprites){const gl=this.gl;gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
-  if(geometry.length){const p=this.vfxProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.bindBuffer(gl.ARRAY_BUFFER,this.vfxBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(geometry),gl.DYNAMIC_DRAW);this.attrib(p,'p',3,28,0);this.attrib(p,'tint',4,28,12);gl.drawArrays(gl.TRIANGLES,0,geometry.length/7);this.stats.drawCalls++;}
-  if(sprites.length){const p=this.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,this.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,this.vfxSprites);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(sprites),gl.DYNAMIC_DRAW);this.attrib(p,'p',3,36,0);this.attrib(p,'uv',2,36,12);this.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,sprites.length/9);this.stats.drawCalls++;}
-  gl.depthMask(true);gl.disable(gl.BLEND);
- }
  renderViewArms(actor){
   // Client-only viewmodel: NOT in simulation, snapshots, world meshes or other peers' cameras.
   // Coordinates are meters, relative to a fixed first-person overlay camera at (0,0,0).
-  const gl=this.gl,geom=[],action=actor.combat.action,c=actor.combat;
+  const geom=[],action=actor.combat.action,c=actor.combat;
   const attacking=c.state==='attack'&&!!action;
   const wind=attacking&&c.elapsed<action.wind?clamp(c.elapsed/action.wind,0,1):0;
   const active=attacking?clamp((c.elapsed-action.wind)/action.active,0,1):0;
@@ -298,22 +345,11 @@ class Renderer {
    this.box(geom,{x:.41,y,z},{x:.11,y:.13,z:.64},c3('#8e6246'),{x:0,y:0,z:-1});
    this.box(geom,{x:.41,y:y+.03,z:z-.39},{x:w==='greatsword'?.25:.15,y:.13,z:tool==='pick'?.62:w==='spear'?.95:.74},color,{x:0,y:0,z:-1});
   }
-  if(!geom.length)return;
-  // Render *after* world+sprites, depth disabled so it never clips through local terrain.
-  gl.disable(gl.DEPTH_TEST);gl.depthMask(false);
-  gl.useProgram(this.meshProgram);
-  gl.uniformMatrix4fv(gl.getUniformLocation(this.meshProgram,'vp'),false,matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])));
-  gl.uniform3fv(gl.getUniformLocation(this.meshProgram,'eye'),new Float32Array([0,0,0]));
-  gl.uniform1f(gl.getUniformLocation(this.meshProgram,'ambient'),Math.max(.6,this.ambient));
-  gl.uniform3fv(gl.getUniformLocation(this.meshProgram,'fog'),new Float32Array([.69,.85,.86]));
-  gl.uniform4fv(gl.getUniformLocation(this.meshProgram,'lights[0]'),new Float32Array(32));
-  gl.bindBuffer(gl.ARRAY_BUFFER,this.dynamic);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(geom),gl.DYNAMIC_DRAW);
-  this.attrib(this.meshProgram,'p',3,24,0);this.attrib(this.meshProgram,'c',3,24,12);
-  gl.drawArrays(gl.TRIANGLES,0,geom.length/6);this.stats.drawCalls++;
-  gl.depthMask(true);gl.enable(gl.DEPTH_TEST);
+  // Drawn *after* world+sprites with depth disabled so it never clips through local terrain.
+  this.drawColored(geom,{overlay:true,lights:NO_LIGHTS,vp:matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])),eye:[0,0,0],ambient:Math.max(.6,this.ambient),fog:[.69,.85,.86]});
  }
- free(){const gl=this.gl;this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);for(const b of [this.dynamic,this.spriteBuffer,this.skyBuffer,this.vfxBuffer,this.vfxSprites])gl.deleteBuffer(b);for(const p of [this.meshProgram,this.spriteProgram,this.skyProgram,this.terrainProgram,this.vfxProgram])gl.deleteProgram(p);this.companionRenderer.dispose();gl.deleteTexture(this.blockAtlas.tex);gl.deleteTexture(this.dropAtlas.tex);this.clearWaterMeshes();gl.deleteProgram(this.waterProgram);this.combatFx.reset();this.healthHud.reset();}
+ free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.companionRenderer.dispose();
+  for(const pool of this.pools.values())for(const item of pool.items){item.geometry?.dispose();item.object.material.dispose();}this.pools.clear();
+  for(const m of [this.terrainMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
+  this.combatFx.reset();this.healthHud.reset();this.three.dispose();}
 }
-
-
-

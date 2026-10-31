@@ -3,7 +3,7 @@
 const COMPANION_SPRITE=Object.freeze({cell:128,pixelsPerMeter:32,size:2048});
 const VECTOR_FRAME_COUNTS=Object.freeze({idle:4,walk:4,work:4,return:4,prepare:8,flight:3,ground:3});
 
-function createCompanionCombatAtlas(gl){
+function createCompanionCombatAtlas(){
  const {cell,pixelsPerMeter:S,size}=COMPANION_SPRITE,canvas=document.createElement('canvas');canvas.width=canvas.height=size;
  const dest=canvas.getContext('2d'),frames={};let index=0;
  const layouts={claw:{attack:12,work:4,return:4}};
@@ -30,7 +30,7 @@ function createCompanionCombatAtlas(gl){
   const rgba=c.getImageData(0,0,cell,cell);for(let i=3;i<rgba.data.length;i+=4)rgba.data[i]=rgba.data[i]>=120?255:0;c.putImageData(rgba,0,0);
   dest.drawImage(tile,x,y);frames[mode+'/'+clip+'/'+view+'/'+frame]={u0:x/size,u1:(x+cell)/size,v0:1-y/size,v1:1-(y+cell)/size,x,y,w:cell,h:cell};index++;
  }
- const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);for(const name of[gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,name,gl.NEAREST);for(const name of[gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,name,gl.CLAMP_TO_EDGE);return{tex,frames,canvas,count:index};
+ return{frames,canvas,count:index};
 }
 
 function svgWorldMatrix(viewBox,root,facing,sizeScale,flipX=false,aspectX=1){
@@ -38,15 +38,68 @@ function svgWorldMatrix(viewBox,root,facing,sizeScale,flipX=false,aspectX=1){
  return new Float32Array([right.x*sx,0,right.z*sx,0,0,-size,0,0,forward.x*size,0,forward.z*size,0,root.x-right.x*offset*sx,root.y-1+(minY+height)*size,root.z-right.z*offset*sx,1]);
 }
 
+/* GameKit vector assets keep their SVG parts, clips and expressions; this backend implements the
+ * retained-mesh contract (createMesh/drawMesh/deleteMesh) with three.js. The shader reproduces
+ * GameKit's world-mode mesh shader: per-part 2D affine poses, premultiplied alpha, tint and white flash. */
+const VECTOR_IDENTITY=Object.freeze([1,0,0,1,0,0]);
+const VECTOR_DEPTH_FUNCS=Object.freeze({never:'NeverDepth',less:'LessDepth',equal:'EqualDepth',lequal:'LessEqualDepth',greater:'GreaterDepth',notequal:'NotEqualDepth',gequal:'GreaterEqualDepth',always:'AlwaysDepth'});
+function vectorMeshShader(partCount,morphCount){
+ const multi=partCount>1,local=morphCount?'position+a_morph.xy*(i_params.x'+(multi?'+pose.x':'')+')'+(morphCount>1?'+a_morph.zw*(i_params.y'+(multi?'+pose.y':'')+')':''):'position';
+ return{vertex:`in vec2 position;in vec4 a_color;${morphCount?'in vec4 a_morph;':''}${multi?`in float a_part;uniform vec4 u_parts[${partCount*3}];`:''}uniform vec4 i_row0;uniform vec4 i_row1;uniform vec4 i_row2;uniform vec4 i_params;uniform mat4 u_viewProjection;uniform vec4 u_color;out vec4 v_color;
+void main(){${multi?'int index=int(a_part)*3;vec4 row0=u_parts[index];vec4 row1=u_parts[index+1];vec4 pose=u_parts[index+2];':''}vec2 local=${local};vec2 plane=${multi?'vec2(dot(row0.xyz,vec3(local,1.0)),dot(row1.xyz,vec3(local,1.0)))':'local'};
+vec3 world=vec3(dot(i_row0.xyz,vec3(plane,1.0)),dot(i_row1.xyz,vec3(plane,1.0)),dot(i_row2.xyz,vec3(plane,1.0)));vec4 projected=u_viewProjection*vec4(world,1.0);projected.z+=(i_params.w+${multi?'pose.w':'0.0'})*projected.w;gl_Position=projected;
+vec4 color=mix(a_color*u_color,u_color,i_row1.w);color.a*=i_row0.w${multi?'*pose.z':''};color.rgb=mix(color.rgb,vec3(1.0),i_row2.w);v_color=vec4(color.rgb*color.a,color.a);}`,
+  fragment:'precision mediump float;in vec4 v_color;out vec4 fragColor;void main(){fragColor=v_color;}'};
+}
+class ThreeVectorMeshes {
+ constructor(renderer){this.r=renderer;this.meshes=new Set();}
+ createMesh(data){
+  const T=this.r.T,vertices=data?.vertices,indices=data?.indices;
+  if(!(vertices instanceof Float32Array)||data.strideFloats!==11||vertices.length<33||vertices.length%11||!Number.isSafeInteger(data.partCount)||data.partCount<1||data.partCount>16||!Number.isSafeInteger(data.morphCount)||data.morphCount<0||data.morphCount>2||!(indices instanceof Uint16Array)||indices.length<3||indices.length%3)throw TypeError('Indexed mesh geometry with complete triangles and 1..16 parts required');
+  if(data.nonScalingStroke||data.indexVariants&&Object.keys(data.indexVariants).length)throw TypeError('three.js 벡터 메시는 non-scaling stroke와 이름 있는 index variant를 지원하지 않습니다');
+  const buffer=new T.InterleavedBuffer(vertices.slice(),11),attributes=[['position',2,0],['a_color',4,2],['a_morph',4,6],['a_part',1,10]].map(([name,size,offset])=>[name,new T.InterleavedBufferAttribute(buffer,size,offset)]);
+  const index=new T.BufferAttribute(indices.slice(),1),variants=new Map(Object.entries(data.expressionIndices||{}).map(([name,variant])=>[name,new T.BufferAttribute(variant.slice(),1)]));
+  const mesh={attributes,index,variants,geometries:new Map(),partCount:data.partCount,morphCount:data.morphCount,shaderKey:data.partCount+':'+data.morphCount,parts:new Float32Array(data.partCount*12),count:indices.length};
+  this.meshes.add(mesh);return mesh;
+ }
+ deleteMesh(mesh){if(!this.meshes.delete(mesh))return false;for(const geometry of mesh.geometries.values())geometry.dispose();mesh.geometries.clear();return true;}
+ geometry(mesh,variant,index,first,count){const key=variant+'|'+first+'|'+count;let geometry=mesh.geometries.get(key);
+  if(!geometry){geometry=new this.r.T.BufferGeometry();for(const [name,attribute]of mesh.attributes)geometry.setAttribute(name,attribute);geometry.setIndex(index);geometry.setDrawRange(first,count);mesh.geometries.set(key,geometry);}return geometry;}
+ drawMesh(mesh,options={}){
+  const {matrix=VECTOR_IDENTITY,parts=null,morph=[0,0],color=[1,1,1,1],forceColor=false,alpha=1,whiteFlash=false,depth=0,depthTest=false,depthWrite=false,depthFunc='lequal',indexVariant=null,indexRange=null,clips=[],stencilRef=null,projection,viewProjection,worldMatrix}=options;
+  if(!this.meshes.has(mesh))throw TypeError('Mesh owned by this renderer required');
+  if(projection!==undefined||viewProjection?.length!==16||worldMatrix?.length!==16)throw TypeError('3D mesh draws require viewProjection and worldMatrix and cannot include projection');
+  if(clips.length||stencilRef!==null)throw TypeError('three.js 벡터 메시는 clip·stencil 그리기를 지원하지 않습니다');
+  if(!VECTOR_DEPTH_FUNCS[depthFunc])throw TypeError('Unsupported depthFunc');
+  const index=indexVariant===null?mesh.index:mesh.variants.get(indexVariant);if(!index)throw TypeError('Known mesh index variant required');
+  const first=indexRange?.[0]??0,count=indexRange?.[1]??index.count;if(first+count>index.count)throw RangeError('indexRange exceeds the selected mesh index data');if(!count)return;
+  const P=mesh.parts;
+  for(let i=0;i<mesh.partCount;i++){const part=parts?.[i],M=part?.transform??VECTOR_IDENTITY,shift=part?.morph??[0,0],at=i*12;
+   P[at]=M[0];P[at+1]=M[2];P[at+2]=M[4];P[at+3]=0;P[at+4]=M[1];P[at+5]=M[3];P[at+6]=M[5];P[at+7]=0;P[at+8]=shift[0];P[at+9]=shift[1];P[at+10]=part?.visible===false?0:part?.opacity??1;P[at+11]=part?.depth??0;}
+  let [m0,m1,m2,m3,m4,m5]=matrix,weight0=morph[0],weight1=morph[1],instanceAlpha=alpha;
+  if(mesh.partCount===1){const a=m0,b=m1,c=m2,d=m3;m0=a*P[0]+c*P[4];m1=b*P[0]+d*P[4];m2=a*P[1]+c*P[5];m3=b*P[1]+d*P[5];m4=a*P[2]+c*P[6]+m4;m5=b*P[2]+d*P[6]+m5;instanceAlpha*=P[10];weight0+=P[8];weight1+=P[9];}
+  const W=worldMatrix,T=this.r.T;
+  const item=this.r.pooled('vector:'+mesh.shaderKey,()=>{const shader=vectorMeshShader(mesh.partCount,mesh.morphCount);return{object:new T.Mesh(new T.BufferGeometry(),this.r.material(shader.vertex,shader.fragment,{u_viewProjection:{value:new Float32Array(16)},u_color:{value:new Float32Array(4)},i_row0:{value:new Float32Array(4)},i_row1:{value:new Float32Array(4)},i_row2:{value:new Float32Array(4)},i_params:{value:new Float32Array(4)},...(mesh.partCount>1?{u_parts:{value:new Float32Array(mesh.partCount*12)}}:{})},{blend:'premultiplied'}))};});
+  const material=item.object.material,u=material.uniforms;
+  u.i_row0.value.set([W[0]*m0+W[4]*m1,W[0]*m2+W[4]*m3,W[0]*m4+W[4]*m5+W[12],instanceAlpha]);
+  u.i_row1.value.set([W[1]*m0+W[5]*m1,W[1]*m2+W[5]*m3,W[1]*m4+W[5]*m5+W[13],forceColor?1:0]);
+  u.i_row2.value.set([W[2]*m0+W[6]*m1,W[2]*m2+W[6]*m3,W[2]*m4+W[6]*m5+W[14],whiteFlash?1:0]);
+  u.i_params.value.set([weight0,weight1,0,depth+(mesh.partCount===1?P[11]:0)]);u.u_color.value.set(color);u.u_viewProjection.value.set(viewProjection);if(u.u_parts)u.u_parts.value.set(P);
+  material.depthTest=depthTest;material.depthWrite=depthWrite;material.depthFunc=T[VECTOR_DEPTH_FUNCS[depthFunc]];
+  item.object.geometry=this.geometry(mesh,indexVariant,index,first,count);this.r.submit(item.object);
+ }
+ dispose(){for(const mesh of [...this.meshes])this.deleteMesh(mesh);}
+}
+
 class CompanionRenderer {
  constructor(renderer,gamekit,compiledAssets){
-  if(!gamekit?.rendering?.WebGLDevice||!gamekit?.rendering?.MeshRenderer||!gamekit?.vectorAssets?.createVectorAsset||!compiledAssets?.pebbleMole)throw Error('GameKit SVG world renderer is unavailable');
-  this.r=renderer;this.atlas=createCompanionCombatAtlas(renderer.gl);this.device=new gamekit.rendering.WebGLDevice(renderer.canvas,{alpha:false,antialias:true,depth:true,stencil:false});
-  this.meshes=new gamekit.rendering.MeshRenderer(this.device);this.asset=gamekit.vectorAssets.createVectorAsset(this.meshes,compiledAssets.pebbleMole);this.characterAssets=new Map(Object.entries(compiledAssets.characters||{}).map(([id,asset])=>[id,gamekit.vectorAssets.createVectorAsset(this.meshes,asset)]));this.characterPlayers=new Map();this.characterWorld=[];this.characterSamples=[];this.players=new Map();this.samples=[];this.frameActive=false;
+  if(!gamekit?.vectorAssets?.createVectorAsset||!compiledAssets?.pebbleMole)throw Error('GameKit SVG vector assets are unavailable');
+  this.r=renderer;this.atlas=createCompanionCombatAtlas();this.atlas.texture=renderer.canvasTexture(this.atlas.canvas);
+  this.meshes=new ThreeVectorMeshes(renderer);this.asset=gamekit.vectorAssets.createVectorAsset(this.meshes,compiledAssets.pebbleMole);this.characterAssets=new Map(Object.entries(compiledAssets.characters||{}).map(([id,asset])=>[id,gamekit.vectorAssets.createVectorAsset(this.meshes,asset)]));this.characterPlayers=new Map();this.characterWorld=[];this.characterSamples=[];this.players=new Map();this.samples=[];this.frameActive=false;
  }
- beginFrame(clearColor){this.frameActive=this.device.beginFrame({width:this.r.canvas.width,height:this.r.canvas.height,clearColor:[...clearColor,1],clearDepth:1});if(this.frameActive)this.meshes.beginFrame();return this.frameActive;}
- endFrame(){if(!this.frameActive)return;this.meshes.flush('digmoriSvgFrameEnd');this.device.endFrame();this.frameActive=false;for(const [key,state]of this.players)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.players.delete(key);}for(const [key,state]of this.characterPlayers)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.characterPlayers.delete(key);}}
- dispose(){for(const state of this.players.values())state.player.dispose();this.players.clear();for(const state of this.characterPlayers.values())state.player.dispose();this.characterPlayers.clear();for(const asset of this.characterAssets.values())asset.dispose();this.characterAssets.clear();this.asset.dispose();this.meshes.dispose();this.device.dispose();this.r.gl.deleteTexture(this.atlas.tex);}
+ beginFrame(){this.frameActive=true;return true;}
+ endFrame(){if(!this.frameActive)return;this.frameActive=false;for(const [key,state]of this.players)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.players.delete(key);}for(const [key,state]of this.characterPlayers)if(this.r.frame-state.lastSeen>1800){state.player.dispose();this.characterPlayers.delete(key);}}
+ dispose(){for(const state of this.players.values())state.player.dispose();this.players.clear();for(const state of this.characterPlayers.values())state.player.dispose();this.characterPlayers.clear();for(const asset of this.characterAssets.values())asset.dispose();this.characterAssets.clear();this.asset.dispose();this.meshes.dispose();this.atlas.texture.dispose();}
  beginCharacterFrame(){this.characterWorld=[];this.characterSamples=[];}
  hasCharacter(kind){return this.characterAssets.has(kind);}
  queueCharacter(item){if(this.hasCharacter(item.kind))this.characterWorld.push(item);}
@@ -63,7 +116,7 @@ class CompanionRenderer {
   player.setBasePose('foot-left',{x:pose.stride,y:-Math.max(0,pose.stride)*.28,rotation:0,scaleX:1,scaleY:1});player.setBasePose('foot-right',{x:-pose.stride,y:-Math.max(0,-pose.stride)*.28,rotation:0,scaleX:1,scaleY:1});
   for(let view=0;view<5;view++)player.setBasePose('view'+view,{x:0,y:0,rotation:item.kind==='sprout'?Math.sin(sample.frame/(ANIMATION.clips[sample.clip]||4)*TAU)*.012:0,scaleX:1,scaleY:1});
   const forward=V.norm({x:r.forward.x,y:0,z:r.forward.z}),root={x:item.pos.x,y:item.pos.y+1,z:item.pos.z},sizeScale=(32/56)*(item.scale||1),worldMatrix=svgWorldMatrix(asset.viewBox,root,forward,sizeScale,sample.flip,1.65*56/96);
-  player.draw({viewProjection:r.vp,worldMatrix,alpha:item.alpha??1,color:item.tint||[1,1,1,1],whiteFlash:!!item.whiteFlash,depthTest:true,depthWrite:false,depthFunc:'lequal'});this.meshes.flush('digmoriSvgCharacter');
+  player.draw({viewProjection:r.vp,worldMatrix,alpha:item.alpha??1,color:item.tint||[1,1,1,1],whiteFlash:!!item.whiteFlash,depthTest:true,depthWrite:false,depthFunc:'lequal'});
   this.characterSamples.push({mode:'svg-character',key:item.key,kind:item.kind,clip:sample.clip,frame:sample.frame,view:sample.dir,flip:sample.flip,expression,timeMs,depthTest:true,depthWrite:false,worldMatrix:Array.from(worldMatrix),alpha:item.alpha??1});
  }
  drawCharacters(phase){for(const item of this.characterWorld)if(item.phase===phase)this.drawCharacter(item);}
@@ -79,7 +132,7 @@ class CompanionRenderer {
   if(!this.frameActive)return;
   const r=this.r,forward=V.norm({x:item.dir.x,y:0,z:item.dir.z}),toCamera=V.norm({x:-r.forward.x,y:0,z:-r.forward.z}),expression=V.dot(forward,toCamera)>0?'front':'back',
    player=this.playerFor(item.key,item.clip,expression),duration=this.asset.metadata.clips[item.clip].durationMs,count=VECTOR_FRAME_COUNTS[item.clip]||4,timeMs=Number.isFinite(item.timeMs)?item.timeMs:duration*Math.max(0,Math.min(count-1,item.frame))/Math.max(1,count-1),worldMatrix=svgWorldMatrix(this.asset.viewBox,item.root,item.dir,item.sizeScale);
-  player.seek(timeMs);player.draw({viewProjection:r.vp,worldMatrix,alpha:1,depthTest:true,depthWrite:false,depthFunc:'lequal'});this.meshes.flush('digmoriSvgActor');
+  player.seek(timeMs);player.draw({viewProjection:r.vp,worldMatrix,alpha:1,depthTest:true,depthWrite:false,depthFunc:'lequal'});
   this.samples.push({mode:'svg',key:item.key,clip:item.clip,frame:item.frame,expression,timeMs,depthTest:true,depthWrite:false,root:{...item.root},worldMatrix:Array.from(worldMatrix)});
  }
  prepare(view,sim,actor,dyn){
@@ -121,7 +174,7 @@ class CompanionRenderer {
   }
  }
  draw(front){for(const item of this.vectorWorld)if(item.front===front)this.drawVector(item);const vertices=front?this.front:this.behind;if(!vertices.length)return;
-  const r=this.r,gl=r.gl,p=r.spriteProgram;gl.useProgram(p);gl.uniformMatrix4fv(gl.getUniformLocation(p,'vp'),false,r.vp);gl.uniform1f(gl.getUniformLocation(p,'ambient'),r.ambient??1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas.tex);gl.uniform1i(gl.getUniformLocation(p,'tex'),0);gl.bindBuffer(gl.ARRAY_BUFFER,r.spriteBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);r.attrib(p,'p',3,36,0);r.attrib(p,'uv',2,36,12);r.attrib(p,'tint',4,36,20);gl.drawArrays(gl.TRIANGLES,0,vertices.length/9);
+  this.r.drawSprites(vertices,this.atlas.texture,{ambient:this.r.ambient??1,depthWrite:false});
  }
 }
 
