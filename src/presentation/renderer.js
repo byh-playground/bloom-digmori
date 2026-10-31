@@ -196,7 +196,8 @@ class Renderer {
    if(a.speciesId==='shell'||a.dead||this.camera.first&&a.id===actor.id||a.id!==actor.id&&!this.entityVisualReady(a))continue;
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
-   let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:[[1,1,1,1],[.78,.89,1,1],[1,.8,.9,1],[1,.92,.7,1]][hashStr(a.id)%4];if(a.id===actor.id)tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
+   // Players keep their authored colours; co-op players are told apart by the name tag in EnemyHealthHUD.
+   let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
    const whiteFlash=!!(reaction&&reaction.age<CFG.combat.feedback.flash&&reaction.age<45);
    if(reaction&&reaction.age<CFG.combat.feedback.flash&&!whiteFlash)tint=[1.75,.65,.5,1];
    const rp=a.pos;this.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,actor:visual,reaction,pos:rp,scale,tint,alpha:1,whiteFlash});
@@ -323,15 +324,15 @@ class Renderer {
    this.box(geom,{x,y,z:z-.08},{x:.21,y:.21,z:.25},[.88,.76,.54],{x:0,y:0,z:-1});
   }
   // Held item also has a viewmodel, but no additional remote/world entity.
-  if(attacking&&item?.weapon&&!['bow','shield'].includes(item.weapon)){
+  if(attacking&&item?.weapon){
    const vp=weaponVisualPose({...actor,pos:{x:0,y:0,z:0}},{...action,dir:{x:0,y:0,z:-1}},c.elapsed),root={x:.18,y:-.31,z:-.82},length=clamp(vp.reach*.42,.48,1.55),color=c3(MATERIALS[item.material]?.color||'#c5b7a0');
-   this.weaponBeam(geom,root,V.add(root,V.scale(vp.dir,length)),item.weapon==='greatsword'?.12:.065,color);
+   this.weaponBeam(geom,root,V.add(root,V.scale(vp.dir,length)),.065,color);
   }else if(item&&(item.tool||item.weapon)){
    const w=item.weapon,tool=item.tool,t=attacking?strike:0;
    const z=-1.35-.33*t-toolSwing-buildPush,y=-.28+.15*t-toolSwing*.35;
    const color=c3(MATERIALS[item.material]?.color||'#c5b7a0');
    this.box(geom,{x:.41,y,z},{x:.11,y:.13,z:.64},c3('#8e6246'),{x:0,y:0,z:-1});
-   this.box(geom,{x:.41,y:y+.03,z:z-.39},{x:w==='greatsword'?.25:.15,y:.13,z:tool==='pick'?.62:w==='spear'?.95:.74},color,{x:0,y:0,z:-1});
+   this.box(geom,{x:.41,y:y+.03,z:z-.39},{x:.15,y:.13,z:tool==='pick'?.62:w==='spear'?.95:.74},color,{x:0,y:0,z:-1});
   }
   // Drawn *after* world+sprites with depth disabled so it never clips through local terrain.
   this.drawColored(geom,{overlay:true,lights:NO_LIGHTS,vp:matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])),eye:[0,0,0],ambient:Math.max(.6,this.ambient),fog:[.69,.85,.86]});

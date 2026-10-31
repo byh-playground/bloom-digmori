@@ -34,7 +34,7 @@ jobs:
           cp index.html .nojekyll _site/
           cp -R src previews _site/
           find _site -type f -exec sha256sum {} + | sort > artifacts/pages-sha256.txt
-          # The player cut-out rig parts ship byte-for-byte: 33 PNGs plus the grip-point JSON.
+          # The player cut-out rig parts ship byte-for-byte: 33 PNGs (29 body parts + sword, spear, axe and pick) plus the grip-point JSON.
           test "$(grep -c '_site/src/assets/player/[a-z_]*\.png$' artifacts/pages-sha256.txt)" -eq 33
           grep -q '_site/src/assets/player/player-parts\.json$' artifacts/pages-sha256.txt
       - uses: actions/upload-artifact@v4

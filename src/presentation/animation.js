@@ -1,7 +1,7 @@
 'use strict';
 /* A single simulation clock selects poses. Animation never creates hits or moves a body. */
 const ANIMATION=Object.freeze({cell:{width:64,height:64},stride:2.1,runStride:2.8,land:175,brake:150,
- clips:{idle:4,walk:8,run:8,swim:8,brake:3,light:8,lightReverse:8,heavy:8,heavyReverse:8,overhead:8,thrust:8,thrustReverse:8,hurt:4,hurtHeavy:4,rise:2,fall:2,land:4,dead:5,gather:4,bow:8,bash:8},rollFrames:12,
+ clips:{idle:4,walk:8,run:8,swim:8,brake:3,light:8,lightReverse:8,heavy:8,heavyReverse:8,overhead:8,thrust:8,thrustReverse:8,hurt:4,hurtHeavy:4,rise:2,fall:2,land:4,dead:5,gather:4,shoot:8},rollFrames:12,
  slash:{frames:6,tail:135,windup:70,debugGround:false}});
 const easeMotion=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
 function actionTiming(action,elapsed){if(!action)return{stage:'idle',phase:0,frame:0,active:false};
@@ -10,11 +10,10 @@ function actionTiming(action,elapsed){if(!action)return{stage:'idle',phase:0,fra
  const phase=clamp((elapsed-action.wind-action.active)/Math.max(1,action.recovery),0,1);return{stage:'recover',phase,frame:6+Math.min(1,Math.floor(phase*2)),active:false};
 }
 function attackClip(action){
- if(['companionBall','arrow','spit'].includes(action.kind))return 'bow';
+ if(['companionBall','spit'].includes(action.kind))return 'shoot';
  const motion=attackMotion(action);if(motion==='overhead')return 'overhead';
- if(action.weapon==='shield')return 'bash';
  if(motion==='thrust'||motion==='thrustReverse'||action.weapon==='fist')return motion==='thrustReverse'?'thrustReverse':'thrust';
- const heavy=action.weapon==='greatsword'||action.kind==='burst';
+ const heavy=action.kind==='burst';
  return (heavy?'heavy':'light')+(motion==='reverse'?'Reverse':'');
 }
 function weaponVisualPose(a,act,elapsed){const t=actionTiming(act,elapsed);if(t.stage==='active')return attackPose(a,act,t.phase);
@@ -49,7 +48,7 @@ function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(rever
  if(clip==='idle')bob=Math.sin(cycle)*.35;
  if(clip==='walk'||clip==='run'){const run=clip==='run';stride=Math.sin(cycle)*(run?5.4:3.5);bob=Math.abs(Math.sin(cycle))*(run?1.8:.8);lean=run?.11:.025;armL=[13-stride*.7,39+stride*.5];armR=[34+stride*.75,39-stride*.5];knee=run?2.2:.7;}
  if(clip==='brake'){lean=-.15*(1-p);squash=1-.12*(1-p);stride=2*(1-p);armL=[10,38];armR=[36,36];}
- if(['light','heavy','overhead','thrust','bow','bash'].includes(clip)){
+ if(['light','heavy','overhead','thrust','shoot'].includes(clip)){
   const wind=frame<3,hit=frame>=3&&frame<6,t=wind?frame/2:hit?(frame-3)/2:frame-6,heavy=clip==='heavy',overhead=clip==='overhead';
   if(overhead){
    if(wind){lean=-.21*t;squash=1-.13*t;armL=[lerp(16,25,t),lerp(38,5,t)];armR=[lerp(34,30,t),lerp(38,3,t)];stride=-2.8*t;knee=1.5*t;}
@@ -65,7 +64,7 @@ function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(rever
    else if(hit){lean=.14*(1-t*.25);armL=[18,34];armR=[42,30];stride=3.5;}
    else{lean=.07*(1-t);armL=[16,38];armR=[27+7*t,38+2*t];stride=1.5*(1-t);}
    if(reverse){const old=armL;armL=[48-armR[0],armR[1]];armR=[48-old[0],old[1]];lean=-lean;stride=-stride;}
-   if(clip==='bow'){armL=[39,31];armR=wind?[31-10*t,30]:[22,31];lean=wind?-.08:.06;}
+   if(clip==='shoot'){armL=[39,31];armR=wind?[31-10*t,30]:[22,31];lean=wind?-.08:.06;}
   }
  }
 

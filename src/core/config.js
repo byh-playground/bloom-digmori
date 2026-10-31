@@ -18,7 +18,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.30.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.31.0',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -34,7 +34,7 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   render:{uploadBudgetMs:2,maxUploads:2,maxPending:3,workerBudgetMs:3,waterMeshBudgetMs:2.5,maxWaterMeshesPerFrame:2},
   combat:{combo:{window:650,chainRecovery:.45,minRecovery:75},hit:{radius:.26,angularStep:.11,maxSamples:40,skin:.008},
    knockback:{drag:3.5,maxSpeed:14,duration:340,bossResistance:.26,playerResistance:.76,
-    weapons:{fist:4.2,dagger:3.8,sword:6.2,greatsword:9.2,spear:5.6,axe:7.5,shield:8,bow:4.6},
+    weapons:{fist:4.2,sword:6.2,spear:5.6,axe:7.5},
     creatures:{shell:1,leaf:1.1,boss:.26}},
    feedback:{particles:220,bursts:32,numbers:24,flash:130,poseHold:45,heavyHold:70,shake:.045,volume:.20,afterimages:3}},
   textures:{enabled:true,minifyStart:.8,minifyEnd:2.5},

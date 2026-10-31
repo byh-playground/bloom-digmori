@@ -8,12 +8,12 @@ const BIOMES=Object.freeze({
 });
 const BLOCKS=[
  {id:'air',name:'공기',color:'#ffffff',solid:false},
- {id:'grass',name:'풀흙',color:'#80b966',hardness:650,drop:'dirt',tool:'shovel',tier:0},
- {id:'dirt',name:'흙',color:'#aa8056',hardness:650,tool:'shovel',tier:0},
+ {id:'grass',name:'풀흙',color:'#80b966',hardness:650,drop:'dirt',tool:'pick',tier:0},
+ {id:'dirt',name:'흙',color:'#aa8056',hardness:650,tool:'pick',tier:0},
  {id:'stone',name:'돌',color:'#93a29b',hardness:1400,drop:'cobble',tool:'pick',tier:1},
  {id:'log',name:'원목',color:'#9e724d',hardness:1500,tool:'axe',tier:0},
  {id:'leaves',name:'잎',color:'#69af67',hardness:250,drop:'seed',tool:'none',tier:0},
- {id:'sand',name:'모래',color:'#edcf8b',hardness:550,tool:'shovel',tier:0},
+ {id:'sand',name:'모래',color:'#edcf8b',hardness:550,tool:'pick',tier:0},
  {id:'coalOre',name:'석탄 광석',color:'#586567',hardness:1900,drop:'coal',tool:'pick',tier:1},
  {id:'ironOre',name:'철 광석',color:'#bbaa8c',hardness:2100,drop:'rawIron',tool:'pick',tier:2},
  {id:'goldOre',name:'금 광석',color:'#d5bd65',hardness:2400,drop:'rawGold',tool:'pick',tier:3},
@@ -30,8 +30,8 @@ const BLOCKS=[
  {id:'stem',name:'버섯 줄기',color:'#e8d9b8',hardness:900,drop:'log',tool:'axe',tier:0},
  {id:'trophy',name:'화원 수호의 증표',color:'#eec565',hardness:800,tier:0,light:12},
  {id:'crystalBloom',name:'공명 수정',color:'#8eddeb',hardness:1400,tool:'pick',tier:2,drop:'crystalShard',light:9},
- {id:'snow',name:'눈덮인 흙',color:'#dae9ed',hardness:650,drop:'dirt',tool:'shovel',tier:0},
- {id:'mycelium',name:'균사 흙',color:'#b79bc4',hardness:650,drop:'dirt',tool:'shovel',tier:0},
+ {id:'snow',name:'눈덮인 흙',color:'#dae9ed',hardness:650,drop:'dirt',tool:'pick',tier:0},
+ {id:'mycelium',name:'균사 흙',color:'#b79bc4',hardness:650,drop:'dirt',tool:'pick',tier:0},
  {id:'lootChest',name:'봉인된 보물함',color:'#bf935d',hardness:Infinity,tier:99,station:'loot'}
 ];
 const BID=Object.fromEntries(BLOCKS.map((b,i)=>[b.id,i]));
@@ -45,52 +45,46 @@ const RESOURCE_BY_ID=Object.freeze(Object.fromEntries(RESOURCE_DEFS.map(def=>[de
 const resourceRangeText=id=>{const r=RESOURCE_BY_ID[id];return r?`${r.name} Y ${r.min}~${r.max}`:'';};
 // 무기 종류가 기본 성능을, 재료 등급이 공격력(+5 단위)을 결정한다.
 // 채광 속도와 무게는 피해 수치와 분리한다.
-const MATERIALS={wood:{name:'나무',tier:1,damageBonus:-10,speed:2,color:'#cfa876'},stone:{name:'돌',tier:2,damageBonus:-5,speed:4,color:'#a3adae'},iron:{name:'철',tier:3,damageBonus:0,speed:6,color:'#dde6e6'},diamond:{name:'다이아몬드',tier:4,damageBonus:5,speed:8,color:'#78ded9'},gold:{name:'금',tier:1,damageBonus:-5,speed:12,color:'#eed47b'}};
-// heavy: 강한 넉백과 타격 연출을 쓰는 무기(대검). 플레이어 전투는 기본 공격 연타(combo 단계)만 사용한다.
+const MATERIALS={wood:{name:'나무',tier:1,damageBonus:-10,speed:2,color:'#cfa876'},stone:{name:'돌',tier:2,damageBonus:-5,speed:4,color:'#a3adae'},iron:{name:'철',tier:3,damageBonus:0,speed:6,color:'#dde6e6'},diamond:{name:'다이아몬드',tier:4,damageBonus:5,speed:8,color:'#78ded9'}};
+// 플레이어 전투는 기본 공격 연타(combo 단계)만 사용한다. 도끼는 무기이면서 원목 채집 도구다.
 const WEAPONS={
- sword:{name:'검',icon:'⚔',damage:25,reach:3.3,arc:1.65,weight:5,wind:250,active:125,recovery:375,combo:3},
- greatsword:{name:'대검',icon:'⚔',damage:40,heavy:true,reach:3.7,arc:1.8,weight:11,wind:550,active:150,recovery:600,combo:3},
- spear:{name:'창',icon:'↟',damage:25,reach:4.2,arc:.3,weight:6,wind:300,active:100,recovery:450,combo:3},
- axe:{name:'도끼',icon:'🪓',damage:30,reach:3.2,arc:1.4,weight:8,wind:425,active:125,recovery:450,combo:3},
- dagger:{name:'단검',icon:'†',damage:15,reach:3.0,arc:1.25,weight:2,wind:125,active:75,recovery:250,combo:3},
- bow:{name:'활',icon:'🏹',damage:25,reach:35,arc:0,weight:3,wind:175,active:50,recovery:675,combo:2},
- shield:{name:'방패',icon:'⛨',damage:15,reach:3.0,arc:1.2,weight:8,wind:250,active:100,recovery:450,combo:2}
+ sword:{name:'검',icon:'⚔',damage:25,reach:3.3,arc:1.65,weight:5,wind:250,active:125,recovery:375},
+ spear:{name:'창',icon:'↟',damage:25,reach:4.2,arc:.3,weight:6,wind:300,active:100,recovery:450},
+ axe:{name:'도끼',icon:'🪓',damage:30,reach:3.2,arc:1.4,weight:8,wind:425,active:125,recovery:450}
 };
 const ITEMS={};
 function defineItem(id,name,icon,opts={}){ITEMS[id]={id,name,icon,stack:64,...opts};}
 for(const b of BLOCKS)if(!['air','grass','bedrock','altar','coalOre','ironOre','goldOre','diamondOre','lootChest'].includes(b.id))defineItem(b.id,b.name,({log:'▥',leaves:'✿',stone:'◆',dirt:'■',planks:'▤',workbench:'▦',furnace:'▣',torch:'♨',cap:'🍄',stem:'▥',trophy:'✧'})[b.id]||'◆',{block:BID[b.id]});
-for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['leather','가죽','▱'],['arrow','화살','➶'],['sigil','수호자 소환 문양','✵'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚'],['relic','고대의 유물','✧']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
+for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['leather','가죽','▱'],['sigil','수호자 소환 문양','✵'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚'],['relic','고대의 유물','✧']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
 for(const [mat,m]of Object.entries(MATERIALS)){
- for(const type of ['pick','shovel'])defineItem(mat+'_'+type,m.name+' '+(type==='pick'?'곡괭이':'삽'),type==='pick'?'⛏':'⚒',{stack:1,material:mat,tool:type,tier:m.tier,miningSpeed:m.speed,weight:type==='pick'?4:3});
- for(const [type,w]of Object.entries(WEAPONS)){
-  if((type==='bow'||type==='shield')&&mat!=='wood'&&mat!=='iron')continue;
+ defineItem(mat+'_pick',m.name+' 곡괭이','⛏',{stack:1,material:mat,tool:'pick',tier:m.tier,miningSpeed:m.speed,weight:4});
+ for(const [type,w]of Object.entries(WEAPONS))
   defineItem(mat+'_'+type,m.name+' '+w.name,w.icon,{stack:1,material:mat,weapon:type,weight:w.weight,...type==='axe'?{tool:'axe',miningSpeed:m.speed,tier:m.tier}:{}});
- }
 }
-// 부위별 값은 정수 단위: 부위 가중치는 투구 1 / 흉갑 2 / 각반 1 / 신발 1.
-// 같은 세트의 방어력 총합을 바로 계산할 수 있다.
-for(const [mat,name,defense,weight]of [['leather','가죽',5,2],['iron','철',10,5],['gold','금',5,4],['diamond','다이아몬드',15,4]])
- for(const [part,pn,k]of [['helmet','투구',1],['chest','흉갑',2],['legs','각반',1],['boots','장화',1]])
+const ARMOR_SLOTS=Object.freeze(['helmet','chest','boots']);
+// 갑옷은 투구·흉갑·장화 세 부위. 부위 값은 정수 단위이고 부위 가중치는 투구 1 / 흉갑 3 / 장화 1이다.
+// 옛 각반 몫(1)을 몸통을 덮는 흉갑에 합쳐 세트 합(가중치 5)과 세트 방어력(가죽 25 · 철 50 · 다이아몬드 75)을 유지한다.
+for(const [mat,name,defense,weight]of [['leather','가죽',5,2],['iron','철',10,5],['diamond','다이아몬드',15,4]])
+ for(const [part,pn,k]of [['helmet','투구',1],['chest','흉갑',3],['boots','장화',1]])
   defineItem(mat+'_'+part,name+' '+pn,'♜',{stack:1,armor:part,defense:defense*k,weight:weight*k,material:mat});
+// Item ids removed in 0.31.0; Simulation.retireEquipment drops them from older saves.
+const RETIRED_ITEM_IDS=new Set(['arrow',
+ ...['wood','stone','iron','diamond','gold'].flatMap(m=>['shovel','greatsword','dagger','bow','shield'].map(t=>m+'_'+t)),
+ ...['pick','sword','spear','axe','helmet','chest','boots'].map(t=>'gold_'+t),
+ ...['leather','iron','gold','diamond'].map(m=>m+'_legs')]);
 const RECIPES=[];
 function recipe(id,out,count,pattern,keys,station=2,unlock=null){RECIPES.push({id,out,count,pattern,keys,station,unlock});}
 recipe('planks','planks',4,['L'],{L:'log'});recipe('sticks','stick',4,['P','P'],{P:'planks'});recipe('workbench','workbench',1,['PP','PP'],{P:'planks'});
 recipe('bucket','bucket',1,['I I',' I '],{I:'iron'},3);recipe('furnace','furnace',1,['CCC','C C','CCC'],{C:'cobble'},3);recipe('torch','torch',4,['C','S'],{C:['coal','charcoal'],S:'stick'});
-recipe('arrows','arrow',8,['C','S','F'],{C:'cobble',S:'stick',F:'fiber'},3);recipe('fiber','fiber',4,['LL'],{L:'leaves'});
-for(const [mat,ingredient]of [['wood','planks'],['stone','cobble'],['iron','iron'],['diamond','diamond'],['gold','gold']]){
- const keys={M:ingredient,S:'stick',F:'fiber'};
- recipe(mat+'_pick',mat+'_pick',1,['MMM',' S ',' S '],keys,3);recipe(mat+'_shovel',mat+'_shovel',1,['M','S','S'],keys,3);
- recipe(mat+'_sword',mat+'_sword',1,['M','M','S'],keys,3);recipe(mat+'_greatsword',mat+'_greatsword',1,[' MM',' MM','S  '],keys,3);
+recipe('fiber','fiber',4,['LL'],{L:'leaves'});
+for(const [mat,ingredient]of [['wood','planks'],['stone','cobble'],['iron','iron'],['diamond','diamond']]){
+ const keys={M:ingredient,S:'stick'};
+ recipe(mat+'_pick',mat+'_pick',1,['MMM',' S ',' S '],keys,3);
+ recipe(mat+'_sword',mat+'_sword',1,['M','M','S'],keys,3);
  recipe(mat+'_spear',mat+'_spear',1,['  M',' S ','S  '],keys,3);recipe(mat+'_axe',mat+'_axe',1,['MM','MS',' S'],keys,3);
- recipe(mat+'_dagger',mat+'_dagger',1,['M','S'],keys,2);
- if(mat==='wood'||mat==='iron'){
-  recipe(mat+'_bow',mat+'_bow',1,[' MF','S F',' MF'],keys,3);
-  recipe(mat+'_shield',mat+'_shield',1,['MMM','MMM',' M '],keys,3);
- }
 }
-for(const mat of ['leather','iron','gold','diamond']){
- recipe(mat+'_helmet',mat+'_helmet',1,['MMM','M M'],{M:mat},3);recipe(mat+'_chest',mat+'_chest',1,['M M','MMM','MMM'],{M:mat},3);
- recipe(mat+'_legs',mat+'_legs',1,['MMM','M M','M M'],{M:mat},3);recipe(mat+'_boots',mat+'_boots',1,['M M','M M'],{M:mat},3);
+for(const mat of ['leather','iron','diamond']){
+ recipe(mat+'_helmet',mat+'_helmet',1,['MMM','M M'],{M:mat},3);recipe(mat+'_chest',mat+'_chest',1,['M M','MMM','MMM'],{M:mat},3);recipe(mat+'_boots',mat+'_boots',1,['M M','M M'],{M:mat},3);
 }
 recipe('healingSalve','healingSalve',1,['FF','CS'],{F:'food',C:'crystalShard',S:'fiber'},2);
 recipe('sigil','sigil',1,['SIS','IDI','SIS'],{S:'seed',I:'iron',D:'diamond'},3);

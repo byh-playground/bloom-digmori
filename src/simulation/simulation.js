@@ -21,7 +21,7 @@ class Simulation {
    if(pair)contact={point:{...pair.point1},normal:{...pair.normal1}};
    if(target)accepted=Combat.hit(shot.source,target,shot,this,contact);
   }
-  if(!accepted)this.emit('spark',{id:shot.id,pos:shot.pos,enemy:shot.enemy},{point:contact?.point||{...shot.pos},normal:contact?.normal||V.scale(V.norm(shot.flightVelocity||shot.velocity||shot.dir),-1),weapon:shot.weapon||'bow'});
+  if(!accepted)this.emit('spark',{id:shot.id,pos:shot.pos,enemy:shot.enemy},{point:contact?.point||{...shot.pos},normal:contact?.normal||V.scale(V.norm(shot.flightVelocity||shot.velocity||shot.dir),-1),weapon:shot.weapon||'shot'});
   if(shot.companionId){shot.throwPhase='fall';return;}
   this.physics.removeBody(shot);delete this.projectiles[id];
  }
@@ -39,7 +39,7 @@ class Simulation {
    const structure=this.terrain.structuresNear({x:hit.x,y:hit.y,z:hit.z},50).find(s=>s.type==='dungeon'||s.type==='mine');
    const dungeon=structure?.type==='dungeon',deep=hit.y< -15,loot=dungeon?
      [['crystalShard',1+(hash3(hit.x,1,hit.z,this.terrain.seed)%3)],['rawGold',2],['iron',2],['relic',deep?1:0],['food',2]]:
-     [['coal',4],['rawIron',3],['arrow',8],['food',2]];
+     [['coal',4],['rawIron',3],['food',2]];
    const changed=this.terrain.set(hit.x,hit.y,hit.z,BID.planks);if(changed===false)return false;
    this.progress[opened]=true;this.progress.chests=(this.progress.chests||0)+1;if(dungeon&&!this.progress['cleared:'+structure.key]){this.progress['cleared:'+structure.key]=true;this.progress.clearedDungeons=(this.progress.clearedDungeons||0)+1;}
    for(const [id,count] of loot){if(count<=0)continue;const remains=Inventory.addTo(actor.inventory.slots,id,count);this.markItem(id);if(remains)this.spawnDrop(id,remains,{x:hit.x+.5,y:hit.y+1.4,z:hit.z+.5});}
@@ -218,14 +218,31 @@ class Simulation {
    }
    for(const shot of meta.projectiles||[])for(const key of ['poise','cost','tier','staminaRefunded','name','combo'])delete shot[key];
   }
-  parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));this.migrateLegacyActors(m);this.retireCombatResources(m);
+  // 0.31.0 trimmed equipment: greatsword, dagger, bow, shield, arrows, shovels, gold weapons/tools/armor and
+  // leggings are gone. Same-version saves drop those stacks wherever they sit; retired drops and in-flight
+  // player arrows are listed in meta.retiredBodies so load() can remove their physics bodies.
+  retireEquipment(meta){
+   const retired=id=>RETIRED_ITEM_IDS.has(id),keep=s=>s&&retired(s.id)?null:s,retiredBodies=[];
+   for(const actor of meta.actors||[]){const i=actor.inventory;
+    if(i){for(const area of ['slots','grid'])if(Array.isArray(i[area]))i[area]=i[area].map(keep);i.cursor=keep(i.cursor??null);
+     if(i.armor){delete i.armor.legs;for(const k of ARMOR_SLOTS)i.armor[k]=keep(i.armor[k]??null);}}
+    const c=actor.combat;if(c&&(retired(c.comboWeapon)||retired(c.action?.weaponKey))){Combat.resetCombo(c);if(c.state==='attack'){c.state='idle';c.elapsed=0;c.action=null;}}
+   }
+   for(const [,f]of meta.furnaces||[])if(Array.isArray(f?.slots))f.slots=f.slots.map(keep);
+   for(const b of Object.values(meta.companions?.bases||{}))if(Array.isArray(b.slots))b.slots=b.slots.map(keep);
+   for(const u of Object.values(meta.companions?.units||{}))if(u.cargo&&retired(u.cargo.id))u.cargo=null;
+   meta.drops=(meta.drops||[]).filter(d=>retired(d.item)?(retiredBodies.push(d),false):true);
+   meta.projectiles=(meta.projectiles||[]).filter(shot=>{if(shot.weapon!=='bow')return true;if(shot.companionId){shot.weapon='ball';return true;}retiredBodies.push(shot);return false;});
+   meta.retiredBodies=retiredBodies;
+  }
+  parse(bytes){if(!(bytes instanceof Uint8Array)||bytes.length<12||bytes.length>32*1024*1024)throw Error('저장 크기 오류');const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jl=v.getUint32(4,true),pl=v.getUint32(8,true);if(v.getUint32(0,true)!==0x424C4D41||12+jl+pl!==bytes.length||!pl)throw Error('물리 상태 없는 저장 또는 손상된 파일');const m=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(12,12+jl)));this.migrateLegacyActors(m);this.retireCombatResources(m);this.retireEquipment(m);
   if(m.version!==SNAPSHOT_VERSION)throw Error('현재 '+SNAPSHOT_VERSION+' 저장만 지원합니다. 이전 버전은 새 월드가 필요합니다.');
   if(!Number.isInteger(m.seed)||!Number.isInteger(m.tick)||m.tick<0||m.actors.length>32||m.drops.length>300||m.projectiles.length>80)throw Error('저장 버전 또는 용량 불일치');for(const a of m.actors)if(a.candidateCompanion&&SPECIES[a.candidateCompanion]){const kind=a.candidateCompanion,def=SPECIES[kind].wild,ratio=a.maxHp>0?a.hp/a.maxHp:1;a.speciesId=kind;a.kind=kind;a.wildState='neutral';a.enemy=false;a.targetId=null;a.homePos=a.homePos||{...a.pos};a.rpg=null;a.hp=def.hp*ratio;a.maxHp=def.hp;delete a.candidateCompanion;}const ids=new Set();for(const a of m.actors){if(ids.has(a.id)||a.enemy&&!a.speciesId&&!a.boss||!a.pos||!Object.values(a.pos).every(Number.isFinite)||!Inventory.validate(a.inventory)||!a.combat||(!a.enemy&&!a.speciesId&&!a.boss&&(!a.rpg||!Number.isInteger(a.rpg.level)||!Number.isInteger(a.rpg.xp)||!Number.isInteger(a.rpg.points)||!a.rpg.skills||Object.keys(RPG_SKILLS).some(k=>!Number.isInteger(a.rpg.skills[k]))))||!Number.isFinite(a.hp))throw Error('배우 상태 손상');ids.add(a.id);}Companions.validate(m.companions,m.actors,m.projectiles);return{meta:m,physics:bytes.subarray(12+jl)};
  }
  load(bytes){const {meta:m,physics:payload}=this.parse(bytes),terrain=VoxelWorld.restore(m.seed,m.edits);
   terrain.editSerial=m.terrainState?.editSerial??m.edits.length;terrain.physicsRevisions=new Map(m.terrainState?.physicsRevisions||[]);
   terrain.water.restore(m.fluid);const physics=Physics.restore(this.R,terrain,payload,m.physics);
-  try{for(const a of m.actors){if(a.body===null)continue;if(!physics.world.getRigidBody(a.body))throw Error('물리 배우 매핑 손상');}for(const e of [...m.drops,...m.projectiles,...Object.values(m.companions?.units||{}).filter(u=>u.body!==null)]){const b=physics.world.getRigidBody(e.body);if(!b||!physics.world.getCollider(e.collider))throw Error('물리 객체 매핑 손상');}
+  try{for(const e of m.retiredBodies)if(physics.world.getRigidBody(e.body))physics.removeBody(e);for(const a of m.actors){if(a.body===null)continue;if(!physics.world.getRigidBody(a.body))throw Error('물리 배우 매핑 손상');}for(const e of [...m.drops,...m.projectiles,...Object.values(m.companions?.units||{}).filter(u=>u.body!==null)]){const b=physics.world.getRigidBody(e.body);if(!b||!physics.world.getCollider(e.collider))throw Error('물리 객체 매핑 손상');}
    for(const u of Object.values(m.companions?.units||{}).filter(u=>u.body!==null)){const tag=physics.tags.get(u.collider),col=physics.world.getCollider(u.collider);if(tag?.type!=='companion'||tag.id!==u.id||col?.parent()?.handle!==u.body)throw Error('동료 물리 소유권 손상');}
   }catch(e){physics.free();throw e;}
   // A Rapier snapshot owns its saved timestep. Rebase tick-based clocks only when that rate changes.

@@ -1,10 +1,10 @@
 'use strict';
 /* Inventory: 슬롯/커서/제작 상태만 소유한다. UI는 명령을 제출한다. */
 class Inventory {
- static empty(){return{slots:Array(36).fill(null),grid:Array(9).fill(null),cursor:null,armor:{helmet:null,chest:null,legs:null,boots:null},selected:0,station:null};}
+ static empty(){return{slots:Array(36).fill(null),grid:Array(9).fill(null),cursor:null,armor:{helmet:null,chest:null,boots:null},selected:0,station:null};}
  static limit(id){return ITEMS[id]?.stack||0;}
  static validateStack(s){return s===null||!!(s&&ITEMS[s.id]&&Number.isInteger(s.count)&&s.count>0&&s.count<=this.limit(s.id));}
- static validate(i){return !!i&&Array.isArray(i.slots)&&i.slots.length===36&&i.slots.every(this.validateStack.bind(this))&&Array.isArray(i.grid)&&i.grid.length===9&&i.grid.every(this.validateStack.bind(this))&&this.validateStack(i.cursor)&&Number.isInteger(i.selected)&&i.selected>=0&&i.selected<9&&['helmet','chest','legs','boots'].every(k=>this.validateStack(i.armor[k])&&(!i.armor[k]||ITEMS[i.armor[k].id].armor===k));}
+ static validate(i){return !!i&&Array.isArray(i.slots)&&i.slots.length===36&&i.slots.every(this.validateStack.bind(this))&&Array.isArray(i.grid)&&i.grid.length===9&&i.grid.every(this.validateStack.bind(this))&&this.validateStack(i.cursor)&&Number.isInteger(i.selected)&&i.selected>=0&&i.selected<9&&!!i.armor&&Object.keys(i.armor).length===ARMOR_SLOTS.length&&ARMOR_SLOTS.every(k=>this.validateStack(i.armor[k])&&(!i.armor[k]||ITEMS[i.armor[k].id].armor===k));}
  static count(i,id){return i.slots.reduce((n,s)=>n+(s?.id===id?s.count:0),0);}
  static addTo(slots,id,n){let left=n;const max=this.limit(id);if(!max||!Number.isInteger(n)||n<0)return n;
   for(const s of slots)if(s?.id===id&&left){const take=Math.min(max-s.count,left);s.count+=take;left-=take;}
@@ -14,7 +14,7 @@ class Inventory {
  static area(actor,area,sim){const i=actor.inventory;if(area==='bag')return i.slots;if(area==='grid')return i.grid;
   if(area==='furnace'&&i.station&&sim.stationInReach(actor,i.station,'furnace'))return sim.furnaces[i.station]?.slots||null;return null;}
  static click(actor,command,sim){const i=actor.inventory,area=command.area,index=command.index;let target;
-  if(area==='armor'){if(!['helmet','chest','legs','boots'].includes(index))return false;target=i.armor;}else{target=this.area(actor,area,sim);if(!target||!Number.isInteger(index)||index<0||index>=target.length)return false;
+  if(area==='armor'){if(!ARMOR_SLOTS.includes(index))return false;target=i.armor;}else{target=this.area(actor,area,sim);if(!target||!Number.isInteger(index)||index<0||index>=target.length)return false;
     if(area==='grid'&&!sim.stationInReach(actor,i.station,'craft')&&![0,1,3,4].includes(index))return false;}
   const stack=target[index],held=i.cursor,accept=s=>!s||area==='armor'?(!s||ITEMS[s.id].armor===index):area==='furnace'?(index===0?!!SMELT[s.id]:index===1?!!FUELS[s.id]:false):true;
   if(command.shift&&stack&&area!=='grid'){
@@ -49,7 +49,7 @@ class Inventory {
    const key=t.area+':'+t.index;if(seen.has(key))continue;seen.add(key);
    const arr=t.area==='armor'?i.armor:this.area(actor,t.area,sim),index=t.index;
    if(!arr)return false;
-   if(t.area==='armor'){if(!['helmet','chest','legs','boots'].includes(index)||ITEMS[held.id].armor!==index)continue;}
+   if(t.area==='armor'){if(!ARMOR_SLOTS.includes(index)||ITEMS[held.id].armor!==index)continue;}
    else if(!Number.isInteger(index)||index<0||index>=arr.length)continue;
    if(t.area==='grid'&&!sim.stationInReach(actor,i.station,'craft')&&![0,1,3,4].includes(index))continue;
    if(t.area==='furnace'&&(index===2||index===0&&!SMELT[held.id]||index===1&&!FUELS[held.id]))continue;

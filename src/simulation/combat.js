@@ -26,7 +26,7 @@ function attackPose(actor,action,phase){
 /* One hurt-volume path: fixed snapshots, pairwise Rapier casts, world-space contact payloads. */
 const IDENTITY_ROTATION=Object.freeze({x:0,y:0,z:0,w:1}),ZERO_VECTOR=Object.freeze({x:0,y:0,z:0});
 function rotateByQuaternion(v,q){const tx=2*(q.y*v.z-q.z*v.y),ty=2*(q.z*v.x-q.x*v.z),tz=2*(q.x*v.y-q.y*v.x);return{x:v.x+q.w*tx+q.y*tz-q.z*ty,y:v.y+q.w*ty+q.z*tx-q.x*tz,z:v.z+q.w*tz+q.x*ty-q.y*tx};}
-function weaponHitRadius(action,scale=1){const widths={fist:.30,dagger:.20,spear:.18,greatsword:.34,axe:.29,shield:.34};return (widths[action.weapon]||CFG.combat.hit.radius)*Math.min(scale,2);}
+function weaponHitRadius(action,scale=1){const widths={fist:.30,spear:.18,axe:.29};return (widths[action.weapon]||CFG.combat.hit.radius)*Math.min(scale,2);}
 function attackSamples(actor,action,from,to){
  if(isClawAction(action)){const out=[],count=Math.max(1,Math.ceil(Math.abs(to-from)*12));for(let n=1;n<=count;n++){
   const previous=clawWorldPose(actor,action,action.wind+lerp(from,to,(n-1)/count)*action.active),pose=clawWorldPose(actor,action,action.wind+lerp(from,to,n/count)*action.active);
@@ -55,22 +55,21 @@ function knockbackResponse(target,power,heavy=false){
 class Combat {
  static state(){return {state:'idle',elapsed:0,action:null,left:false,combo:0,comboUntil:0,comboWeapon:null,queued:false,airRollUsed:false,invul:0};}
  static canAct(c){return c.state==='idle'||(c.state==='attack'&&c.elapsed>=c.action.wind+c.action.active+c.action.recovery*.68);}
- static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=SPECIES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.art==='ball'?80:280,recovery:350,arc:1.9};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,reach:3.0,arc:1.25,weight:0,wind:200,active:100,recovery:350,combo:3};}
+ static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=SPECIES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.art==='ball'?80:280,recovery:350,arc:1.9};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,reach:3.0,arc:1.25,weight:0,wind:200,active:100,recovery:350};}
  static resetCombo(c){c.combo=0;c.comboUntil=0;c.comboWeapon=null;c.queued=false;}
  static equipmentKey(a,sim=null){return sim?.companions.equipped(a)?.id||Inventory.stats(a).item?.id||'fist';}
- // The only player action is the basic chain: three melee stages, or the bow/shield chain length.
+ // The only player action is the basic chain: three melee stages for fists, sword, spear and axe.
  static makeAction(a,sim=null){if(sim&&!a.enemy&&a.companionSlot>=0)return sim.companions.action(a);const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
-  const melee=weapon!=='bow'&&weapon!=='shield',count=melee?BASIC_CHAIN.length:w.combo;
+  const count=BASIC_CHAIN.length;
   const continuing=c.comboWeapon===weaponKey&&(c.comboUntil>0||c.state==='attack'&&c.action?.name==='light');
-  const combo=continuing?c.combo%count:0,stage=melee?BASIC_CHAIN[combo]:null;
-  let actionKind=weapon==='bow'?'arrow':'swing';
-  let motion=stage?.motion;
-  if(stage&&combo<2&&(weapon==='fist'||weapon==='spear'))motion=combo?'thrustReverse':'thrust';
-  if(stage&&combo===2)actionKind='overhead';
-  const label=stage?(weapon==='fist'?(combo===0?'정권':combo===1?'반대 정권':'내려치기'):weapon==='spear'&&combo<2?(combo===0?'찌르기':'반대 찌르기'):stage.label):null;
-  return {name:'light',weapon,weaponKey,kind:actionKind,...motion?{motion}: {},comboLabel:label,comboCount:count,combo,
-   wind:Math.round(w.wind*(stage?.wind||1)),active:Math.round(w.active*(stage?.active||1)),recovery:Math.round(w.recovery*(stage?.recovery||1)),reach:w.reach,
-   arc:w.arc,damage:statStep(Math.max(STAT_SCALE.damage,w.damage+damageBonus+(a.rpg?.skills.might||0)*5)*(1+combo*.1),STAT_SCALE.damage),heavy:!!w.heavy,
+  const combo=continuing?c.combo%count:0,stage=BASIC_CHAIN[combo];
+  let actionKind='swing',motion=stage.motion;
+  if(combo<2&&(weapon==='fist'||weapon==='spear'))motion=combo?'thrustReverse':'thrust';
+  if(combo===2)actionKind='overhead';
+  const label=weapon==='fist'?(combo===0?'정권':combo===1?'반대 정권':'내려치기'):weapon==='spear'&&combo<2?(combo===0?'찌르기':'반대 찌르기'):stage.label;
+  return {name:'light',weapon,weaponKey,kind:actionKind,motion,comboLabel:label,comboCount:count,combo,
+   wind:Math.round(w.wind*stage.wind),active:Math.round(w.active*stage.active),recovery:Math.round(w.recovery*stage.recovery),reach:w.reach,
+   arc:w.arc,damage:statStep(Math.max(STAT_SCALE.damage,w.damage+damageBonus+(a.rpg?.skills.might||0)*5)*(1+combo*.1),STAT_SCALE.damage),heavy:false,
    impulse:(CFG.combat.knockback.weapons[weapon]||5)*(1+combo*.08),enemy:a.enemy,dir:{...a.facing},hits:[],touched:[],fired:false,sequence:0};
  }
  static start(a,action,sim){const c=a.combat;if(!action||!this.canAct(c)||action.companionId&&sim.companions.ready(a)?.id!==action.companionId)return false;if(action.companionId&&!sim.companions.start(a,action))return false;
@@ -131,8 +130,8 @@ class Combat {
   if(c.state!=='attack')return;const act=c.action,prev=c.elapsed-dt,end=act.wind+act.active;
   if(c.elapsed>act.wind&&prev<end){
    if(!act.swung){act.swung=true;sim.emit('swing',a,{weapon:act.weapon,kind:act.kind,sequence:act.sequence,combo:act.combo,comboCount:act.comboCount,label:act.comboLabel});}
-   if(['companionBall','arrow','spit'].includes(act.kind)){
-    if(!act.fired){act.fired=true;if(act.kind!=='companionBall'&&!a.enemy&&!Inventory.takeFrom(a.inventory.slots,'arrow',1)){sim.emit('no-arrow',a);}else sim.fire(a,act);}
+   if(['companionBall','spit'].includes(act.kind)){
+    if(!act.fired){act.fired=true;sim.fire(a,act);}
    }else if(act.kind==='burst'){
     if(!act.fired){act.fired=true;for(const t of Object.values(sim.actors).sort((a,b)=>cmp(a.id,b.id))){if(t.id===a.id||t.dead||t.suspended)continue;const d=V.sub(t.pos,a.pos);if(V.len(d)<act.reach&&sim.physics.sight(V.add(a.pos,{x:0,y:1,z:0}),V.add(t.pos,{x:0,y:1,z:0}),a))this.hit(a.id,t,act,sim);}sim.emit('burst',a,{radius:act.reach});}
    }else{
@@ -161,7 +160,7 @@ class Combat {
   let push=projectile?V.norm({x:(payload.flightVelocity||payload.velocity||payload.dir).x,y:0,z:(payload.flightVelocity||payload.velocity||payload.dir).z}):source?V.norm({x:target.pos.x-source.pos.x,y:0,z:target.pos.z-source.pos.z}):V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   if(V.len(push)<.001)push=V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   const response=knockbackResponse(target,payload.impulse||4,heavy);sim.physics.impulse(target,push,response.horizontal,response);
-  const event={damage,point:{...point},normal:contact?.normal||V.scale(push,-1),direction:push,sourceId,weapon:payload.weapon||(projectile?'bow':'fist'),sequence:payload.sequence||0,heavy,lethal,power:response.horizontal};
+  const event={damage,point:{...point},normal:contact?.normal||V.scale(push,-1),direction:push,sourceId,weapon:payload.weapon||(projectile?'shot':'fist'),sequence:payload.sequence||0,heavy,lethal,power:response.horizontal};
   sim.emit('hit',target,event);
   if(source)sim.emit('attack-hit',source,{...event,targetId:target.id});
   if(lethal)sim.kill(target,sourceId);return true;

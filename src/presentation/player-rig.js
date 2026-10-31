@@ -5,30 +5,38 @@
  * writes the simulation. Rig units: ground at y=0, head centre at y=133. */
 const RIG_PARTS=Object.freeze(['front','side','back'].flatMap(v=>['head','torso','hand','foot','cap','jacket','pack'].map(p=>v+'_'+p))
  .concat(['front','side'].flatMap(v=>['n','atk','shout','hurt'].map(f=>v+'_head_'+f))));
-const RIG_WEAPON_SCALE=Object.freeze({sword:.7,greatsword:.54,spear:.64,axe:.64});
+const RIG_WEAPON_SCALE=Object.freeze({sword:.7,spear:.64,axe:.64,pick:.64});
 // Attack angles in degrees from straight up, clockwise, for a rig facing screen-left: rest, wind-up, strike end.
 const RIG_SWINGS=Object.freeze([[-20,40,-95],[-20,-130,55],[-20,15,-160]]);
 // Attack timeline in rig progress: wind-up ends at strikeStart, the strike lands by strikeEnd, rest pose at rest.
 const RIG_ATTACK=Object.freeze({strikeStart:.16,strikeEnd:.24,rest:.8});
-// Equipment tiers recolour the cap, jacket and blade (hue absolute, saturation/value multipliers).
-// 0 = authored colours, 1 = 철, 2 = 청수정.
-const RIG_TIER_COLOR=Object.freeze([null,{cap:[222,.25,1.02],jacket:[24,.42,.88],blade:null},{cap:[214,1.2,1.05],jacket:[190,.8,1.05],blade:[195,.38,1.04]}]);
-// Held item → rig art. Items without a weapon drawing (pick, shovel, dagger, bow, shield, blocks…) show an empty hand.
-const RIG_WEAPONS=Object.freeze(['sword','greatsword','spear','axe']);
-const RIG_TIER_BY_MATERIAL=Object.freeze({iron:1,diamond:2});
+// Equipment materials recolour their own part: helmet → cap, chestplate → jacket, boots → foot, held
+// weapon/tool → blade. Each entry is [hue°, saturation ×, value ×]; null keeps the authored colours.
+// base = parts no equipment touches. wood/leather = authored, stone = 돌, iron = 철, diamond = 청수정.
+const RIG_MATERIAL_COLOR=Object.freeze({
+ base:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
+ wood:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
+ leather:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
+ stone:Object.freeze({cap:null,jacket:null,foot:null,blade:[30,.16,.74]}),
+ iron:Object.freeze({cap:[222,.25,1.02],jacket:[24,.42,.88],foot:[222,.25,1.35],blade:null}),
+ diamond:Object.freeze({cap:[214,1.2,1.05],jacket:[190,.8,1.05],foot:[192,1.2,1.65],blade:[195,.38,1.04]})
+});
+const RIG_PART_KIND=key=>/_cap$/.test(key)?'cap':/_jacket$/.test(key)?'jacket':/_foot$/.test(key)?'foot':null;
+// Held item → rig art. Items without a drawing (blocks, food…) show an empty hand.
+const RIG_WEAPONS=Object.freeze(['sword','spear','axe','pick']);
+const rigWeaponOf=item=>item?.weapon||(item?.tool==='pick'?'pick':null);
 // World placement: a 512 px canvas whose ground row (420) sits on the actor's feet; 200 rig units ≈ the old sprout height.
 const RIG_VIEW=Object.freeze({canvas:512,ground:420,metersPerUnit:.0092});
 function rigEase(t,keys){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){if(t<=keys[i][0]){const a=keys[i-1],b=keys[i];let u=(t-a[0])/(b[0]-a[0]);u=u*u*(3-2*u);return a[1]+(b[1]-a[1])*u}}return keys[keys.length-1][1]}
 function rgbToHsv(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;if(d){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360}return[h,mx?d/mx:0,mx]}
 function hsvToRgb(h,s,v){const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;let r=0,g=0,b=0;if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}return[(r+m)*255,(g+m)*255,(b+m)*255]}
-function recolorPart(image,kind,tier){
- const map=RIG_TIER_COLOR[tier];if(!map||kind==='none'||(kind==='blade'&&!map.blade))return image;
+function recolorPart(image,kind,to){
+ if(!to)return image;
  const out=document.createElement('canvas');out.width=image.width;out.height=image.height;const x=out.getContext('2d');x.drawImage(image,0,0);
  const data=x.getImageData(0,0,out.width,out.height),p=data.data;
- for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;const[h,s,v]=rgbToHsv(p[i],p[i+1],p[i+2]);let to=null;
-  if(kind==='cloth'){if(h>140&&h<215&&s>.28)to=map.cap;else if(h>8&&h<44&&s>.6&&v>.55)to=map.jacket}
-  else if(kind==='blade'&&s<.2&&v>.45)to=map.blade;
-  if(!to)continue;const rgb=kind==='blade'?hsvToRgb(to[0],to[1]*(.6+v*.4),Math.min(1,v*to[2])):hsvToRgb(to[0],Math.min(1,s*to[1]),Math.min(1,v*to[2]));p[i]=rgb[0];p[i+1]=rgb[1];p[i+2]=rgb[2]}
+ for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;const[h,s,v]=rgbToHsv(p[i],p[i+1],p[i+2]);
+  const hit=kind==='cap'?h>140&&h<215&&s>.28:kind==='jacket'?h>8&&h<44&&s>.6&&v>.55:kind==='foot'?s>.15:s<.2&&v>.45;
+  if(!hit)continue;const rgb=kind==='blade'?hsvToRgb(to[0],to[1]*(.6+v*.4),Math.min(1,v*to[2])):hsvToRgb(to[0],Math.min(1,s*to[1]),Math.min(1,v*to[2]));p[i]=rgb[0];p[i+1]=rgb[1];p[i+2]=rgb[2]}
  x.putImageData(data,0,0);return out}
 function loadRigImage(url){return new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('플레이어 부품 이미지 로딩 실패: '+url));i.src=url})}
 class PlayerRig{
@@ -36,12 +44,12 @@ class PlayerRig{
   const response=await fetch(base+'player-parts.json');if(!response.ok)throw Error('플레이어 부품 정보 로딩 실패: '+response.status);
   const meta=await response.json(),rig=new PlayerRig();rig.grip=meta.weaponGrip;
   for(const w of RIG_WEAPONS)if(!Array.isArray(rig.grip?.[w]))throw Error('플레이어 무기 손잡이 정보 누락: '+w);
-  const jobs=RIG_PARTS.map(k=>loadRigImage(base+k+'.png').then(img=>rig.add(k,img,/cap|jacket/.test(k)?'cloth':'none')))
+  const jobs=RIG_PARTS.map(k=>loadRigImage(base+k+'.png').then(img=>rig.add(k,img,RIG_PART_KIND(k))))
    .concat(RIG_WEAPONS.map(w=>loadRigImage(base+'weapon_'+w+'.png').then(img=>rig.add('weapon_'+w,img,'blade'))));
   await Promise.all(jobs);return rig;
  }
- constructor(){this.tiers=[{},{},{}];this.grip={}}
- add(key,image,kind){for(let t=0;t<3;t++)this.tiers[t][key]=recolorPart(image,kind,t)}
+ constructor(){this.variants=Object.fromEntries(Object.keys(RIG_MATERIAL_COLOR).map(m=>[m,{}]));this.grip={}}
+ add(key,image,kind){for(const [m,map]of Object.entries(RIG_MATERIAL_COLOR))this.variants[m][key]=kind?recolorPart(image,kind,map[kind]):image}
  // Pose from display state. `seconds` drives the idle/walk cycles; look.progress (0..1) drives roll and attack.
  pose(look,seconds){
   const p={bob:0,head:0,headX:0,handL:[0,0],handR:[0,0],footL:[0,0],footR:[0,0],footScaleL:1,footScaleR:1,weaponAngle:.35,rot:0,squash:1,offsetX:0,tuck:0,zoom:1,face:null};
@@ -61,14 +69,17 @@ class PlayerRig{
   if(look.hurt)p.face='hurt';
   return p;
  }
- // look: {anim, view:'front'|'side'|'back', flip, progress, combo, weapon:null|'sword'|'greatsword'|'spear'|'axe', tier:0..2, hurt}
+ // look: {anim, view:'front'|'side'|'back', flip, progress, combo, weapon:null|'sword'|'spear'|'axe'|'pick',
+ //  material (held weapon/tool), helmet/chest: material|null (null = part not drawn), boots: material|'base', hurt}
  draw(ctx,look,seconds,origin){
-  const p=this.pose(look,seconds),parts=this.tiers[look.tier]||this.tiers[0],U=origin.scale,OX=origin.x,GY=origin.y;let view=look.view,headKey=null;
+  const p=this.pose(look,seconds),V=this.variants,U=origin.scale,OX=origin.x,GY=origin.y;let view=look.view,headKey=null;
   if(p.pitch!==undefined&&Math.cos(p.pitch)<0)view=view==='front'?'back':'front';
-  const P=(key,x,y,o={})=>{const im=parts[key];if(!im)return;const s=(o.s||1)*U;ctx.save();ctx.translate(OX+x*U,GY-y*U);ctx.rotate(o.r||0);ctx.scale((o.flip?-1:1)*(o.sx||1),o.sy||1);
+  // Part key → material variant: equipment slots pick their material, everything else is authored.
+  const variantOf=key=>{const kind=RIG_PART_KIND(key);return kind==='cap'?look.helmet:kind==='jacket'?look.chest:kind==='foot'?look.boots:key.startsWith('weapon_')?look.material:'base'};
+  const P=(key,x,y,o={})=>{const m=variantOf(key);if(!m)return;const im=V[m][key];if(!im)return;const s=(o.s||1)*U;ctx.save();ctx.translate(OX+x*U,GY-y*U);ctx.rotate(o.r||0);ctx.scale((o.flip?-1:1)*(o.sx||1),o.sy||1);
    if(o.dim)ctx.filter='brightness(.8)';ctx.drawImage(im,(-im.width/2-(o.px||0))*s,(-im.height/2-(o.py||0))*s,im.width*s,im.height*s);ctx.restore()};
-  const weapon=(x,y,r,flip)=>{if(!look.weapon)return;const k='weapon_'+look.weapon,im=parts[k],g=this.grip[look.weapon];P(k,x,y,{s:RIG_WEAPON_SCALE[look.weapon],r,px:g[0]-im.width/2,py:g[1]-im.height/2,flip})};
-  const head=(pre,f)=>headKey=parts[pre+'head_'+f]&&f?pre+'head_'+f:pre+'head';
+  const weapon=(x,y,r,flip)=>{if(!look.weapon)return;const k='weapon_'+look.weapon,im=V[look.material][k],g=this.grip[look.weapon];P(k,x,y,{s:RIG_WEAPON_SCALE[look.weapon],r,px:g[0]-im.width/2,py:g[1]-im.height/2,flip})};
+  const head=(pre,f)=>headKey=V.base[pre+'head_'+f]&&f?pre+'head_'+f:pre+'head';
   ctx.save();if(look.flip){ctx.translate(OX*2,0);ctx.scale(-1,1)}
   // Presentation-only impact jitter; deterministic in the attack progress so equal states draw equal frames.
   if(p.shake)ctx.translate(Math.sin(p.swing.q*977)*p.shake,Math.cos(p.swing.q*613)*p.shake);
@@ -117,7 +128,8 @@ function rigAttackProgress(action,elapsed){const {strikeStart:ts,strikeEnd:te,re
 // Display actor state → rig look. `lastFlip` keeps the side drawing's mirror while the facing is near the camera axis.
 function playerRigLook(a,cameraYaw,reaction,lastFlip=false){
  const c=a.combat,act=c.action,rolling=c.state==='roll'&&!!act,attacking=c.state==='attack'&&!!act&&!act.companionId,item=Inventory.stats(a).item;
- const held=attacking?ITEMS[act.weaponKey]||null:item,weaponId=attacking?act.weapon:held?.weapon,weapon=RIG_WEAPONS.includes(weaponId)?weaponId:null;
+ const held=attacking?ITEMS[act.weaponKey]||null:item,weaponId=rigWeaponOf(held),weapon=RIG_WEAPONS.includes(weaponId)?weaponId:null;
+ const worn=slot=>{const s=a.inventory.armor[slot];return s?ITEMS[s.id].material:null};
  const f=rolling||attacking?act.dir:a.facing,sx=f.x*Math.cos(cameraYaw)-f.z*Math.sin(cameraYaw),toward=f.x*Math.sin(cameraYaw)+f.z*Math.cos(cameraYaw);
  let view=Math.abs(sx)>=.5?'side':toward>0?'front':'back';if(attacking)view='side';
  const flip=Math.abs(sx)>=.2?sx>0:lastFlip,m=a.motion||motionState(),speed=Math.hypot(a.velocity.x,a.velocity.z);
@@ -125,7 +137,7 @@ function playerRigLook(a,cameraYaw,reaction,lastFlip=false){
  const progress=rolling?clamp(c.elapsed/act.duration,0,1):attacking?rigAttackProgress(act,c.elapsed):0;
  // Walk cycle follows travelled distance (one rig cycle per legacy stride); idle breathes on the simulation clock.
  const seconds=anim==='walk'?m.distance/(a.sprinting?ANIMATION.runStride:ANIMATION.stride)*TAU/10:(a.anim||0)/1000;
- return{anim,view,flip:view==='side'&&flip,sideFlip:flip,progress,seconds,combo:attacking?act.combo||0:0,weapon,tier:RIG_TIER_BY_MATERIAL[held?.material]||0,hurt:!!(reaction&&reaction.age<CFG.combat.feedback.flash)};
+ return{anim,view,flip:view==='side'&&flip,sideFlip:flip,progress,seconds,combo:attacking?act.combo||0:0,weapon,material:weapon?held.material:'base',helmet:worn('helmet'),chest:worn('chest'),boots:worn('boots')||'base',hurt:!!(reaction&&reaction.age<CFG.combat.feedback.flash)};
 }
 const RIG_GLSL=Object.freeze({
  vertex:'in vec3 position;in vec2 uv;in vec4 tint;uniform mat4 vp;out vec2 v;out vec4 t;void main(){v=uv;t=tint;gl_Position=vp*vec4(position,1.);}',
@@ -149,7 +161,7 @@ class PlayerRigRenderer {
    s.texture.needsUpdate=true;s.frame=this.r.frame;s.look=look;
   }
   this.items.push({...item,surface:s});
-  this.samples.push({mode:'rig',phase:item.phase,key:item.key,canvasKey,kind:'player',anim:look.anim,view:s.info.view,flip:look.flip,progress:look.progress,combo:look.combo,weapon:look.weapon,drawnWeapon:s.info.weapon,tier:look.tier,head:s.info.head,hurt:look.hurt,whiteFlash:!!item.whiteFlash,alpha:item.alpha??1,depthTest:true,depthWrite:false,pos:{...item.pos}});
+  this.samples.push({mode:'rig',phase:item.phase,key:item.key,canvasKey,kind:'player',anim:look.anim,view:s.info.view,flip:look.flip,progress:look.progress,combo:look.combo,weapon:look.weapon,drawnWeapon:s.info.weapon,material:look.material,helmet:look.helmet,chest:look.chest,boots:look.boots,head:s.info.head,hurt:look.hurt,whiteFlash:!!item.whiteFlash,alpha:item.alpha??1,depthTest:true,depthWrite:false,pos:{...item.pos}});
  }
  draw(phase){const r=this.r,T=r.T,C=RIG_VIEW.canvas,up={x:0,y:1,z:0};
   for(const item of this.items){if(item.phase!==phase)continue;
