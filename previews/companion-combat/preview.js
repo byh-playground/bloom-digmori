@@ -6,7 +6,7 @@ const previewGamekit={vectorAssets};
 const definition=DEPENDENCIES.vectorAssets.pebbleMole;
 const previewLoader=loader.createVectorAssetLoader({fetch:globalThis.fetch.bind(globalThis),maxEntries:2});
 const previewVector=await previewLoader.load(new URL('../../'+definition.url,location.href),{sourcePath:definition.sourcePath,expectedSha256:definition.sha256,maxBytes:definition.maxBytes,curveSegments:definition.curveSegments,includeSourcePaths:false});
-const characterDefinition=DEPENDENCIES.vectorAssets.characters.sprout;
+const characterDefinition=DEPENDENCIES.vectorAssets.preview.sprout;
 const previewCharacter=await previewLoader.load(new URL('../../'+characterDefinition.url,location.href),{sourcePath:characterDefinition.sourcePath,expectedSha256:characterDefinition.sha256,maxBytes:characterDefinition.maxBytes,curveSegments:characterDefinition.curveSegments,includeSourcePaths:false});
 const ATTACHMENT_ART=COMPANION_ART;
 const attachmentPose=companionAttachmentPose;
@@ -97,7 +97,8 @@ function drawFrame(t){
  previewUI.scale.textContent=`표시 ${Math.round(cssWidth)}×${Math.round(cssHeight)} · DPR ${dpr} · 캔버스 ${width}×${height} · 거리 ${r.camera.distance}m`;
  window.symbioticPreview={revision:4,combatMode,beat,previewOnly:true,pixelContract:{...PIXEL_CONTRACT,dpr,cssSize:[cssWidth,cssHeight],equipment:ATTACHMENT_ART.map((a,i)=>({id:a.id,pixels:r.companions.frames[combatMode+'/'+i+'/0'].pixels,worldPerPixelX:PIXEL_CONTRACT.worldPerPixelX,worldPerPixelY:PIXEL_CONTRACT.worldPerPixelY}))},layout,action,sample,positions,deploy,sockets:contract.sockets,hand:contract.hand,elbow:contract.elbow,camera:{...r.camera},renderSize:[width,height],glError:gl.getError(),frames:(window.symbioticPreview?.frames||0)+1};
 }
-try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector,characters:{sprout:previewCharacter}},THREE);renderer.companions=companionAtlas();renderer.companions.texture=renderer.canvasTexture(renderer.companions.canvas);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
+const previewRig=await PlayerRig.load('../../'+DEPENDENCIES.playerArt.base);
+try{renderer=new Renderer(previewUI.preview,previewGamekit,{pebbleMole:previewVector,characters:{sprout:previewCharacter}},THREE,previewRig);renderer.companions=companionAtlas();renderer.companions.texture=renderer.canvasTexture(renderer.companions.canvas);function tick(now){const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;if(playing)clock+=dt;try{drawFrame(clock);requestAnimationFrame(tick);}catch(e){showError(e);}}requestAnimationFrame(tick);}catch(e){showError(e);}
 function showError(e){previewUI.error.style.display='block';previewUI.error.textContent='미리보기를 렌더하지 못했습니다: '+e.message+' · WebGL을 사용할 수 있는 브라우저에서 열어 주세요.';previewUI.state.textContent='렌더 실패';console.error(e);}
 
 // Deterministic browser review entry point; same live fixture, no alternative rendering path.

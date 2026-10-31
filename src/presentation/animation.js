@@ -31,7 +31,7 @@ function motionState(){return{distance:0,land:0,brake:0,speed:0,air:0,grounded:f
 function actorSpritePose(a,cameraYaw,reaction=null){const c=a.combat,act=c.action,m=a.motion||motionState(),speed=Math.hypot(a.velocity.x,a.velocity.z);let clip='idle',frame=0,f=act&&c.state==='roll'?(act.facing||a.facing):c.state==='attack'?act.dir:a.facing;
  // Frozen launch-facing plus captured roll direction: camera motion cannot turn an ongoing roll.
  const view=(Math.round(Math.atan2(f.x*cosQ(cameraYaw)-f.z*sinQ(cameraYaw),f.x*sinQ(cameraYaw)+f.z*cosQ(cameraYaw))/(Math.PI/4))+8)%8;
- if(c.state==='roll'&&act)return{clip:'roll'+(view>=5?(8-(act.directionIndex||0))%8:(act.directionIndex||0)),frame:Math.min(ANIMATION.rollFrames-1,Math.floor(clamp(c.elapsed/act.duration,0,1)*ANIMATION.rollFrames)),view,dir:view>=5?8-view:view,flip:view>=5,kind:'sprout'};
+ if(c.state==='roll'&&act)return{clip:'roll'+(view>=5?(8-(act.directionIndex||0))%8:(act.directionIndex||0)),frame:Math.min(ANIMATION.rollFrames-1,Math.floor(clamp(c.elapsed/act.duration,0,1)*ANIMATION.rollFrames)),view,dir:view>=5?8-view:view,flip:view>=5,kind:'player'};
  if(a.dead||c.state==='dead'){clip='dead';frame=4;}
  else if(reaction&&reaction.age<230){clip=reaction.heavy?'hurtHeavy':'hurt';frame=Math.min(3,Math.floor(reaction.age/230*4));}
  else if(c.state==='attack'&&act){clip=attackClip(act);frame=actionTiming(act,c.elapsed).frame;}
@@ -42,9 +42,9 @@ function actorSpritePose(a,cameraYaw,reaction=null){const c=a.combat,act=c.actio
  else if(a.mine?.target&&a.mine.elapsed>0){clip='gather';frame=Math.floor(a.mine.elapsed/100)%4;}
  else if(speed>.16&&a.knock<=0){clip=!a.enemy&&a.sprinting?'run':a.enemy&&speed>5?'run':'walk';frame=Math.floor(m.distance/(clip==='run'?ANIMATION.runStride:ANIMATION.stride)*8)%8;}
  else{frame=Math.floor(a.anim/240)%4;}
- return{clip,frame,view,dir:view>=5?8-view:view,flip:view>=5,kind:a.speciesId?SPECIES[a.speciesId].wild.kind:a.boss?BOSS.kind:'sprout'};
+ return{clip,frame,view,dir:view>=5?8-view:view,flip:view>=5,kind:a.speciesId?SPECIES[a.speciesId].wild.kind:a.boss?BOSS.kind:'player'};
 }
-// Art-only joint controls in source sprite pixels. Keep the approved sprout's head and palette.
+// Art-only joint controls in source sprite pixels for the SVG creatures and the companion-combat preview.
 function clipArtPose(clip,frame){const reverse=clip.endsWith('Reverse');if(reverse)clip=clip.slice(0,-7);const n=ANIMATION.clips[clip]||4,p=frame/Math.max(1,n-1),cycle=frame/n*TAU;let lean=0,squash=1,bob=0,stride=0,armL=[13,40],armR=[34,40],knee=0,head=0;
  if(clip==='idle')bob=Math.sin(cycle)*.35;
  if(clip==='walk'||clip==='run'){const run=clip==='run';stride=Math.sin(cycle)*(run?5.4:3.5);bob=Math.abs(Math.sin(cycle))*(run?1.8:.8);lean=run?.11:.025;armL=[13-stride*.7,39+stride*.5];armR=[34+stride*.75,39-stride*.5];knee=run?2.2:.7;}
