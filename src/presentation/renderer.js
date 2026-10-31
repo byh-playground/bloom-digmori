@@ -194,8 +194,8 @@ class Renderer {
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
    let tint=a.speciesId?[...SPECIES[a.speciesId].wild.tint]:a.boss?[...BOSS.tint]:[[1,1,1,1],[.78,.89,1,1],[1,.8,.9,1],[1,.92,.7,1]][hashStr(a.id)%4];if(a.id===actor.id)tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
-   const whiteFlash=!!(reaction&&!reaction.guard&&reaction.age<CFG.combat.feedback.flash&&reaction.age<45);
-   if(reaction&&!reaction.guard&&reaction.age<CFG.combat.feedback.flash&&!whiteFlash)tint=[1.75,.65,.5,1];
+   const whiteFlash=!!(reaction&&reaction.age<CFG.combat.feedback.flash&&reaction.age<45);
+   if(reaction&&reaction.age<CFG.combat.feedback.flash&&!whiteFlash)tint=[1.75,.65,.5,1];
    const rp=a.pos;this.companionRenderer.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,pos:rp,scale,tint,alpha:1,whiteFlash});
    const raw=sim.actors[a.id],hit=raw?sim.physics.ground(raw,rp,2.5):null;if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}
   }
@@ -240,7 +240,7 @@ class Renderer {
    if(p.kind==='block'){
     const f=p.life/p.maximum,sz=p.size*f;
     this.box(dyn,{x:p.pos.x,y:p.pos.y-sz*.5,z:p.pos.z},{x:sz,y:sz,z:sz},p.color);
-   }else this.sprite(sprites,p.pos,.15,.15,this.atlas.frames['fx/spark'],p.type==='guard'?[.7,.9,1,1]:[1,.84,.51,1]);
+   }else this.sprite(sprites,p.pos,.15,.15,this.atlas.frames['fx/spark'],[1,.84,.51,1]);
   }
   if(this.blockFx){
    const fx=this.blockFx,t=fx.time/fx.duration,k=fx.kind==='place'?1:-1;

@@ -23,7 +23,6 @@ function createAudioConfig(){return {volume:CFG.combat.feedback.volume,headroom:
  swing:{category:'combat',priority:1,layers:[{kind:'noise',hz:1500,ms:115,gain:.20}]},
  hit:{category:'combat',priority:3,layers:[{kind:'noise',hz:2200,ms:135,gain:.48},{kind:'tone',hz:210,end:80,ms:130,gain:.32,type:'sine'}]},
  heavyHit:{category:'combat',priority:4,layers:[{kind:'noise',hz:1800,ms:190,gain:.62},{kind:'tone',hz:125,end:48,ms:185,gain:.52,type:'triangle'}]},
- guard:{category:'combat',priority:4,layers:[{kind:'noise',hz:3600,ms:180,gain:.40},{kind:'tone',hz:1150,end:750,ms:175,gain:.24,type:'sine'}]},
  wall:{category:'combat',priority:2,layers:[{kind:'noise',hz:1100,ms:130,gain:.28},{kind:'tone',hz:160,end:80,ms:125,gain:.20,type:'sine'}]},
  mine:{category:'world',priority:1,layers:[{kind:'tone',hz:285,end:100,ms:130,gain:.20,type:'triangle'}]},
  place:{category:'world',priority:1,layers:[{kind:'tone',hz:180,end:75,ms:130,gain:.18,type:'sine'}]}

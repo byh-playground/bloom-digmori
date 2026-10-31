@@ -28,7 +28,7 @@ class Companions {
   // Never teleport a live projectile or duplicate carried resources into a second placement.
   if(u.cargo&&u.location!=='work'&&destination.location==='combat')return false;
   if(u.phase==='flight'||u.phase==='return'||u.cargo&&u.location==='work'){u.pending={...destination};return true;}
-  if(u.location==='combat'&&(a.combat.action?.companionId===u.id||a.companionSlot===u.slot&&['charge','secondary','guard'].includes(a.combat.state))){const c=a.combat;Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;c.charge=0;c.secondary=false;}
+  if(u.location==='combat'&&a.combat.action?.companionId===u.id){const c=a.combat;Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}
   const oldSlot=u.slot;this.removeBody(u);if(other&&other!==u){if(a.companionSlot===other.slot)a.companionSlot=-1;other.pending=null;other.location='reserve';other.slot=null;}
   u.location=destination.location;u.slot=destination.location==='combat'?destination.slot:null;u.phase='idle';u.pending=null;u.target=null;u.progress=0;
   if(u.location==='work'){u.pos=V.add(this.base(a.id).pos,{x:1,y:1,z:0});this.sim.physics.addBall(u,.23,{x:0,y:0,z:0},0);}
@@ -36,12 +36,12 @@ class Companions {
   this.sim.emit('companion-assigned',a,{companionId:u.id,location:u.location});return true;
  }
  command(a,c){if(c.action==='recruit')return this.recruit(a,c.candidateId);
-  if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){if(a.companionSlot!==c.slot&&['charge','secondary','guard'].includes(a.combat.state)){a.combat.state='idle';a.combat.charge=0;a.combat.action=null;}a.companionSlot=c.slot;Combat.resetCombo(a.combat);return true;}return false;}
+  if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){a.companionSlot=c.slot;Combat.resetCombo(a.combat);return true;}return false;}
   if(c.action==='collect'){const b=this.base(a.id);if(!b||!this.nearBase(a))return false;for(let n=0;n<b.slots.length;n++){const s=b.slots[n];if(!s)continue;const left=Inventory.addTo(a.inventory.slots,s.id,s.count);if(left<s.count)this.sim.markItem(s.id);b.slots[n]=left?{id:s.id,count:left}:null;}for(const u of this.owned(a.id).filter(u=>u.location==='reserve'&&u.cargo)){const left=Inventory.addTo(a.inventory.slots,u.cargo.id,u.cargo.count);if(left<u.cargo.count)this.sim.markItem(u.cargo.id);u.cargo=left?{...u.cargo,count:left}:null;}return true;}
   return this.assign(a,this.data.units[c.id],{location:c.location,slot:c.slot});
  }
- action(a,kind,tier){const u=this.ready(a);if(!u||!SPECIES[u.kind].capabilities.attack||!['light','charged'].includes(kind))return null;const def=Combat.weapon(a,this.sim),mult=kind==='charged'?(tier===2?2:1.5):1;
-  return {name:kind,weapon:def.mode==='ball'?'bow':'fist',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'companionClaw',motion:def.mode==='ball'?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,tier,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep((def.damage+(a.rpg?.skills.might||0)*5)*mult,STAT_SCALE.damage),poise:statStep(def.poise*mult,STAT_SCALE.poise),cost:statStep(def.cost*(tier?1+tier*.5:1),STAT_SCALE.stamina),impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,staminaRefunded:false,sequence:0};
+ action(a){const u=this.ready(a);if(!u||!SPECIES[u.kind].capabilities.attack)return null;const def=Combat.weapon(a,this.sim);
+  return {name:'light',weapon:def.mode==='ball'?'bow':'fist',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'companionClaw',motion:def.mode==='ball'?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep(def.damage+(a.rpg?.skills.might||0)*5,STAT_SCALE.damage),heavy:!!def.heavy,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,sequence:0};
  }
  start(a,act){const u=this.data.units[act.companionId];if(!u||this.ready(a)!==u)return false;u.cooldown=SPECIES[u.kind].capabilities.attack.cooldown;return true;}
  launched(shot){const u=this.data.units[shot.companionId];if(u){u.phase='flight';u.pos={...shot.pos};}}

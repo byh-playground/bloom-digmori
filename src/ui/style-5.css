@@ -10,8 +10,6 @@
  .touch-actions{display:flex!important;flex-direction:column!important;grid-template-columns:none!important;grid-template-rows:none!important;align-items:center;gap:12px!important;right:max(19px,env(safe-area-inset-right))!important;bottom:max(19px,env(safe-area-inset-bottom))!important}
  .touch-actions .mobile-button{display:flex;flex-direction:column;align-items:center;justify-content:center;width:61px!important;height:61px!important;border-radius:50%!important;font-size:23px!important;line-height:1.06;background:#324f41da!important;border:2px solid #a8c7a7!important;box-shadow:0 4px 14px #091b145e}
  .touch-actions .mobile-button small{font-size:9px;font-weight:650;letter-spacing:.02em}
- .touch-actions #mobile-skill{background:#5d4f74d9!important;border-color:#d7bbf5!important}
- .touch-actions #mobile-skill[hidden]{display:none!important}
  #inventory .panel{width:min(97vw,860px);max-height:96dvh;overflow:auto;padding:10px 12px}
  #inventory-panel{display:flex;flex-direction:row;gap:14px;align-items:flex-start}
  #recipe-book{width:clamp(125px,22vw,175px)!important;flex-shrink:0;display:block!important;overflow:auto;max-height:72dvh}

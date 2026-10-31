@@ -9,19 +9,19 @@ const DEPENDENCIES=Object.freeze({
  vectorAssets:Object.freeze({pebbleMole:Object.freeze({url:'src/assets/companions/pebble-mole.svg',sourcePath:'src/assets/companions/pebble-mole.svg',sha256:'f2dfee77c89084741620974a40d1eb3e49fc9d8c9f813776280d2da7bcdc3cb4',maxBytes:65536,curveSegments:16}),characters:Object.freeze({sprout:Object.freeze({url:'src/assets/characters/sprout.svg',sourcePath:'src/assets/characters/sprout.svg',sha256:'59aaac5cd245cd19321a529681f58880e7634fa0c991465719dc8bf9c88de032',maxBytes:65536,curveSegments:16}),fungus:Object.freeze({url:'src/assets/characters/fungus.svg',sourcePath:'src/assets/characters/fungus.svg',sha256:'20cb39fd53cf911ab21508e4a61c880657cdc164fd33949b94ec7beb878fbc4c',maxBytes:65536,curveSegments:16}),bug:Object.freeze({url:'src/assets/characters/bug.svg',sourcePath:'src/assets/characters/bug.svg',sha256:'9dbb87c71786dc7ba17eeb6067a9e1c0a2c39c6addd8acc0e60f72cf92243c30',maxBytes:65536,curveSegments:16}),flower:Object.freeze({url:'src/assets/characters/flower.svg',sourcePath:'src/assets/characters/flower.svg',sha256:'5a2c23f23eb6cd13ef2cc5a8629448d48064d828d4fc2cb54dbc8b4b30d762bb',maxBytes:65536,curveSegments:16}),bee:Object.freeze({url:'src/assets/characters/bee.svg',sourcePath:'src/assets/characters/bee.svg',sha256:'7ac381dab18eeb79e83514ec1983259e4de68bc321f011ba0b528160283f651c',maxBytes:65536,curveSegments:16})})})
 });
 /* Digmori — 게임별 스탯 프로필의 SSOT. 시간=ms, 거리=m, HP=생명력. */
-// 표시값을 임의로 떼우지 않는다. 설정 피해/강인도/스태미나는 5단위,
-// 일반 생물 최대 HP는 25단위, 기본 플레이어 HP와 스태미나는 100을 기준으로 한다.
+// 표시값을 임의로 떼우지 않는다. 설정 피해는 5단위,
+// 일반 생물 최대 HP는 25단위, 기본 플레이어 HP는 100을 기준으로 한다.
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
-const STAT_SCALE=Object.freeze({hp:25,damage:5,poise:5,stamina:5});
+const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.28.15',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.29.0',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
-  player:{hp:100,stamina:100,poise:100,load:50,walk:4.6,run:6.0,acceleration:36,jump:7.8,gravity:20,radius:.35,halfHeight:.60,eyeHeight:1.65},
-  stamina:{delay:700,regen:25,sprintPerMeter:.55,hitRefund:.45,finisherRefund:.65,chargedRefund:.55,minHitRefund:5},poise:{delay:2000,regen:25,stagger:600},input:{hold:250,buffer:180,sprintOuter:1.35,sprintForward:.78},
-  roll:[{distance:4.6,duration:550,cost:20,hop:3.4},{distance:3.5,duration:650,cost:25,hop:3.0},{distance:2.2,duration:900,cost:30,hop:2.3}],
-  iframes:{start:50,end:300},armorK:100,chargeMove:.40,respawn:2500,dropLife:300000,maxDrops:256,
+  player:{hp:100,load:50,walk:4.6,run:6.0,acceleration:36,jump:7.8,gravity:20,radius:.35,halfHeight:.60,eyeHeight:1.65},
+  input:{buffer:180,sprintOuter:1.35,sprintForward:.78},
+  roll:[{distance:4.6,duration:550,hop:3.4},{distance:3.5,duration:650,hop:3.0},{distance:2.2,duration:900,hop:2.3}],
+  iframes:{start:50,end:300},armorK:100,respawn:2500,dropLife:300000,maxDrops:256,
   terrain:{predictSeconds:.85,retireTicks:ticksForMs(2000),prefetchPerTick:1,margin:1.25},
   water:{horizontalRange:7,updateEveryTicks:ticksForMs(100),activateEveryTicks:ticksForMs(1000),maxUpdatesPerStep:160,activationRadius:16,simulationRadius:64,retireEveryTicks:ticksForMs(2000),maxFlowCells:24000,swimSpeed:2.8,sprintSpeed:4.8,riseSpeed:3.0,diveSpeed:-2.4},
   // Foot contact must be at the actor's actual sole; a higher ledge under a
@@ -29,7 +29,7 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   movement:{groundGap:.10,footInset:.025,footPenetration:.045,autoJumpLook:.80,ceilingGap:.04,autoStepRise:1.12,bankRiseSpeed:4.5},
   render:{uploadBudgetMs:2,maxUploads:2,maxPending:3,workerBudgetMs:3,waterMeshBudgetMs:2.5,maxWaterMeshesPerFrame:2},
   combat:{combo:{window:650,chainRecovery:.45,minRecovery:75},hit:{radius:.26,angularStep:.11,maxSamples:40,skin:.008},
-   knockback:{drag:3.5,maxSpeed:14,duration:340,bossResistance:.26,playerResistance:.76,guardScale:.20,
+   knockback:{drag:3.5,maxSpeed:14,duration:340,bossResistance:.26,playerResistance:.76,
     weapons:{fist:4.2,dagger:3.8,sword:6.2,greatsword:9.2,spear:5.6,axe:7.5,shield:8,bow:4.6},
     creatures:{shell:1,leaf:1.1,boss:.26}},
    feedback:{particles:220,bursts:32,numbers:24,flash:130,poseHold:45,heavyHold:70,shake:.045,volume:.20,afterimages:3}},
