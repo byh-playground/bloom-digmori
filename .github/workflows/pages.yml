@@ -38,11 +38,11 @@ jobs:
           # The player cut-out rig parts ship byte-for-byte: 33 PNGs (29 body parts + sword, spear, axe and pick) plus the grip-point JSON.
           test "$(grep -c '_site/src/assets/player/[a-z_]*\.png$' artifacts/pages-sha256.txt)" -eq 33
           grep -q '_site/src/assets/player/player-parts\.json$' artifacts/pages-sha256.txt
-          # The new species cut-out rig parts ship byte-for-byte: 86 PNGs (root 26, rock-chick 35, mushroom-snail 25) plus one parts JSON each,
+          # The new species cut-out rig parts ship byte-for-byte: 97 PNGs (root 34, rock-chick 35, mushroom-snail 28) plus one parts JSON each,
           # and every PNG is listed in its species JSON (anchors and scales) and every listed part has a PNG.
-          test "$(grep -c '_site/src/assets/units/root/[a-z0-9_]*\.png$' artifacts/pages-sha256.txt)" -eq 26
+          test "$(grep -c '_site/src/assets/units/root/[a-z0-9_]*\.png$' artifacts/pages-sha256.txt)" -eq 34
           test "$(grep -c '_site/src/assets/units/rock-chick/[a-z0-9_]*\.png$' artifacts/pages-sha256.txt)" -eq 35
-          test "$(grep -c '_site/src/assets/units/mushroom-snail/[a-z0-9_]*\.png$' artifacts/pages-sha256.txt)" -eq 25
+          test "$(grep -c '_site/src/assets/units/mushroom-snail/[a-z0-9_]*\.png$' artifacts/pages-sha256.txt)" -eq 28
           for s in root rock-chick mushroom-snail; do
             grep -q "_site/src/assets/units/$s/$s-parts\.json$" artifacts/pages-sha256.txt
             node -e "const fs=require('fs'),d='_site/src/assets/units/$s/',k=Object.keys(JSON.parse(fs.readFileSync(d+'$s-parts.json','utf8')).parts).sort().join(),p=fs.readdirSync(d).filter(f=>f.endsWith('.png')).map(f=>f.slice(0,-4)).sort().join();if(k!==p)throw Error('$s parts JSON and PNG files differ')"

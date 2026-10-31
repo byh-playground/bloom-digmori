@@ -52,9 +52,9 @@ class UnitRig{
   this.shells=!!this.slots.front.shellTop;this.leaves=!!this.slots.front.leaves;this.shell=!!this.slots.front.shell;
   if(!UNIT_WALKS.includes(this.walk))throw Error('동료 걷기 방식 누락: '+species);
   const need=[...UNIT_VIEWS.map(v=>'body_'+v),...['front','side'].flatMap(v=>UNIT_EXPRESSIONS.map(e=>'face_'+v+'_'+e)),...['front','side'].map(v=>'hat_'+v),'egg'];
-  if(species==='root')need.push(...['front','side'].flatMap(v=>[1,2,3,4].map(g=>'leaves_'+v+'_g'+g)));
+  if(species==='root')need.push(...UNIT_VIEWS.flatMap(v=>[...[1,2,3,4].map(g=>'leaves_'+v+'_g'+g),'sprout_'+v,'hat_'+v]));
   if(species==='rock-chick')need.push(...UNIT_VIEWS.flatMap(v=>['shell_top_'+v,'shell_bottom_'+v,'hat_'+v]),...['front','side'].flatMap(v=>['peek','peek_hurt','peek_sleep'].map(e=>'face_'+v+'_'+e)),...['iron','crystal','copper','gold'].map(o=>'ore_'+o));
-  if(species==='mushroom-snail')need.push(...UNIT_VIEWS.map(v=>'shell_'+v),...[1,2,3,4].map(g=>'shrooms_g'+g));
+  if(species==='mushroom-snail')need.push(...UNIT_VIEWS.flatMap(v=>['shell_'+v,'hat_'+v]),...[1,2,3,4].map(g=>'shrooms_g'+g),'shrooms_side_g4','shrooms_back_g4');
   for(const key of need){const p=this.parts[key];if(!p||!Array.isArray(p.anchor)||typeof this.scale[p.group]!=='number')throw Error('동료 부품 정보 누락: '+species+' '+key);}
   for(const v of UNIT_VIEWS)if(!this.slots[v])throw Error('동료 부품 위치 누락: '+species+' '+v);
  }
@@ -115,7 +115,7 @@ class UnitRig{
    ctx.save();ctx.translate(x*U,-y*U);if(o.r)ctx.rotate(o.r);if(o.sx||o.sy)ctx.scale(o.sx||1,o.sy||1);ctx.drawImage(im,-m.anchor[0]*s,-m.anchor[1]*s,im.width*s,im.height*s);ctx.restore();drawn.push(key);};
   // Sub-frame (shell, leaves…) at rig (x,y) whose children use local rig coordinates.
   const frame=(x,y,o,fn)=>{ctx.save();ctx.translate(x*U,-y*U);if(o.r)ctx.rotate(o.r);if(o.s)ctx.scale(o.s,o.s);fn();ctx.restore();};
-  const slot=this.slots[view],fv=view==='back'?'front':view,faceKey='face_'+view+'_'+p.face;
+  const slot=this.slots[view],faceKey='face_'+view+'_'+p.face;
   ctx.save();ctx.translate(origin.x,origin.y);if(look.flip)ctx.scale(-1,1);
   this.effect(ctx,p,U,'back',view);
   // Forward motion: sideways in the side view, toward/away from the camera in front/back.
@@ -123,9 +123,9 @@ class UnitRig{
   ctx.translate(fwdX*U,-p.bob*U);ctx.rotate(p.rot*(view==='side'?1:.35));ctx.scale(p.sx*zoom*stage.round[0],p.sy*zoom*stage.round[1]);
   const face=(at,dy=0)=>{if(view!=='back')P(faceKey,at[0],at[1]+dy,{s:stage.face});};
   if(this.leaves){
-   // Leaves grow from the crown: grade 1 leaves, 2 bud, 3 flower, 4 two flowers (leaves sheet). Baby: a small grade-1 sprout.
-   const [lx,ly]=slot.leaves;P('leaves_'+fv+'_g'+(baby?1:grade),lx,ly,{r:p.sway,s:baby?.55:1});
-   P('body_'+view,0,0);face(slot.face);if(boss)P('hat_'+fv,...slot.hat);
+   // Leaves grow from the crown: grade 1 leaves, 2 bud, 3 flower, 4 two flowers (leaves sheet). Baby: its own sprout part.
+   const [lx,ly]=slot.leaves;P(baby?'sprout_'+view:'leaves_'+view+'_g'+grade,lx,ly,{r:p.sway});
+   P('body_'+view,0,0);face(slot.face);if(boss)P('hat_'+view,...slot.hat);
   }else if(this.shells){
    // 껍질 쏙: the body sinks, the top shell drops and the bottom shell rises until only a strip with the eyes shows.
    const c=p.shell,[tx,ty]=slot.shellTop,[bx,by]=slot.shellBottom;
@@ -136,11 +136,12 @@ class UnitRig{
     if(boss)P('hat_'+view,...slot.hat);});
   }else{
    // Mushroom clusters on the shell: grade 1..4 = 1/2/3/5 mushrooms (shell sheet). The baby's shell is bare.
+   // A per-view cluster (shrooms_<view>_g<grade>) replaces the shared one where it was drawn (side/back grade 4).
    // Slot [x, y, scale]: the shell sheet draws the side view relatively larger than the turnaround, so each view carries its own fit.
-   const [sx,sy,ss=1]=slot.shell,shell=()=>frame(sx,sy,{s:p.shellScale*ss},()=>{P('shell_'+view,0,0);if(!baby)P('shrooms_g'+grade,(slot.shrooms[0]-sx)/ss,(slot.shrooms[1]-sy)/ss,{r:p.sway*.5});});
+   const [sx,sy,ss=1]=slot.shell,shell=()=>frame(sx,sy,{s:p.shellScale*ss},()=>{P('shell_'+view,0,0);if(!baby)P(this.parts['shrooms_'+view+'_g'+grade]?'shrooms_'+view+'_g'+grade:'shrooms_g'+grade,(slot.shrooms[0]-sx)/ss,(slot.shrooms[1]-sy)/ss,{r:p.sway*.5});});
    if(view==='front'){shell();P('body_front',0,0);face(slot.face);if(boss)P('hat_front',...slot.hat);}
    else if(view==='side'){P('body_side',0,0);shell();face(slot.face);if(boss)P('hat_side',...slot.hat);}
-   else{P('body_back',0,0);if(boss)P('hat_front',...slot.hat);shell();}
+   else{P('body_back',0,0);if(boss)P('hat_back',...slot.hat);shell();}
   }
   ctx.restore();
   ctx.save();ctx.translate(origin.x,origin.y);if(look.flip)ctx.scale(-1,1);this.effect(ctx,p,U,'front',view);ctx.restore();
