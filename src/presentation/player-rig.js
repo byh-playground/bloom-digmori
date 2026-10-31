@@ -12,13 +12,13 @@ const RIG_SWINGS=Object.freeze([[-20,40,-95],[-20,-130,55],[-20,15,-160]]);
 const RIG_ATTACK=Object.freeze({strikeStart:.16,strikeEnd:.24,rest:.8});
 // Equipment materials recolour their own part: helmet → cap, chestplate → jacket, boots → foot, held
 // weapon/tool → blade. Each entry is [hue°, saturation ×, value ×]; null keeps the authored colours.
-// base = parts no equipment touches. wood/leather = authored, stone = 돌, iron = 철, diamond = 청수정.
+// base = parts no equipment touches. leather = authored, wood = 나무 blade, stone = 돌, iron = 철, diamond = 청수정.
 const RIG_MATERIAL_COLOR=Object.freeze({
  base:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
- wood:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
+ wood:Object.freeze({cap:null,jacket:null,foot:null,blade:[30,.48,.86]}),
  leather:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
  stone:Object.freeze({cap:null,jacket:null,foot:null,blade:[30,.16,.74]}),
- iron:Object.freeze({cap:[222,.25,1.02],jacket:[24,.42,.88],foot:[222,.25,1.35],blade:null}),
+ iron:Object.freeze({cap:[222,.25,1.02],jacket:[214,.3,.86],foot:[222,.25,1.35],blade:null}),
  diamond:Object.freeze({cap:[214,1.2,1.05],jacket:[190,.8,1.05],foot:[192,1.2,1.65],blade:[195,.38,1.04]})
 });
 const RIG_PART_KIND=key=>/_cap$/.test(key)?'cap':/_jacket$/.test(key)?'jacket':/_foot$/.test(key)?'foot':null;
