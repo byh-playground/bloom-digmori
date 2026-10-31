@@ -41,7 +41,7 @@ class Companions {
   return this.assign(a,this.data.units[c.id],{location:c.location,slot:c.slot});
  }
  action(a){const u=this.ready(a);if(!u||!SPECIES[u.kind].capabilities.attack)return null;const def=Combat.weapon(a,this.sim);
-  return {name:'light',weapon:def.mode==='ball'?'bow':'fist',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'companionClaw',motion:def.mode==='ball'?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep(def.damage+(a.rpg?.skills.might||0)*5,STAT_SCALE.damage),heavy:!!def.heavy,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,sequence:0};
+  return {name:'light',weapon:def.mode==='ball'?'ball':'fist',weaponKey:u.id,kind:def.mode==='ball'?'companionBall':'companionClaw',motion:def.mode==='ball'?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep(def.damage+(a.rpg?.skills.might||0)*5,STAT_SCALE.damage),heavy:!!def.heavy,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,sequence:0};
  }
  start(a,act){const u=this.data.units[act.companionId];if(!u||this.ready(a)!==u)return false;u.cooldown=SPECIES[u.kind].capabilities.attack.cooldown;return true;}
  launched(shot){const u=this.data.units[shot.companionId];if(u){u.phase='flight';u.pos={...shot.pos};}}
