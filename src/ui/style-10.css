@@ -1,0 +1,11 @@
+
+#error-launch{font-size:11px;border-color:#c6a067;background:#3d2e2afa;color:#ffe4b2}
+#error-dialog{position:fixed;inset:0;z-index:250;background:#08130ecc;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
+#error-dialog .error-card{width:min(720px,97vw);max-height:94dvh;overflow:auto;background:#1a2922;border:1px solid #c59f69;border-radius:12px;padding:16px 18px;box-shadow:0 14px 52px #0009}
+#error-dialog h2{margin:0 0 6px;color:#fff0d4;font-size:19px}#error-dialog p{font-size:12px;color:#ced9cb;line-height:1.6;margin:7px 0}
+#error-summary{white-space:pre-wrap;font-size:12px;color:#ffcfb7;font-weight:700;margin:7px 0;overflow-wrap:anywhere}
+#error-text{width:100%;height:min(43dvh,320px);resize:vertical;display:block;background:#0e1a16;color:#d3ead4;border:1px solid #628276;border-radius:5px;font:11px/1.5 Consolas,monospace;white-space:pre;overflow:auto;padding:10px}
+#error-dialog .error-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px;align-items:center}
+#error-copy{background:#b3c997;color:#14271a;font-weight:800}
+#error-copy-status{font-size:11px;color:#e5e1b3;min-height:16px}
+@media(pointer:coarse){#error-dialog .error-card{padding:9px 12px}#error-text{height:29dvh}#error-dialog h2{font-size:16px}}

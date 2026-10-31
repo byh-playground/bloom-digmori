@@ -23,13 +23,14 @@ jobs:
           test -s index.html
           test -f .nojekyll
           test -d src
+          test -d previews
           find src -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -r -n1 node --check
           git diff --check
       - name: Copy source bytes without building
         run: |
           mkdir -p _site artifacts
           cp index.html .nojekyll _site/
-          cp -R src _site/
+          cp -R src previews _site/
           find _site -type f -exec sha256sum {} + | sort > artifacts/pages-sha256.txt
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
