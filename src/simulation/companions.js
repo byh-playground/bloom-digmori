@@ -50,7 +50,7 @@ class Companions {
   return false;
  }
  action(a){const u=this.ready(a);if(!u||!SPECIES[u.kind].capabilities.attack)return null;const def=Combat.weapon(a,this.sim),ball=def.mode==='ball';
-  return {name:'light',weapon:ball?'ball':'fist',weaponKey:u.id,kind:ball?'companionBall':'companionMelee',motion:ball?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep(def.damage+(a.rpg?.skills.might||0)*5,STAT_SCALE.damage),heavy:!!def.heavy,impulse:5,enemy:false,dir:{...a.facing},hits:[],touched:[],fired:false,sequence:0};
+  return {name:'light',weapon:ball?'ball':'fist',weaponKey:u.id,kind:ball?'companionBall':'companionMelee',motion:ball?'sweep':'clamp',companionId:u.id,companionKind:u.kind,companionMode:def.mode,projectile:def.projectile?{...def.projectile}:null,owner:a.id,combo:0,comboCount:1,wind:def.wind,active:def.active,recovery:def.recovery,reach:def.reach,arc:def.arc,damage:statStep(def.damage+(a.rpg?.skills.might||0)*5,STAT_SCALE.damage),heavy:!!def.heavy,impulse:5,enemy:false,dir:aimDirection(a),hits:[],touched:[],fired:false,sequence:0};
  }
  start(a,act){const u=this.data.units[act.companionId];if(!u||this.ready(a)!==u)return false;u.cooldown=SPECIES[u.kind].capabilities.attack.cooldown;return true;}
  launched(shot){const u=this.data.units[shot.companionId];if(u){u.phase='flight';u.pos={...shot.pos};}}
@@ -81,12 +81,12 @@ class Companions {
  // Combat units walk after their owner on the owner's ground level (no body, so they never block terrain or attacks).
  // The selected combat unit stands at the strike root beside the owner; the rest trail behind in rows of three.
  // Far behind (teleport, respawn) they rejoin at once.
- follow(a,u,index){const f=V.norm({x:a.facing.x,y:0,z:a.facing.z}),side={x:-f.z,y:0,z:f.x},row=Math.floor(index/3),col=[0,-1,1][index%3];
+ follow(a,u,index){const f=bodyHeading(a),side={x:-f.z,y:0,z:f.x},row=Math.floor(index/3),col=[0,-1,1][index%3];
   const to=index<0?{...companionRoot(a),y:a.pos.y}:{x:a.pos.x-f.x*(1.6+row*1.2)+side.x*col*1.1,y:a.pos.y,z:a.pos.z-f.z*(1.6+row*1.2)+side.z*col*1.1};
   const delta=V.sub(to,u.pos),dist=V.len(delta),dt=CFG.stepMs/1000;
   if(dist>16){u.pos=to;u.previous={...to};u.velocity={x:0,y:0,z:0};}
   else if(dist>.08){const step=Math.min(dist,(dist>3?7:4.2)*dt);u.velocity=V.scale(delta,step/dist/dt);u.pos=V.add(u.pos,V.scale(delta,step/dist));if(Math.hypot(delta.x,delta.z)>.05)u.yaw=Math.atan2(-delta.x,-delta.z);}
-  else{u.velocity={x:0,y:0,z:0};u.yaw=Math.atan2(-a.facing.x,-a.facing.z);}
+  else{u.velocity={x:0,y:0,z:0};u.yaw=Math.atan2(-f.x,-f.z);}
  }
  // ---- Ranch (grid walk) ----
  stepTicks(u){const t=RANCH_RULES.stepTicks[u.kind];return u.stage==='adult'?t:Math.ceil(t*5/4);}

@@ -3,18 +3,20 @@ import {chromium} from 'playwright';
 import fs from 'node:fs';
 import http from 'node:http';
 import assert from 'node:assert/strict';
+import {CURSOR_HELPERS} from './cursor-helpers.mjs';
 
 // G2 (0.34.0) companion flow: units come only from eggs, eggs only from boss kills (D-107), and are raised on a ranch
 // (D-103…D-106). This test drives the real path with browser input — boss kill → egg drop → pick up → craft fences, a gate,
 // a chest and a merge potion at a workbench → build a fence pen with a gate (right-click) → place the egg in it → hatch →
-// throw food (Q) until the baby is an adult, twice → throw the merge potion (grade 2) → chest labor fills the chest →
+// throw food (G) until the baby is an adult, twice → throw the merge potion (grade 2) → chest labor fills the chest →
 // save/reload — plus deterministic checks of the boss structures for seed 190725, the egg rule, enclosure detection and
 // the old base-storage save migration.
 // Fixtures (direct state writes) are limited to: placing a wild/boss near the player, lowering a boss's HP and pausing
 // its attacks so a short fight is reproducible, shortening an egg's remaining hatch time (30 s in play) and a labor
 // block's remaining regrowth time (20 s in play), swapping an item into hotbar slot 9 (same as dragging it there), and
 // writing a 0.33-format base (storage + working unit) into a save to check its migration. Set SHOTS=<dir> to also save
-// review screenshots of the ranch flow.
+// review screenshots of the ranch flow. Since 0.35.2 (D-114) every aim is the mouse cursor or a touch point on the block
+// face or unit (found with the game's own pick, tests/cursor-helpers.mjs), and walking uses WASD in screen directions.
 const Bloom_EGG_MS=30000,began=Date.now(),report={checks:[]},errors=[],SHOTS=process.env.SHOTS||null;
 const PEN=Object.freeze({x0:-4,x1:2,z0:-3,z1:2,y:5,gate:Object.freeze({x:-4,z:0})});// seed 190725's flat grass at spawn
 const inPen=c=>c&&c.x>PEN.x0&&c.x<PEN.x1&&c.z>PEN.z0&&c.z<PEN.z1&&c.y===PEN.y;
@@ -28,20 +30,30 @@ const owned=p=>p.evaluate(()=>Bloom.app.sim.companions.owned(Bloom.app.localId))
 const observe=(p,id)=>p.evaluate(id=>{const a=Bloom.app.actor(),c=Bloom.app.sim.actors[id];return c&&{id:c.id,kind:c.speciesId,targetId:c.targetId,hp:c.hp,dead:c.dead,day:!Bloom.app.sim.night(),distance:Math.hypot(a.pos.x-c.pos.x,a.pos.z-c.pos.z),pos:{...c.pos},player:{...a.pos}}},id);
 const panelFit=p=>p.evaluate(()=>{const el=document.querySelector('.companion-panel'),r=el.getBoundingClientRect();return{rect:{x:r.x,y:r.y,w:r.width,h:r.height},client:el.clientHeight,scroll:el.scrollHeight,buttons:[...el.querySelectorAll('button')].filter(b=>b.getClientRects().length).map(b=>({h:b.getBoundingClientRect().height,disabled:b.disabled}))}});
 const pause=(p,ms)=>p.waitForTimeout(ms);
-// Walk with the keyboard (W plus sidesteps when blocked) until the target point is within stopAt metres.
+// Walk with WASD (screen directions of the fixed camera, D-114) toward the target point until it is within stopAt metres;
+// sidestep when blocked. Short taps near the goal.
+const walkKeys=(p,s,turn=0)=>p.evaluate(({player,pos,turn})=>{const c=Bloom.app.renderer.camera,dx=pos.x-player.x,dz=pos.z-player.z,l=Math.hypot(dx,dz)||1,a=turn*Math.PI/2,ux=dx/l,uz=dz/l,wx=ux*Math.cos(a)-uz*Math.sin(a),wz=ux*Math.sin(a)+uz*Math.cos(a),x=wx*Math.cos(c.yaw)-wz*Math.sin(c.yaw),z=wx*Math.sin(c.yaw)+wz*Math.cos(c.yaw),k=[];if(x>.38)k.push('KeyD');if(x<-.38)k.push('KeyA');if(z<-.38)k.push('KeyW');if(z>.38)k.push('KeyS');return k;},{...s,turn});
 async function walkTo(p,target,limit=24000,stopAt=3.5){
- const start=Date.now();let previous=Infinity,stale=Date.now(),side='KeyD';await p.locator('#world').focus();
+ const start=Date.now();let previous=Infinity,stale=Date.now(),side=1;await p.locator('#world').focus();
  while(Date.now()-start<limit){
   const s=await target();if(!s)throw Error('walk target vanished');if(s.distance<=stopAt)return s;
-  await p.evaluate(({player,pos})=>{const c=Bloom.app.renderer.camera;c.yaw=Math.atan2(-(pos.x-player.x),-(pos.z-player.z));c.pitch=.12;},s);
-  if(s.distance<previous-.06){previous=s.distance;stale=Date.now();}else if(Date.now()-stale>1200){await p.keyboard.down(side);await pause(p,600);await p.keyboard.up(side);side=side==='KeyD'?'KeyA':'KeyD';stale=Date.now();previous=Infinity;continue;}
-  await p.keyboard.down('KeyW');await pause(p,170);await p.keyboard.up('KeyW');await pause(p,25);
+  if(s.distance<previous-.06){previous=s.distance;stale=Date.now();}else if(Date.now()-stale>1200){const keys=await walkKeys(p,s,side);for(const k of keys)await p.keyboard.down(k);await pause(p,600);for(const k of keys)await p.keyboard.up(k);side=-side;stale=Date.now();previous=Infinity;continue;}
+  const keys=await walkKeys(p,s),ms=Math.round(clampMs((s.distance-stopAt*.5)/4.6*1000));for(const k of keys)await p.keyboard.down(k);await pause(p,ms);for(const k of keys)await p.keyboard.up(k);await pause(p,25);
  }
  throw Error('could not walk within '+stopAt+'m; last '+JSON.stringify(await target()));
 }
+const clampMs=ms=>Math.max(40,Math.min(170,ms));
+// Turn the fixed camera with Q/E (45° steps) so it looks toward a world point.
+async function faceCamera(p,pos){const turns=await p.evaluate(pos=>{const a=Bloom.app.actor(),c=Bloom.app.renderer.camera,want=((Math.round(Math.atan2(-(pos.x-a.pos.x),-(pos.z-a.pos.z))/(Math.PI/4))%8)+8)%8,d=((want-c.yawStep)%8+8)%8;return d<=4?d:d-8;},pos);
+ await p.locator('#world').focus();for(let i=0;i<Math.abs(turns);i++)await p.keyboard.press(turns>0?'KeyQ':'KeyE');await pause(p,320);}
 const approach=(p,id,limit,stopAt)=>walkTo(p,()=>observe(p,id),limit,stopAt);
-// Aim the camera at the target's body centre (wild units are small, so a level look passes over them).
-async function clickAttack(p,id){const s=await observe(p,id);await p.evaluate(({id,player,pos})=>{const c=Bloom.app.renderer.camera,t=Bloom.app.sim.actors[id],d=Math.hypot(pos.x-player.x,pos.z-player.z);c.yaw=Math.atan2(-(pos.x-player.x),-(pos.z-player.z));c.pitch=Math.atan2(player.y+Bloom.CFG.player.eyeHeight-(pos.y+(t?.offset||.6)),Math.max(.5,d));},{id,...s});await pause(p,120);await p.mouse.move(683,450);await p.mouse.down();await pause(p,90);await p.mouse.up();}
+// Put the cursor on the target unit (the game's pick must report it) and left-click: the strike goes toward the cursor.
+async function clickAttack(p,id){let at=null;for(let i=0;i<15&&!at;i++){at=await p.evaluate(id=>window.__entityScreen(id),id);if(!at)await pause(p,80);}if(!at)throw Error('unit not under any cursor point: '+JSON.stringify(await observe(p,id)));
+ await p.mouse.move(at.x,at.y);await pause(p,60);await p.mouse.down();await pause(p,90);await p.mouse.up();}
+// A long touch press (the right click on touch screens) at a screen point.
+async function longPress(p,x,y){const cdp=await p.context().newCDPSession(p);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:7}]});await pause(p,600);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();}
+// A grass top face 2–3 m from the player that the cursor can reach (for setting an egg down).
+const groundAhead=p=>p.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain;for(const r of [2,3])for(const [dx,dz]of [[0,-1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1]]){const x=Math.floor(a.pos.x)+dx*r,z=Math.floor(a.pos.z)+dz*r,y=t.height(x,z);if(!t.isSolid(t.get(x,y,z))||t.get(x,y+1,z)||t.get(x,y+2,z)||Math.abs(y+1-a.pos.y)>.6)continue;const s=window.__faceScreen({x,y,z},{x:0,y:1,z:0});if(s)return{x,y,z,screen:s};}return null;});
 // from: the first angle tried (radians, 0 = +x), so a fixture can put the wild unit on a chosen side.
 async function spawnSpecies(p,kind,from=0){
  return p.evaluate(({kind,from})=>{const sim=Bloom.app.sim,player=Bloom.app.actor();for(const a of Object.values(sim.actors).filter(a=>a.speciesId)){sim.physics.removeBody(a);delete sim.actors[a.id];}
@@ -65,8 +77,8 @@ async function pickUp(p,item){
 async function placeAndHatch(p,item,mobile=false){
  // A full hotbar puts the egg in the backpack; swap it into hotbar slot 9 (inventory fixture, same as dragging it there).
  const before=await p.evaluate(()=>Bloom.app.sim.companions.all().length),slot=await p.evaluate(item=>{const s=Bloom.app.actor().inventory.slots,i=s.findIndex(s=>s?.id===item);if(i<9)return i;[s[8],s[i]]=[s[i],s[8]];return 8;},item);
- await p.locator('#world').focus();await p.keyboard.press('Digit'+(slot+1));await p.evaluate(()=>{const c=Bloom.app.renderer.camera;c.pitch=.78;});await pause(p,250);
- if(mobile){const box=await p.locator('#world').boundingBox();await p.touchscreen.tap(box.width/2,box.height*.62);}else{await p.locator('#world').focus();await p.mouse.click(683,520,{button:'right'});}
+ await p.locator('#world').focus();await p.keyboard.press('Digit'+(slot+1));await pause(p,250);const ground=await groundAhead(p);assert(ground,'no ground face for the egg');
+ if(mobile)await longPress(p,ground.screen.x,ground.screen.y);else{await p.locator('#world').focus();await p.mouse.click(ground.screen.x,ground.screen.y,{button:'right'});}
  await p.waitForFunction(()=>Object.keys(Bloom.app.sim.eggs).length>0,null,{timeout:4000});
  const egg=await p.evaluate(()=>{const sim=Bloom.app.sim,e=Object.values(sim.eggs)[0];return{...e,block:Bloom.BLOCKS[sim.terrain.get(e.x,e.y,e.z)].id,below:Bloom.BLOCKS[sim.terrain.get(e.x,e.y-1,e.z)].id,hatchMs:(e.hatchTick-e.placedTick)*Bloom.CFG.stepMs,sample:Bloom.app.renderer.unitRig.samples.find(s=>s.role==='egg')};});
  await p.waitForFunction(()=>Bloom.app.renderer.unitRig.samples.some(s=>s.role==='egg'&&s.egg),null,{timeout:4000});
@@ -91,14 +103,12 @@ async function saveAndReload(p,expectedId,expectSlot){
 const shot=async(p,name)=>{if(SHOTS){fs.mkdirSync(SHOTS,{recursive:true});await p.screenshot({path:SHOTS+'/'+name+'.png'});}};
 // Put a bag item into hotbar slot 9 (inventory fixture, the same as dragging it there) and select it with the keyboard.
 async function hold(p,item){const ok=await p.evaluate(item=>{const s=Bloom.app.actor().inventory.slots,i=s.findIndex(s=>s?.id===item);if(i<0)return false;if(i!==8)[s[8],s[i]]=[s[i],s[8]];return true;},item);assert(ok,'no '+item+' in the bag');await p.locator('#world').focus();await p.keyboard.press('Digit9');await p.waitForFunction(item=>Bloom.app.actor().inventory.selected===8&&Bloom.app.actor().inventory.slots[8]?.id===item,item,{timeout:3000});}
-// Turn the camera so the eye ray (with the same input quantization the simulation applies) hits face n of block b.
-const aimAt=(p,b,n)=>p.evaluate(({b,n})=>{const app=Bloom.app,a=app.actor(),eye={x:a.pos.x,y:a.pos.y+Bloom.CFG.player.eyeHeight,z:a.pos.z};
- for(const [u,v]of [[0,0],[.3,0],[-.3,0],[0,.3],[0,-.3],[.3,.3],[-.3,-.3],[.3,-.3],[-.3,.3],[.42,0],[-.42,0],[0,.42],[0,-.42]]){
-  const pt={x:b.x+.5+n.x*.5+(n.x?0:u),y:b.y+.5+n.y*.5+(n.y?0:n.x?v:v),z:b.z+.5+n.z*.5+(n.z?0:n.x?u:v)},d={x:pt.x-eye.x,y:pt.y-eye.y,z:pt.z-eye.z},len=Math.hypot(d.x,d.y,d.z);if(len>Bloom.CFG.reach-.05)continue;
-  const yaw=Math.atan2(-d.x,-d.z),pitch=Math.asin(-d.y/len),q=Bloom.decodeInput(Bloom.encodeInputObject({...Bloom.neutralInput(),yaw,pitch})),hit=app.sim.aim({...a,facing:direction(q.yaw,q.pitch)});
-  if(hit&&hit.x===b.x&&hit.y===b.y&&hit.z===b.z&&hit.normal.x===n.x&&hit.normal.y===n.y&&hit.normal.z===n.z){app.renderer.camera.yaw=yaw;app.renderer.camera.pitch=pitch;return true;}}
- return false;},{b,n});
-async function rightClick(p,b,n,expect,arg){assert(await aimAt(p,b,n),'cannot aim at '+JSON.stringify({b,n}));await pause(p,70);await p.locator('#world').focus();await p.mouse.click(683,384,{button:'right'});await p.waitForFunction(expect,arg,{timeout:3000});}
+// Move the mouse onto face n of block b (the game's own pick confirms it) and wait until the simulation holds that target
+// within reach. Returns the screen point, or null.
+async function aimAt(p,b,n){for(let i=0;i<15;i++){const at=await p.evaluate(({b,n})=>window.__faceScreen(b,n),{b,n});if(at){await p.mouse.move(at.x,at.y);
+  const ok=await p.waitForFunction(({b,n})=>{const t=Bloom.app.sim.aim(Bloom.app.actor());return t&&t.x===b.x&&t.y===b.y&&t.z===b.z&&t.normal.x===n.x&&t.normal.y===n.y&&t.normal.z===n.z;},{b,n},{timeout:1500}).then(()=>true,()=>false);if(ok)return at;}await pause(p,80);}
+ return null;}
+async function rightClick(p,b,n,expect,arg){const at=await aimAt(p,b,n);assert(at,'cannot aim at '+JSON.stringify({b,n}));await p.mouse.click(at.x,at.y,{button:'right'});await p.waitForFunction(expect,arg,{timeout:3000});}
 const blockAt=(p,x,y,z)=>p.evaluate(({x,y,z})=>Bloom.BLOCKS[Bloom.app.sim.terrain.get(x,y,z)].id,{x,y,z});
 const walkPoint=(p,pt,stopAt=.35)=>walkTo(p,()=>p.evaluate(pt=>{const a=Bloom.app.actor();return{distance:Math.hypot(a.pos.x-pt.x,a.pos.z-pt.z),pos:{x:pt.x,y:a.pos.y,z:pt.z},player:{...a.pos}};},pt),15000,stopAt);
 // Place the selected block on the floor cell (x,PEN.y,z) by right-clicking the top face of the grass under it.
@@ -108,8 +118,8 @@ async function craft(p,recipe,times){await p.locator('[data-recipe="'+recipe+'"]
  const out=Bloom_RECIPE_OUT[recipe];for(let n=0;n<times;n++){const before=await p.evaluate(()=>Bloom.app.actor().inventory.cursor?.count||0);await p.locator('#craft-result').click();await p.waitForFunction(b=>(Bloom.app.actor().inventory.cursor?.count||0)>b,before,{timeout:3000});}
  const slot=await p.evaluate(()=>Bloom.app.actor().inventory.slots.findIndex((s,i)=>i>=9&&!s));await p.locator('#inventory-grid [data-area="bag"][data-index="'+slot+'"]').click();await p.waitForFunction(({slot,out})=>Bloom.app.actor().inventory.slots[slot]?.id===out&&!Bloom.app.actor().inventory.cursor,{slot,out},{timeout:3000});}
 const Bloom_RECIPE_OUT={planks:'planks',sticks:'stick',storageChest:'storageChest',fenceGate:'fenceGate',fence:'fence',mergePotion:'mergePotion'};
-// Throw one held food forward (Q) toward a floor point.
-async function throwFood(p,pt){await p.evaluate(pt=>{const a=Bloom.app.actor(),c=Bloom.app.renderer.camera;c.yaw=Math.atan2(-(pt.x-a.pos.x),-(pt.z-a.pos.z));c.pitch=.18;},pt);await pause(p,60);await p.locator('#world').focus();await p.keyboard.press('KeyQ');}
+// Throw one held food (G) toward a floor point under the cursor.
+async function throwFood(p,pt){const at=await p.evaluate(pt=>window.__pointScreen({x:pt.x,y:Bloom.app.actor().pos.y,z:pt.z}),pt);await p.mouse.move(at.x,at.y);await pause(p,90);await p.locator('#world').focus();await p.keyboard.press('KeyG');}
 const ranchState=(p,ids)=>p.evaluate(ids=>ids.map(id=>{const u=Bloom.app.sim.companions.data.units[id];return u&&{id,stage:u.stage,grade:u.grade,fed:u.fed,location:u.location,cell:u.cell,phase:u.phase,task:u.task};}),ids);
 // Page-side sampler: every 50 ms, each tracked ranch unit's cell must be inside the pen.
 const watchPen=(p,ids)=>p.evaluate(({ids,pen})=>{clearInterval(window.__penTimer);window.__penSamples=0;window.__penEscapes=[];window.__penIds=ids;window.__penTimer=setInterval(()=>{for(const id of window.__penIds){const u=Bloom.app.sim.companions.data.units[id];if(!u||u.location!=='ranch'||!u.cell)continue;window.__penSamples++;for(const c of [u.cell,u.next].filter(Boolean))if(!(c.x>pen.x0&&c.x<pen.x1&&c.z>pen.z0&&c.z<pen.z1&&c.y===pen.y))window.__penEscapes.push({id,c,tick:Bloom.app.sim.tick});}},50);},{ids,pen:PEN});
@@ -120,10 +130,10 @@ try{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
  // 1. A fresh normal world: grassland wildlife (뿌리) spawns as plain wildlife and the panel has no recruit list.
- const normal=await browser.newPage({viewport:{width:1366,height:900}});normal.setDefaultTimeout(15000);normal.on('pageerror',e=>errors.push(e.message));await normal.goto('http://127.0.0.1:'+server.address().port+'/',{timeout:45000});await boot(normal);
+ const normal=await browser.newPage({viewport:{width:1366,height:900}});normal.setDefaultTimeout(15000);normal.on('pageerror',e=>errors.push(e.message));await normal.addInitScript(CURSOR_HELPERS);await normal.goto('http://127.0.0.1:'+server.address().port+'/',{timeout:45000});await boot(normal);
  await normal.waitForFunction(()=>!Bloom.app.sim.night()&&Object.values(Bloom.app.sim.actors).some(a=>a.speciesId&&!a.dead),null,{timeout:30000});
- const wild=await normal.evaluate(()=>{const a=Object.values(Bloom.app.sim.actors).find(a=>a.speciesId&&!a.dead),p=Bloom.app.actor();Bloom.app.renderer.camera.yaw=Math.atan2(-(a.pos.x-p.pos.x),-(a.pos.z-p.pos.z));Bloom.app.renderer.camera.pitch=.12;return{id:a.id,kind:a.speciesId,realm:Bloom.app.sim.terrain.realm(a.pos.x,a.pos.y,a.pos.z),state:a.wildState,hostile:a.enemy,distance:Math.hypot(a.pos.x-p.pos.x,a.pos.z-p.pos.z),verticalDelta:Math.abs(a.pos.y-p.pos.y),spawn:Bloom.CFG.creatures};});
- assert.equal(wild.kind,'root');assert.equal(wild.realm,'grassland');assert.equal(wild.state,'neutral');assert.equal(wild.hostile,false);assert(wild.verticalDelta<=3.5);assert(wild.distance>=7.5);
+ const wild=await normal.evaluate(()=>{const a=Object.values(Bloom.app.sim.actors).find(a=>a.speciesId&&!a.dead),p=Bloom.app.actor();return{id:a.id,pos:{...a.pos},kind:a.speciesId,realm:Bloom.app.sim.terrain.realm(a.pos.x,a.pos.y,a.pos.z),state:a.wildState,hostile:a.enemy,distance:Math.hypot(a.pos.x-p.pos.x,a.pos.z-p.pos.z),verticalDelta:Math.abs(a.pos.y-p.pos.y),spawn:Bloom.CFG.creatures};});
+ await faceCamera(normal,wild.pos);assert.equal(wild.kind,'root');assert.equal(wild.realm,'grassland');assert.equal(wild.state,'neutral');assert.equal(wild.hostile,false);assert(wild.verticalDelta<=3.5);assert(wild.distance>=7.5);
  await normal.waitForFunction(id=>{const label=document.querySelector('.enemy-label[data-actor-id="'+id+'"]');return !!label&&label.textContent.includes('뿌리 · 야생')&&label.classList.contains('wild')},wild.id,{timeout:5000});
  await normal.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.role==='wild'&&s.species==='root'),wild.id,{timeout:5000});
  await normal.locator('#companions-btn').click();const panel=await normal.evaluate(()=>({candidates:!!document.querySelector('#companion-candidates,.companion-encounters,[data-candidate-id]'),buttons:[...document.querySelectorAll('#companions button')].map(b=>b.textContent.trim()),empty:document.querySelector('#companion-cards').textContent}));
@@ -132,7 +142,7 @@ try{
  await normal.waitForTimeout(8000);const population=await normal.evaluate(()=>{const p=Bloom.app.actor(),wild=Object.values(Bloom.app.sim.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey);return{total:wild.length,nearby:wild.filter(a=>Math.hypot(a.pos.x-p.pos.x,a.pos.z-p.pos.z)<Bloom.CFG.creatures.encounterRadius).length,kinds:[...new Set(wild.map(a=>a.speciesId))]};});
  assert(population.total<=wild.spawn.maxWild);assert(population.nearby<=wild.spawn.perPlayer);pass('live exploration keeps wildlife within the world/player caps',population);await normal.close();
 
- const pc=await browser.newPage({viewport:{width:1366,height:768}});pc.setDefaultTimeout(15000);pc.on('pageerror',e=>errors.push(e.message));
+ const pc=await browser.newPage({viewport:{width:1366,height:768}});pc.setDefaultTimeout(15000);pc.on('pageerror',e=>errors.push(e.message));await pc.addInitScript(CURSOR_HELPERS);
  await pc.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(pc);
  // 2. Deterministic world checks for seed 190725: one of each boss structure within reach of spawn, the voxels they are
  // built from, the boss each wakes, the cave realm's rock chicks, and the D-107 egg rule.
@@ -192,10 +202,10 @@ try{
  await walkPoint(pc,{x:-1.6,z:-.4});
  const gateCell={x:PEN.gate.x,y:PEN.y,z:PEN.gate.z},isBlock=id=>g=>Bloom.BLOCKS[Bloom.app.sim.terrain.get(g.x,g.y,g.z)].id===g.id;
  const region=()=>pc.evaluate(()=>{const r=Bloom.app.sim.ranch.region(-1,5,0);return{open:r.open,cells:r.cells.size};});
- await rightClick(pc,gateCell,{x:1,y:0,z:0},isBlock(),{...gateCell,id:'fenceGateOpen'});const opened=await region();
- await rightClick(pc,gateCell,{x:1,y:0,z:0},isBlock(),{...gateCell,id:'fenceGate'});const pen=await region();
+ await rightClick(pc,gateCell,{x:0,y:1,z:0},isBlock(),{...gateCell,id:'fenceGateOpen'});const opened=await region();
+ await rightClick(pc,gateCell,{x:0,y:1,z:0},isBlock(),{...gateCell,id:'fenceGate'});const pen=await region();
  assert(opened.open&&!pen.open&&pen.cells===20,'enclosure: '+JSON.stringify({opened,pen}));
- await pc.evaluate(()=>{const c=Bloom.app.renderer.camera;c.yaw=Math.PI/2;c.pitch=.62;c.distance=10;});await pause(pc,400);await shot(pc,'01-pen-fence-gate');
+ await pc.evaluate(()=>Bloom.app.renderer.setZoom(10));await pause(pc,400);await shot(pc,'01-pen-fence-gate');
  pass('21 fences and a gate are placed by right-click; the open gate opens the region and the closed gate makes a 20-cell pen',{opened,pen});
  // 4d. The boss egg is set down inside the pen and hatches into a ranch baby that stays in the pen.
  const hatchAt=async(item,x,z)=>{await hold(pc,item);const before=await pc.evaluate(()=>Bloom.app.sim.companions.all().length);await placeOn(pc,x,z,item);
@@ -210,7 +220,8 @@ try{
  // 4e. D-105: thrown 열매 (Q) inside the pen; the baby walks to each one and eats it, three bites make it an adult.
  // One throw per bite (thrown drops can bounce off each other back to the thrower); each must be eaten before the next.
  const dumpBite=async id=>Error('no bite: '+JSON.stringify(await ranchState(pc,[id]))+' '+JSON.stringify(await pc.evaluate(()=>({player:Bloom.app.actor().pos,drops:Object.values(Bloom.app.sim.drops).map(d=>[d.id,d.item,d.count,d.pos])}))));
- const view=(id,pitch,distance)=>pc.evaluate(({id,pitch,distance})=>{const u=Bloom.app.sim.companions.data.units[id],a=Bloom.app.actor(),c=Bloom.app.renderer.camera;c.yaw=Math.atan2(-(u.pos.x-a.pos.x),-(u.pos.z-a.pos.z));c.pitch=pitch;c.distance=distance;},{id,pitch,distance});
+ // Review screenshots only zoom the fixed camera (pitch is fixed since 0.35.2; the argument is kept for the call sites).
+ const view=(id,pitch,distance)=>pc.evaluate(distance=>Bloom.app.renderer.setZoom(distance),distance);
  const feed=async(id,label)=>{await hold(pc,'food');
   for(let bite=1;bite<=3;bite++){await throwFood(pc,{x:1.5,z:-.4+(bite-2)*.9});
    await pc.waitForFunction(id=>Bloom.app.sim.companions.data.units[id]?.task==='eat',id,{timeout:6000}).catch(async()=>{throw await dumpBite(id);});
@@ -224,8 +235,8 @@ try{
  await pc.locator('#debug-kit').dispatchEvent('click');const second=(await hatchAt('rootEgg',-2,1)).unit;await watchPen(pc,[unitId,second.id]);await feed(second.id,null);
  // 4g. D-104: both adults follow the held food to the player, then the thrown merge potion makes one grade-2 root.
  await hold(pc,'food');await pc.waitForFunction(ids=>ids.every(id=>{const u=Bloom.app.sim.companions.data.units[id],a=Bloom.app.actor();return Math.hypot(u.pos.x-a.pos.x,u.pos.z-a.pos.z)<1.9&&!u.next;}),[unitId,second.id],{timeout:12000});
- // Aim steeply down toward the pair's midpoint, so the splash (3 m) lands between them.
- await hold(pc,'mergePotion');await pc.evaluate(ids=>{const a=Bloom.app.actor(),us=ids.map(id=>Bloom.app.sim.companions.data.units[id]),m={x:(us[0].pos.x+us[1].pos.x)/2,z:(us[0].pos.z+us[1].pos.z)/2},c=Bloom.app.renderer.camera;if(Math.hypot(m.x-a.pos.x,m.z-a.pos.z)>.2)c.yaw=Math.atan2(-(m.x-a.pos.x),-(m.z-a.pos.z));c.pitch=1.2;},[unitId,second.id]);await pause(pc,80);await pc.locator('#world').focus();await pc.mouse.click(683,384,{button:'right'});
+ // Put the cursor on the floor between the pair, so the splash (3 m) lands between them.
+ await hold(pc,'mergePotion');const mid=await pc.evaluate(ids=>{const a=Bloom.app.actor(),us=ids.map(id=>Bloom.app.sim.companions.data.units[id]);return window.__pointScreen({x:(us[0].pos.x+us[1].pos.x)/2,y:a.pos.y,z:(us[0].pos.z+us[1].pos.z)/2});},[unitId,second.id]);await pc.mouse.move(mid.x,mid.y);await pause(pc,120);await pc.locator('#world').focus();await pc.mouse.click(mid.x,mid.y,{button:'right'});
  await pc.waitForFunction(id=>!Bloom.app.sim.companions.data.units[id],second.id,{timeout:5000});await view(unitId,.9,6);await pause(pc,120);await shot(pc,'04-potion-splash-merge');
  const merged=(await ranchState(pc,[unitId]))[0],mergeCount=await pc.evaluate(()=>Bloom.app.sim.companions.owned('local').length);assert.deepEqual([merged.grade,merged.stage,mergeCount,(await owned(pc))[0].id],[2,'adult',1,unitId]);
  pass('a thrown merge potion splashes the two grade-1 adults; the lower unit id keeps its place as one grade-2 unit',{merged,consumed:second.id});
@@ -235,7 +246,7 @@ try{
  await pc.waitForFunction(()=>Object.values(Bloom.app.sim.chests).some(c=>c.slots.some(Boolean)),null,{timeout:20000});
  const regrow=await pc.evaluate(()=>{const sim=Bloom.app.sim,g=Object.values(sim.regrow);for(const r of g)r.tick=sim.tick+15;return g.map(r=>({key:r.key,id:Bloom.BLOCKS[r.id].id}));});assert(regrow.length&&regrow.every(r=>r.id==='leaves'));
  await pc.waitForFunction(keys=>keys.every(k=>Bloom.app.sim.terrain.get(...k.split(',').map(Number))===Bloom.BID.leaves),regrow.map(r=>r.key),{timeout:6000});
- assert(await aimAt(pc,{x:-3,y:PEN.y,z:1},{x:1,y:0,z:0}),'aim chest');await pc.keyboard.press('KeyF');await pc.waitForFunction(()=>!document.querySelector('#chest-view').hidden&&document.querySelectorAll('#chest-grid [data-item]').length>0,null,{timeout:4000});
+ assert(await aimAt(pc,{x:-3,y:PEN.y,z:1},{x:0,y:1,z:0}),'aim chest');await pc.keyboard.press('KeyF');await pc.waitForFunction(()=>!document.querySelector('#chest-view').hidden&&document.querySelectorAll('#chest-grid [data-item]').length>0,null,{timeout:4000});
  const chestUI=await pc.evaluate(()=>[...document.querySelectorAll('#chest-grid [data-item]')].map(b=>b.dataset.item));await shot(pc,'06-chest-ui-labor');await pc.keyboard.press('Escape');
  assert(chestUI.length&&chestUI.every(id=>['seed','leaves','food'].includes(id)));pass('chest labor: the adult root harvests leaves in the pen into the chest (shown in the chest UI) and the leaves grow back',{chestUI,regrow});
  // 4i. Save → reload keeps the pen, the grade-2 unit in it, the chest contents; the unit never left the pen.
@@ -256,7 +267,7 @@ try{
  pass('a 0.33-format base migrates: its storage and the working unit’s cargo go into a chest placed at the base spot, the unit joins the ranch and its physics ball is retired',migration);
  await pc.keyboard.press('KeyK');await assign(pc,unitId,0);await pc.locator('#companions-close').click();
  // The grade-2 root now follows from slot 1; the player opens the gate and walks out of the pen through it.
- await rightClick(pc,gateCell,{x:1,y:0,z:0},isBlock(),{...gateCell,id:'fenceGateOpen'});await walkPoint(pc,{x:-2.5,z:.5});await walkPoint(pc,{x:-6,z:.5},.6);
+ await rightClick(pc,gateCell,{x:0,y:1,z:0},isBlock(),{...gateCell,id:'fenceGateOpen'});await walkPoint(pc,{x:-2.5,z:.5});await walkPoint(pc,{x:-6,z:.5},.6);
 
  // 6. A second species from the debug egg: rock chick ball throw, and slot replacement by ID.
  await pc.locator('#debug-kit').dispatchEvent('click');const chick=(await placeAndHatch(pc,'rockChickEgg')).unit;await pc.locator('#debug-adult').dispatchEvent('click');
@@ -270,7 +281,7 @@ try{
 
  // 7. Melee: the adult root slams a wild target from slot 2 through ordinary input (on the flat grass south of the pen).
  await pc.keyboard.press('KeyK');await assign(pc,unitId,1);await pc.locator('#companions-close').click();
- const meleeTarget=await pc.evaluate(()=>{const sim=Bloom.app.sim,player=Bloom.app.actor();for(const e of Object.values(sim.actors))if(e.speciesId){sim.physics.removeBody(e);delete sim.actors[e.id];}sim.physics.teleport(player,{x:.5,y:5.1,z:-5.5});const t=sim.addCreature('mushroom-snail',{x:.5,y:5.1,z:-7.6});t.homePos={...t.pos};t.ai.cooldown=1e9;Bloom.app.renderer.camera.yaw=0;Bloom.app.renderer.camera.pitch=0;return t.id;});await pause(pc,300);
+ const meleeTarget=await pc.evaluate(()=>{const sim=Bloom.app.sim,player=Bloom.app.actor();for(const e of Object.values(sim.actors))if(e.speciesId){sim.physics.removeBody(e);delete sim.actors[e.id];}sim.physics.teleport(player,{x:.5,y:5.1,z:-5.5});const t=sim.addCreature('mushroom-snail',{x:.5,y:5.1,z:-7.6});t.homePos={...t.pos};t.ai.cooldown=1e9;return t.id;});await pause(pc,300);
  await pc.keyboard.press('KeyX');await pc.waitForFunction(()=>Bloom.app.actor().companionSlot===1,null,{timeout:3000});const meleeBefore=await observe(pc,meleeTarget);let slamSeen=false;
  for(let attempt=0;attempt<6;attempt++){await clickAttack(pc,meleeTarget);try{await pc.waitForFunction(id=>Bloom.app.actor().combat.action?.companionId===id,unitId,{timeout:1200});}catch{continue;}
   slamSeen||=await pc.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.role==='strike'&&s.anim==='slam'),unitId,{timeout:1500}).then(()=>true,()=>false);
@@ -288,7 +299,7 @@ try{
  pass('same-version saves migrate shell/leaf wildlife and units to the new species, retire the warden boss, the candidate field and the sigil',migrated);
 
  // 9. Landscape touch UI keeps the panel inside the viewport; assign and remove by ID survive reload.
- const mobileContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true});const mobile=await mobileContext.newPage();mobile.setDefaultTimeout(15000);mobile.on('pageerror',e=>errors.push(e.message));await mobile.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(mobile);
+ const mobileContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true});const mobile=await mobileContext.newPage();mobile.setDefaultTimeout(15000);mobile.on('pageerror',e=>errors.push(e.message));await mobile.addInitScript(CURSOR_HELPERS);await mobile.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(mobile);
  await mobile.locator('#debug-kit').dispatchEvent('click');const mobileUnit=(await placeAndHatch(mobile,'mushroomSnailEgg',true)).unit.id;await mobile.locator('#debug-adult').dispatchEvent('click');await mobile.locator('#companions-btn').tap();await assign(mobile,mobileUnit,0,true);
  let fit=await panelFit(mobile);assert(fit.rect.x>=0&&fit.rect.x+fit.rect.w<=845&&fit.scroll<=fit.client+1&&fit.buttons.every(b=>b.h>=44),JSON.stringify(fit));
  let mobileSaved=await saveAndReload(mobile,mobileUnit,0);await mobile.locator('#companions-btn').tap();await mobile.locator('[data-companion-remove="'+mobileUnit+'"]').tap();await mobile.waitForFunction(id=>Bloom.app.sim.companions.data.units[id]?.location==='ranch',mobileUnit,{timeout:8000});mobileSaved=await saveAndReload(mobile,mobileUnit,null);

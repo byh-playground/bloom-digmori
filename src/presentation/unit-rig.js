@@ -193,7 +193,7 @@ class UnitRigRenderer{
  draw(phase){const r=this.r,T=r.T;
   for(const item of this.items){if(item.phase!==phase)continue;
    const look=item.surface.look,units=UNIT_VIEW.canvas/UNIT_VIEW.pixelsPerUnit,w=units*UNIT_VIEW.metersPerUnit*UNIT_STAGES[look.stage||'adult'].scale*(look.size??1),bottom=-(1-UNIT_VIEW.ground/UNIT_VIEW.canvas)*w,p=item.pos,right=r.right;
-   const at=(x,y)=>[p.x+right.x*x,p.y+y,p.z+right.z*x],tint=[...(item.tint||[1,1,1,1]).slice(0,3),(item.tint?.[3]??1)*(item.alpha??1)];
+   const at=(x,y)=>[p.x+right.x*x,p.y+y*CFG.camera.billboardStretch,p.z+right.z*x],tint=[...(item.tint||[1,1,1,1]).slice(0,3),(item.tint?.[3]??1)*(item.alpha??1)];
    const pts=[at(-w/2,bottom),at(w/2,bottom),at(w/2,bottom+w),at(-w/2,bottom+w)],uv=[[0,0],[1,0],[1,1],[0,1]],vertices=[];
    for(const i of [0,1,2,0,2,3])vertices.push(...pts[i],...uv[i],...tint);
    const pooled=r.pooled('unit-rig',()=>{const geometry=new DynamicGeometry(T,RENDER_LAYOUT.sprite);return{geometry,object:new T.Mesh(geometry.geometry,r.material(RIG_GLSL.vertex,RIG_GLSL.fragment,{vp:{value:new Float32Array(16)},tex:{value:null},flash:{value:0}},{blend:'premultiplied',depthWrite:false}))};});

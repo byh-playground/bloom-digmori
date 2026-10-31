@@ -166,7 +166,7 @@ class PlayerRigRenderer {
  draw(phase){const r=this.r,T=r.T,C=RIG_VIEW.canvas,up={x:0,y:1,z:0};
   for(const item of this.items){if(item.phase!==phase)continue;
    const unit=RIG_VIEW.metersPerUnit*(item.scale||1),w=C*unit,bottom=-(C-RIG_VIEW.ground)*unit,p=item.pos,right=r.right;
-   const at=(x,y)=>[p.x+right.x*x,p.y+y,p.z+right.z*x],tint=[...(item.tint||[1,1,1,1]).slice(0,3),(item.tint?.[3]??1)*(item.alpha??1)];
+   const at=(x,y)=>[p.x+right.x*x,p.y+y*CFG.camera.billboardStretch,p.z+right.z*x],tint=[...(item.tint||[1,1,1,1]).slice(0,3),(item.tint?.[3]??1)*(item.alpha??1)];
    const pts=[at(-w/2,bottom),at(w/2,bottom),at(w/2,bottom+w),at(-w/2,bottom+w)],uv=[[0,0],[1,0],[1,1],[0,1]],vertices=[];
    for(const i of [0,1,2,0,2,3])vertices.push(...pts[i],...uv[i],...tint);
    const pooled=r.pooled('player-rig',()=>{const geometry=new DynamicGeometry(T,RENDER_LAYOUT.sprite);return{geometry,object:new T.Mesh(geometry.geometry,r.material(RIG_GLSL.vertex,RIG_GLSL.fragment,{vp:{value:new Float32Array(16)},tex:{value:null},flash:{value:0}},{blend:'premultiplied',depthWrite:false}))};});

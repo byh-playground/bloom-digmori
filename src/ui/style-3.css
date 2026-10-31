@@ -13,4 +13,4 @@
 }
 #attack-feedback{position:fixed;top:calc(50% + 43px);left:50%;transform:translateX(-50%);pointer-events:none;opacity:0;color:#fff1b7;font-size:13px;font-weight:700;text-shadow:0 2px 4px #000;background:#17221ac9;border:1px solid #d2a860;border-radius:20px;padding:3px 10px;z-index:6;transition:opacity .06s linear;white-space:nowrap}
 #attack-feedback.visible{opacity:1}
-#crosshair.aim-enemy:before,#crosshair.aim-enemy:after{background:#ffe77c}
+
