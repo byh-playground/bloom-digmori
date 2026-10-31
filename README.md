@@ -8,7 +8,7 @@
 
 작은 생명으로 넓은 2.5D 세계를 탐험하는 채굴·건설 샌드박스 게임입니다. 빈 가방으로 시작해 자원을 모으고 도구를 만들며, 동굴·6방 던전·봉인 보물함·수호체를 발견합니다. XP·레벨·스탯과 모험창으로 탐험 진척을 확인할 수 있습니다.
 
-**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.14**
+**[게임 실행](https://byh-playground.github.io/bloom-digmori/)** · 버전 **0.28.15**
 
 ![디그모리 실제 Edge 화면](docs/digmori-desktop.png)
 
@@ -81,7 +81,7 @@ CI는 빌드 없이 원본 JS 문법과 필수 파일 존재만 확인합니다.
 | Rapier deterministic compat | `@dimforge/rapier3d-deterministic-compat@0.21.0`, 실제 WASM 물리 |
 | Bloom GameKit | v0.14.3 · dist `418e17c455db56d6ed073d82d115191d9dd8bf04` |
 | Pebble Mole vector art | `src/assets/companions/pebble-mole.svg` is copied byte-for-byte to Pages and SHA-256 checked; the startup loader fetches, compiles once, and caches it as an in-memory retained mesh |
-| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio, rendering(고정 목록·해시 검증용으로 로드, 3D 그리기는 three.js), vector-assets, vector-assets-loader |
+| GameKit 단독 플레이 모듈 | debug-tools, interpolation, input, simloop, presentation-events, audio, vector-assets, vector-assets-loader |
 | 협동 | GameKit transport·rollback, Nostr/WebRTC; 접속 시 로드 |
 | 3D 렌더 | `three@0.160.0` 고정 ESM(`build/three.module.js`), WebGL2. 지형·물·하늘·효과·SVG 캐릭터를 기존 셰이더와 같은 순서로 그림 |
 | 그래픽·저장 | 청크 Worker, IndexedDB 및 월드 파일 |
@@ -90,11 +90,15 @@ SDK 경로·버전·모듈 해시의 원본은 [core/config.js](src/core/config.
 
 ## 버전·저장 호환
 
-게임은 **0.28.14**, snapshotVersion은 **0.26.0**입니다. 30 TPS와 저장 형식을 유지합니다. 바이옴 식생·자원 규칙은 월드 시드에서 결정적으로 다시 계산하며, 기존 저장·저장 키·지형 편집을 보존하고 전체 월드를 강제로 재생성하지 않습니다. 아직 편집되지 않은 청크는 열릴 때 새 규칙으로 생성됩니다. 0.25.0을 포함한 snapshotVersion 0.26.0 이전 저장은 기존과 같이 새 월드가 필요합니다. 자동 변환 어댑터나 이전 저장 삭제 기능은 없습니다.
+게임은 **0.28.15**, snapshotVersion은 **0.26.0**입니다. 30 TPS와 저장 형식을 유지합니다. 바이옴 식생·자원 규칙은 월드 시드에서 결정적으로 다시 계산하며, 기존 저장·저장 키·지형 편집을 보존하고 전체 월드를 강제로 재생성하지 않습니다. 아직 편집되지 않은 청크는 열릴 때 새 규칙으로 생성됩니다. 0.25.0을 포함한 snapshotVersion 0.26.0 이전 저장은 기존과 같이 새 월드가 필요합니다. 자동 변환 어댑터나 이전 저장 삭제 기능은 없습니다.
 
 브라우저 저장은 출처에 종속됩니다. 기존 로컬/다른 사이트 저장이 새 Pages 주소로 자동 이동하지 않습니다. 0.26.0 월드는 게임의 내보내기·가져오기를 사용할 수 있습니다.
 
 ## 검증
+
+### 0.28.15 three.js 렌더러 이식
+
+자체 WebGL 렌더러를 `three@0.160.0` 고정 ESM으로 옮겼습니다. 지형·물·하늘·효과·SVG 캐릭터의 그리기 순서와 셰이더는 그대로이고, 같은 seed·tick 캡처 11장이 픽셀 단위로 같거나(8장) 폴리곤 경계 안티에일리어싱·물 반짝임 시간값 차이(최대 채널 13)만 있습니다. 쓰지 않게 된 GameKit `rendering` 모듈은 로드 목록에서 뺐습니다. 피격 붉은 틴트가 GameKit 색 범위 검사에 걸려 실행 오류로 멈추던 문제도 함께 사라졌습니다. 게임 기능 변경은 없고 저장 형식은 0.26.0을 유지합니다.
 
 ### 0.28.14 - Direct character SVG rendering
 
