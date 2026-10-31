@@ -1,0 +1,12 @@
+:root{--ink:#3b2a1d;--paper:#fffaf0;--accent:#e08a2c;--shade:rgba(40,28,18,.55)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#bfe3f5;font:15px/1.4 system-ui,'Segoe UI','Noto Sans KR',sans-serif;color:var(--ink)}
+#world{position:fixed;inset:0}
+#world canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;left:max(12px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:6px;pointer-events:none}
+#equip{align-self:flex-start;background:var(--paper);border:2px solid var(--ink);border-radius:10px;padding:4px 10px;font-weight:700}
+#help{background:var(--shade);color:#fff;border-radius:8px;padding:4px 8px;font-size:12px}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:#bfe3f5;font-weight:700}
+#error-dialog{position:fixed;inset:10%;background:var(--paper);border:2px solid var(--ink);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+#loading[hidden],#error-dialog[hidden]{display:none}
+#error-text{flex:1;font:12px monospace}
