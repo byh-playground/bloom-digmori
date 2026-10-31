@@ -1,22 +1,163 @@
 'use strict';
-/* Fixed 30 Hz simulation with interpolated rendering. Single player is a one-person lockstep: commands go through step(). */
-class App{
- constructor(THREE,rig){
-  this.sim=new Simulation();this.renderer=new Renderer(THREE,document.getElementById('world'),this.sim.world,rig);
-  this.controls=new Controls(window,step=>this.renderer.rotate(step));
-  this.previous={x:0,z:0};this.accumulator=0;this.last=0;this.seconds=0;this.started=false;this.commands=[];
+class App {
+ constructor(R,gamekit,companionVector){this.R=R;this.gamekit=gamekit;this.renderer=new Renderer($('world'),gamekit,companionVector);this.sim=null;this.localId='local';this.selected=0;this.pending=[];this.net={session:null,room:null,loop:null,scheduler:null,status:'혼자 플레이 중',phase:'offline',busy:false,backup:null};this.last=0;this.toastUntil=0;this.attackFeedbackUntil=0;this.uiAt=0;this.uiKey='';this.inventoryTouch=null;this.started=false;this.failures=[];this.debug=new URLSearchParams(location.search).get('debug')==='1';this.audio=new gamekit.audio.AudioPlayer(createAudioConfig());this.presentation=new PresentationBridge(this,gamekit);this.scene=new ScenePresentation(gamekit.interpolation);this.controls=new Controls(this);this.localSession=new LocalSimulationSession(this);this.localLoop=gamekit.simloop.createLoop({session:this.localSession,backlogPolicy:'retain',maxBacklogTicks:CFG.timing.maxBacklogTicks,getInput:()=>this.packet(),canAdvance:()=>this.started&&!this.net.session&&!this.net.busy,render:()=>{},onAdvance:()=>this.afterAdvance(this.localSession),onBacklogDrop:g=>METRICS.add('loop.discardedGap',g.elapsedMs),onError:e=>this.fatal(e)});this.localScheduler=gamekit.simloop.createDeadlineScheduler({getIntervalMs:()=>CFG.stepMs,maxBacklogTicks:CFG.timing.maxBacklogTicks,pulse:t=>this.localLoop.pulse(t,{render:false}),onGap:g=>METRICS.add('loop.discardedGap',g.elapsedMs)});this.bindUI();this.companionPanel=new CompanionPanel(this);this.newWorld(CFG.worldSeed);}
+ actor(){return this.sim?.actors[this.localId];}
+ modal(){return ['inventory','journal','companions','menu','network','ending','loading'].some(id=>!$(id).hidden);}
+ toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');this.toastUntil=performance.now()+2700;}
+ toggleView(){this.renderer.camera.first=!this.renderer.camera.first;$('view-btn').textContent=this.renderer.camera.first?'1인칭 V':'3인칭 V';}
+ select(index){this.command({op:'companion',action:'select',slot:-1});this.selected=index;this.command({op:'select',index});this.refreshUI(true);}
+ command(c){if(this.pending.length<64)this.pending.push({payload:encodeCommand(c)});}
+ packet(){const commands=this.pending.splice(0);return {input:this.controls.sample(),commands};}
+ newWorld(seed){if(this.net.session){this.toast('협동 중에는 월드를 바꿀 수 없습니다.');return;}if(this.sim)this.sim.free();const seedText=String(seed??'').trim(),parsedSeed=Number(seedText);this.sim=new Simulation(this.R,seedText&&Number.isSafeInteger(parsedSeed)?parsedSeed>>>0:CFG.worldSeed);this.sim.addPlayer('local');this.localId='local';this.selected=0;this.pending=[];this.renderer.camera={yaw:0,pitch:.20,first:false,distance:initialCameraDistance()};this.renderer.worldRef=null;this.uiKey='';this.controls.release();this.localSession.pending.length=0;this.presentation.reset();this.scene.reset();this.started=true;$('journal').hidden=true;$('companions').hidden=true;this.journalKey='';$('menu').hidden=true;$('loading').hidden=true;this.refreshUI(true);}
+ bindUI(){
+  $('resource-bands').innerHTML=RESOURCE_DEFS.map(r=>'<b>'+escapeHtml(r.name)+'</b> Y '+r.min+'~'+r.max+' · '+escapeHtml(r.hint)+' · '+escapeHtml(r.tool)).join('<br>')+'<br>폐광에는 보장 광맥이, 고대 화원 유적에는 희귀 광맥과 수호체가 있습니다.<br><small>물: 철 주괴 3개 → 빈 물통 · 우클릭/탭으로 퍼기·놓기 · Space 상승 / Shift 잠수 · 야간 자연 스폰은 현재 비활성화</small>';
+  let saved={};try{saved=JSON.parse(localStorage.getItem('bloom-feedback-0170')||'{}');}catch{}
+  for(const key of ['shake','sound','numbers','textures','effects']){const box=$('option-'+key);if(!box)continue;if(typeof saved[key]==='boolean')this.renderer.combatFx.options[key]=saved[key];box.checked=this.renderer.combatFx.options[key];box.onchange=()=>{this.renderer.combatFx.options[key]=box.checked;if(key==='sound'&&box.checked)this.audio.unlock();try{localStorage.setItem('bloom-feedback-0170',JSON.stringify(this.renderer.combatFx.options));}catch{}};}
+
+  $('journal-btn').onclick=()=>this.toggleJournal();$('journal-close').onclick=()=>this.toggleJournal(false);
+  $('journal-skills').onclick=e=>{const b=e.target.closest('[data-skill]');if(b)this.command({op:'upgrade',skill:b.dataset.skill});};
+  $('menu-btn').onclick=()=>this.open('menu');$('inventory-btn').onclick=()=>this.toggleInventory();$('view-btn').onclick=()=>this.toggleView();$('network-btn').onclick=()=>this.open('network');
+  $('inventory-close').onclick=()=>this.toggleInventory(false);$('network-close').onclick=()=>{this.controls.release();$('network').hidden=true;$('world').focus({preventScroll:true});};$('resume').onclick=()=>this.closeAll();$('new-world').onclick=()=>this.newWorld($('seed-input').value);
+  $('save-world').onclick=()=>this.save();$('load-world').onclick=()=>this.load();$('export-world').onclick=()=>this.export();$('import-world').onclick=()=>$('file-input').click();$('file-input').onchange=e=>{const f=e.target.files[0];if(f)this.import(f);};
+  $('continue-end').onclick=()=>$('ending').hidden=true;$('host-room').onclick=()=>this.connect('host');$('join-room').onclick=()=>this.connect('join');$('reconnect-room').onclick=()=>this.reconnect();$('leave-room').onclick=()=>this.leave();
+  $('hotbar').onclick=e=>{const b=e.target.closest('[data-index]');if(b)this.select(+b.dataset.index);};
+  const invNode=$('inventory');
+  const locateSlot=node=>{const b=node?.closest?.('[data-area]');return b?{area:b.dataset.area,index:b.dataset.area==='armor'?b.dataset.index:+b.dataset.index,element:b}:null;};
+  invNode.addEventListener('pointerdown',e=>{const slot=locateSlot(e.target);if(!slot||e.button>2)return;e.preventDefault();
+   const held=!!this.actor()?.inventory.cursor,pc=e.pointerType==='mouse';
+   if(pc&&e.button===0&&e.detail>=2&&held){this.command({op:'collect'});this.inventoryTouch=null;return;}
+   const g={id:e.pointerId,start:slot,x:e.clientX,y:e.clientY,time:performance.now(),moved:false,
+    touch:!pc,clicked:false,held,button:e.button,shift:e.shiftKey,visited:[{area:slot.area,index:slot.index}]};
+   this.inventoryTouch=g;
+   if(pc){if(!held||e.shiftKey){this.command({op:'slot',area:slot.area,index:slot.index,button:e.button===2?2:0,shift:e.shiftKey});g.clicked=true;}}
+   else{slot.element.setPointerCapture(e.pointerId);this.controls.pointer={x:e.clientX,y:e.clientY};}
+  });
+  document.addEventListener('pointermove',e=>{const g=this.inventoryTouch;if(!g||g.id!==e.pointerId)return;
+   if(Math.hypot(e.clientX-g.x,e.clientY-g.y)>12)g.moved=true;
+   const slot=locateSlot(document.elementFromPoint(e.clientX,e.clientY));
+   if(slot&&!g.visited.some(v=>v.area===slot.area&&v.index===slot.index))g.visited.push({area:slot.area,index:slot.index});
+   if(g.touch){this.controls.pointer={x:e.clientX,y:e.clientY};this.moveCursor();}
+  });
+  const releaseSlot=e=>{const g=this.inventoryTouch;if(!g||g.id!==e.pointerId)return;this.inventoryTouch=null;
+   if(e.type==='pointercancel')return;
+   const finish=locateSlot(document.elementFromPoint(e.clientX,e.clientY));
+   const changed=!!finish&&(finish.area!==g.start.area||finish.index!==g.start.index);
+   if(g.touch){const split=!changed&&performance.now()-g.time>=380;
+    this.command({op:'slot',area:g.start.area,index:g.start.index,button:split?2:0,shift:false});
+    if(changed)this.command({op:'slot',area:finish.area,index:finish.index,button:0,shift:false});
+    this.controls.pointer={x:e.clientX,y:e.clientY};
+   }else if(g.held&&!g.clicked){
+    if(g.moved&&g.visited.length>1)this.command({op:'distribute',button:g.button===2?2:0,targets:g.visited});
+    else this.command({op:'slot',area:changed?finish.area:g.start.area,index:changed?finish.index:g.start.index,button:g.button===2?2:0,shift:false});
+   }else if(changed&&g.clicked)this.command({op:'slot',area:finish.area,index:finish.index,button:0,shift:false});
+  };
+  document.addEventListener('pointerup',releaseSlot);document.addEventListener('pointercancel',releaseSlot);
+  invNode.addEventListener('contextmenu',e=>e.preventDefault());
+  $('recipe-list').onclick=e=>{const b=e.target.closest('[data-recipe]');if(!b)return;const id=b.dataset.recipe,r=RECIPES.find(r=>r.id===id);$('recipe-detail').textContent=ITEMS[r.out].name+'\n'+Object.entries(r.keys).map(([char,val])=>{const n=r.pattern.join('').split(char).length-1,ids=Array.isArray(val)?val:[val];return ids.map(i=>ITEMS[i].name).join(' / ')+' ×'+n;}).join(' · ');this.command({op:'recipe',id});};
+  $('craft-result').onclick=e=>this.command({op:'craft',all:e.shiftKey});$('recipe-search').oninput=()=>this.refreshInventory(true);$('craftable-only').onchange=()=>this.refreshInventory(true);
+  // Touch: long press a slot to split. PC: right-click.
+  $('drop-held').onclick=()=>this.command({op:'drop',all:true});
+  document.addEventListener('pointerover',e=>{const node=e.target.closest('[data-item]');if(!node||!ITEMS[node.dataset.item])return;const it=ITEMS[node.dataset.item],lines=[it.name];if(it.weapon){const w=WEAPONS[it.weapon];lines.push('무기: '+w.name+' · 공격 '+statStep(Math.max(STAT_SCALE.damage,w.damage+(MATERIALS[it.material]?.damageBonus??0)),STAT_SCALE.damage),'차지 '+w.charge[0]+' / '+w.charge[1]+' ms','주 기술 '+w.skill+' · 보조 '+w.secondary);}if(it.tool)lines.push('채광 등급 '+it.tier+' · 속도 ×'+it.miningSpeed);if(it.armor)lines.push('방어력 '+it.defense.toFixed(1)+' · 강인도 +'+it.poise.toFixed(1));if(it.weight)lines.push('중량 '+it.weight.toFixed(1));$('tooltip').textContent=lines.join('\n');$('tooltip').hidden=false;$('tooltip').style.left=Math.min(e.clientX+14,innerWidth-235)+'px';$('tooltip').style.top=Math.max(4,Math.min(e.clientY-55,innerHeight-130))+'px';});
+  document.addEventListener('pointerout',e=>{if(e.target.closest?.('[data-item]'))$('tooltip').hidden=true;});
+  if(this.debug){$('debugbar').hidden=false;$('debug-kit').onclick=()=>this.debugKit();$('debug-enemy').onclick=()=>this.debugEnemy();$('debug-boss').onclick=()=>this.debugBoss();}
  }
- start(){this.started=true;this.last=performance.now();requestAnimationFrame(t=>this.frame(t))}
- tick(){
-  const p=this.sim.player,cmd=this.controls.command(this.renderer.yawStep,p.tier);
-  this.previous={x:p.x,z:p.z};this.sim.step(cmd);this.commands.push(cmd);if(this.commands.length>900)this.commands.shift();
+ open(id){document.body.classList.toggle('companions-open',id==='companions');document.exitPointerLock?.();this.controls.release();
+  if(id!=='inventory'&&!$('inventory').hidden){this.command({op:'close'});$('cursor-display').hidden=true;$('tooltip').hidden=true;}
+  for(const name of ['inventory','journal','companions','menu','network','ending'])if(name!==id)$(name).hidden=true;
+  $(id).hidden=false;
  }
- frame(now){
-  const step=1000/CFG.tickRate,dt=Math.min(250,now-this.last);this.last=now;this.accumulator+=dt;this.seconds+=dt/1000;
-  while(this.accumulator>=step){this.tick();this.accumulator-=step}
-  this.renderer.render(this.sim,this.previous,this.accumulator/step,this.seconds);this.hud();
-  requestAnimationFrame(t=>this.frame(t));
+ closeAll(){document.body.classList.remove('companions-open');this.controls.release();if(!$('inventory').hidden)this.toggleInventory(false);for(const id of ['menu','network','ending','journal','companions'])$(id).hidden=true;$('tooltip').hidden=true;$('world').focus({preventScroll:true});}
+ toggleJournal(force){const open=force??$('journal').hidden;if(open){this.open('journal');this.refreshJournal(true);}else{this.controls.release();$('journal').hidden=true;$('world').focus({preventScroll:true});}}
+ toggleInventory(force){const open=force??$('inventory').hidden;if(open){this.open('inventory');this.refreshInventory(true);}else{this.controls.release();$('inventory').hidden=true;this.command({op:'close'});$('cursor-display').hidden=true;$('tooltip').hidden=true;$('world').focus({preventScroll:true});}}
+ itemIconHTML(id,cls='item-texture'){const def=ITEMS[id];if(!def)return'';const src=def.block?this.renderer.blockIcons[def.block]:this.renderer.itemIcons[id];return src?`<img class="${cls}" alt="" src="${src}">`:'';}
+ stackHTML(s,number=null){let content='';if(s){content=this.itemIconHTML(s.id);if(s.count>1)content+='<span class="count">'+s.count+'</span>';}return content+(number!==null?'<span class="number">'+number+'</span>':'');}
+ slotHTML(s,area,index,active=false,number=null){return`<button class="slot${active?' active':''}" data-area="${area}" data-index="${index}" ${s?'data-item="'+s.id+'"':''} aria-label="${s?escapeHtml(ITEMS[s.id].name+' '+s.count):'빈 슬롯'}">${this.stackHTML(s,number)}</button>`;}
+ recipeAvailable(r,actor,width){if(r.station>width||r.unlock&&!this.sim.progress[r.unlock])return false;const slots=structuredClone(actor.inventory.slots);for(const s of actor.inventory.grid)if(s&&Inventory.addTo(slots,s.id,s.count))return false;for(const row of r.pattern)for(const char of row){if(char===' ')continue;const key=r.keys[char],ids=Array.isArray(key)?key:[key],id=ids.find(id=>slots.some(s=>s?.id===id));if(!id||!Inventory.takeFrom(slots,id,1))return false;}return true;}
+ refreshInventory(force=false){const a=this.actor();if(!a||$('inventory').hidden)return;const i=a.inventory,station=this.sim.stationInReach(a,i.station,'furnace')?'furnace':this.sim.stationInReach(a,i.station,'craft')?'craft':'personal',width=station==='craft'?3:2,key=JSON.stringify(i)+JSON.stringify(this.sim.furnaces[i.station])+station+JSON.stringify(this.sim.progress);
+  if(!force&&key===this.uiKey){this.moveCursor();return;}this.uiKey=key;
+  $('station-name').textContent=station==='furnace'?'원료 · 연료 · 제련 결과':station==='craft'?'제작대 3 × 3':'개인 제작 2 × 2';$('craft-view').hidden=station==='furnace';$('furnace-view').hidden=station!=='furnace';
+  $('armor-slots').innerHTML=['helmet','chest','legs','boots'].map((k,n)=>this.slotHTML(i.armor[k],'armor',k,false,['머리','몸통','다리','발'][n])).join('');
+  const indices=[...Array.from({length:27},(_,n)=>n+9),...Array.from({length:9},(_,n)=>n)];  $('inventory-grid').innerHTML=indices.slice(0,27).map(k=>this.slotHTML(i.slots[k],'bag',k)).join('');$('inventory-hotbar').innerHTML=indices.slice(27).map(k=>this.slotHTML(i.slots[k],'bag',k,k===i.selected,k+1)).join('');
+  $('craft-grid').className='craft-grid'+(width===2?' personal':'');$('craft-grid').innerHTML=(width===3?[0,1,2,3,4,5,6,7,8]:[0,1,3,4]).map(k=>this.slotHTML(i.grid[k],'grid',k)).join('');const result=Inventory.result(a,this.sim);$('craft-result').innerHTML=result?this.stackHTML({id:result.recipe.out,count:result.recipe.count}):'';$('craft-result').disabled=!result;
+  if(station==='furnace'){const f=this.sim.furnaces[i.station];for(const [n,id]of ['furnace-input','furnace-fuel','furnace-output'].entries()){$(id).innerHTML=this.stackHTML(f.slots[n]);if(f.slots[n])$(id).dataset.item=f.slots[n].id;else delete $(id).dataset.item;}$('burn-progress').value=f.burnTotal?f.burn/f.burnTotal:0;$('furnace-progress').value=f.recipe&&SMELT[f.recipe]?f.progress/SMELT[f.recipe].ms:0;}
+  const query=$('recipe-search').value.trim(),only=$('craftable-only').checked;$('recipe-list').innerHTML=RECIPES.filter(r=>r.station<=width&&(!query||ITEMS[r.out].name.includes(query))).map(r=>{const can=this.recipeAvailable(r,a,width);if(only&&!can)return'';return`<button data-recipe="${r.id}" data-item="${r.out}" aria-label="${escapeHtml(ITEMS[r.out].name)} 조합 배치" class="${can?'':'missing'}">${this.itemIconHTML(r.out,'recipe-texture')}</button>`;}).join('');this.moveCursor();
  }
- hud(){const p=this.sim.player,text=CFG.tiers[p.tier]+(p.tier?' · '+{sword:'검',greatsword:'대검',spear:'창',axe:'도끼'}[p.weapon]:'');
-  if(this.hudText!==text){this.hudText=text;document.getElementById('equip').textContent=text}}
+ moveCursor(){const s=this.actor()?.inventory.cursor;$('cursor-display').hidden=!s||$('inventory').hidden;if(!s)return;$('cursor-display').innerHTML=this.itemIconHTML(s.id,'cursor-texture')+'<small>'+s.count+'</small>';$('cursor-display').style.left=Math.min(innerWidth-50,this.controls.pointer.x+12)+'px';$('cursor-display').style.top=Math.min(innerHeight-50,this.controls.pointer.y+12)+'px';}
+ resourceHint(actor){const p=this.sim.progress,near=this.sim.terrain.nearestStructure(actor.pos),where=near?(near.type==='mine'?'폐광':'고대 화원 유적')+' '+Math.round(near.distance)+'m':'';let target=!p.wood_pick?resourceRangeText('coalOre')+' · '+RESOURCE_BY_ID.coalOre.hint:!p.iron?resourceRangeText('ironOre')+' · '+RESOURCE_BY_ID.ironOre.hint:!p.diamond?resourceRangeText('goldOre')+' · '+resourceRangeText('diamondOre'):'공명 수정은 깊은 동굴 · 폐광/유적에는 보물함';return target+(where?' · 탐험 '+where:'');}
+ guide(){const p=this.sim.progress;if(!p.log)return['01 · 첫 원목','나무 줄기를 길게 눌러 채집하세요.','가방은 비어 있습니다. 원목 → 판자 → 제작대'];if(!p.workbench)return['02 · 제작대','E를 누르고 안내서에서 판자와 제작대를 만드세요.','재료 자동 배치 → 결과 슬롯 클릭 → 단축바 선택'];if(!p.wood_pick)return['03 · 첫 곡괭이','제작대를 설치하고 F로 열어 나무 곡괭이를 만드세요.','판자 3개 + 나뭇가지 2개'];if(!p.stone_pick)return['04 · 석기 시대','나무 곡괭이를 장착해 돌을 캐세요.','돌 곡괭이와 화로를 준비하세요.'];if(!p.iron)return['05 · 철 제련','돌 곡괭이로 철광석·석탄을 채굴하세요.','화로 F → 위 원석 / 아래 연료 → 결과 회수'];if(!p.iron_pick)return['06 · 철 도구','철 주괴로 철 곡괭이와 전투 장비를 만드세요.','철은 상위 광물 채광의 열쇠입니다.'];if(!p.crystalShard)return['07 · 수정 동굴','Y -10 아래 공명 수정을 채굴하세요.','반짝이는 수정은 연고 제작·탐험 재료입니다.'];if(!p.chests)return['08 · 봉인된 보물함','폐광이나 고대 유적에서 F로 보물함을 여세요.','수정·광물·음식·유물과 경험치를 얻습니다.'];if(!p.clearedDungeons)return['09 · 유적 정화','깊은 유적의 수호체들을 쓰러뜨리세요.','동굴 탐험·보물 획득·레벨업 (J)'];if(!p.diamond)return['10 · 깊은 곳의 빛',resourceRangeText('diamondOre')+' 광맥을 찾으세요.',RESOURCE_BY_ID.diamondOre.tool+' 이상 장착 필요 · 깊은 유적은 전용 수호체가 지켜요.'];if(!p.sigil)return['11 · 수호자의 부름','제작대에서 수호자 소환 문양을 만드세요.','철 4 + 다이아몬드 1 + 씨앗 4'];if(!p.boss)return['12 · 잠든 화원','꽃 제단 (24, 5, -14)에서 F를 누르세요.','소환 문양 소모 · 회피와 강인도 붕괴를 활용하세요.'];return['13 · 다시 자라는 세계','심장으로 수호의 증표를 만들 수 있어요.','소환 문양으로 강화된 수호자 재도전 · 자유 건축'];}
+ refreshJournal(force=false){const actor=this.actor();if(!actor||$('journal').hidden)return;
+  const {level,xp,points,skills}=actor.rpg;const p=this.sim.progress;
+  const key=JSON.stringify([actor.rpg,p]);if(!force&&key===this.journalKey)return;this.journalKey=key;
+  $('journal-level').textContent='레벨 '+level+' · 경험치 '+xp+' / '+RPG.next(level)+' · 투자 가능 '+points+'점';
+  $('journal-exp').value=level>=CFG.rpg.maxLevel?1:xp/RPG.next(level);
+  $('journal-skills').innerHTML=Object.entries(RPG_SKILLS).map(([id,def])=>'<div class="rpg-skill"><div><b>'+escapeHtml(def.name)+' +'+skills[id]+'</b><small>'+escapeHtml(def.description)+'</small></div><button type="button" data-skill="'+id+'" '+(points<1||skills[id]>=10?'disabled':'')+'>강화 +1</button></div>').join('');
+  $('journal-quests').innerHTML=QUESTS.map(q=>{const done=!!p[q.id];return'<li class="'+(done?'done':'')+'"><b>'+(done?'✓ ':'○ ')+escapeHtml(q.title)+'</b><small>'+escapeHtml(q.hint)+'</small></li>';}).join('');
+  const near=this.sim.terrain.structuresNear(actor.pos,CFG.worldgen.resourceGuideRadius).slice(0,5);
+  $('journal-explore').innerHTML=near.map(s=>'<li><b>'+(s.type==='mine'?'폐광':escapeHtml(this.sim.terrain.dungeonTheme(s).name))+'</b> · '+Math.round(s.distance)+'m <small>('+s.x+', '+s.y+', '+s.z+')</small></li>').join('')||'<li>가까운 범위에 구조물이 없어. 다른 방향으로 탐험해 보세요.</li>';
+ }
+ refreshUI(force=false){const a=this.actor();if(!a)return;const inv=a.inventory,stats=Inventory.stats(a),c=a.combat;const hotKey=JSON.stringify(inv.slots.slice(0,9))+this.selected;
+  if(this.hotKey!==hotKey||force){this.hotKey=hotKey;$('hotbar').innerHTML=inv.slots.slice(0,9).map((s,i)=>this.slotHTML(s,'hot',i,i===this.selected,i+1)).join('');}
+  $('rpg-inline').textContent='Lv.'+a.rpg.level+' · XP '+a.rpg.xp+'/'+RPG.next(a.rpg.level)+(a.rpg.points?' · 강화 '+a.rpg.points+'점':'');$('hp-label').textContent='생명 '+Math.ceil(a.hp)+' / '+a.maxHp+' · 기력 '+Math.floor(c.stamina.value);$('load-label').textContent=['경량','중량','초중량'][stats.weightClass]+' '+Math.round(stats.loadRatio*100)+'%';$('hp-fill').style.width=a.hp/a.maxHp*100+'%';$('stamina-fill').style.width=(c.stamina.value/RPG.staminaMax(a)*100)+'%';$('poise-fill').style.width=Math.max(0,1-c.poise.damage/stats.poise)*100+'%';let equippedText=stats.item?stats.item.name:'맨손 · 자원을 채집해 첫 도구를 만드세요';$('vitals').classList.toggle('sprinting',!!a.sprinting);if(a.sprinting)equippedText+=' · 달리기';
+  const companion=this.sim.companions.equipped(a);if(companion)equippedText=SPECIES[companion.kind].name+' · '+this.sim.companions.activity(companion);
+  if(c.state==='attack'&&c.action?.comboLabel)equippedText+=' · '+(c.action.combo+1)+' / '+c.action.comboCount+' '+c.action.comboLabel+(c.queued?' · 다음 타격 예약':'');
+  if(c.state==='charge')equippedText+=' · 차지 '+(c.charge>=Combat.weapon(a,this.sim).charge[1]?'Ⅱ':c.charge>=Combat.weapon(a,this.sim).charge[0]?'Ⅰ':'…');$('equipped').innerHTML=(!companion&&stats.item?this.itemIconHTML(stats.item.id,'equipped-icon'):'')+'<span>'+escapeHtml(equippedText)+'</span>';
+  $('location').textContent=(a.swim?.inWater?(a.swim.underwater?'잠수 중 · ':'수영 중 · '):'')+this.sim.terrain.biome(a.pos.x,a.pos.z)+' · '+(this.sim.night()?'밤':'낮')+' '+this.sim.clock()+'\n'+[a.pos.x,a.pos.y,a.pos.z].map(Math.floor).join(' / ');
+  const guide=this.guide();$('guide').innerHTML='<b>'+guide[0]+'</b><br>'+guide[1]+'<br><small>'+guide[2]+'</small>';$('resource-guide').textContent=this.resourceHint(a);
+  $('crosshair').classList.toggle('aim-enemy',!!this.sim.physics.aimEnemy(a,Combat.weapon(a,this.sim).reach));$('crosshair').classList.toggle('mining',!!a.mine.target&&a.mine.elapsed>0);const hit=this.renderer.target;if(hit){const b=BLOCKS[hit.id],ratio=a.mine.target===blockKey(hit.x,hit.y,hit.z)?a.mine.elapsed/b.hardness:0;$('target').innerHTML=escapeHtml(b.name)+(b.station==='loot'?' · F 열기':b.station?' · F 사용':'')+'<progress value="'+ratio+'" max="1"></progress>';}else $('target').textContent='';
+  const boss=Object.values(this.sim.actors).find(x=>x.boss&&!x.dead);$('bossbar').hidden=!boss;if(boss){$('boss-name').textContent=BOSS.name+' · '+Math.ceil(boss.hp)+' / '+boss.maxHp+' · '+(boss.hp<boss.maxHp*.5?'각성':'잠에서 깸');$('boss-fill').style.width=boss.hp/boss.maxHp*100+'%';}
+  $('death').hidden=!a.dead;
+
+  $('mode-label').textContent=VERSION+' · Rapier 0.21.0 · '+(this.net.session?this.net.session.players.length+'/4인 · '+this.net.session.status:'1인')+' · '+this.renderer.meshes.size+' 청크';$('mobile-skill').hidden=!!companion||!stats.item?.weapon;const evade=$('mobile-roll'),mode=a.swim?.inWater?'dive':'roll';if(evade.dataset.mode!==mode){evade.dataset.mode=mode;evade.firstChild.nodeValue=mode==='dive'?'↓':'↪';evade.querySelector('small').textContent=mode==='dive'?'잠수':'회피';}this.refreshInventory(force);this.refreshJournal(force);this.companionPanel?.refresh(force);
+ }
+ blockActionUI(kind){const el=$('block-action-fx');el.className='effect-'+kind;void el.offsetWidth;el.className='effect-'+kind+' play';}
+ playSound(id,strength=1){if(!this.renderer.combatFx.options.sound)return false;return this.audio.play(id,strength);}
+
+ showCombatFeedback(text,ttl=410){const el=$('attack-feedback');el.textContent=text;el.classList.add('visible');this.attackFeedbackUntil=performance.now()+ttl;}
+ handleEvent(e){
+  const local=this.actor(),near=local&&V.len(V.sub(e.point||e.pos,local.pos))<14;
+  if(e.type==='swing'&&e.actorId===this.localId)this.playSound('swing',.65);
+  if(near&&e.type==='guard')this.playSound('guard',1);else if(near&&(e.type==='wall'||e.type==='spark'))this.playSound('wall',.8);else if(near&&e.type==='hit')this.playSound(e.heavy||e.tier>0||e.lethal?'heavyHit':'hit',1);
+  if(e.actorId===this.localId){
+  if(e.type==='windup')this.showCombatFeedback(e.label?(e.combo+1)+' / '+e.comboCount+' · '+e.label:'⚔ 공격 준비',440);if(e.type==='swing')this.showCombatFeedback(e.label?(e.combo+1)+' / '+e.comboCount+' · '+e.label:e.tier>0?'⚔ 강공격':'⚔ 공격',150);
+  if(e.type==='exhausted')this.showCombatFeedback('기력 부족',600);
+  if(e.type==='whiff')this.showCombatFeedback('공격 빗나감',620);
+  if(e.type==='mine'){this.showCombatFeedback('⛏ 채굴 완료',540);this.blockActionUI('break');this.playSound('mine',.8);}
+  if(e.type==='place'){this.showCombatFeedback('▣ 블록 설치',440);this.blockActionUI('place');this.playSound('place',.75);}
+  if(e.type==='place-blocked'){this.showCombatFeedback(e.reason==='item'?'블록을 먼저 선택하세요':e.reason==='target'?'블록 면을 조준하세요':'설치할 수 없는 위치',520);this.blockActionUI('blocked');}
+  if(e.type==='companion-safety')this.toast('동료 안전 회수 · '+e.reason);if(e.type==='companion-storage-full')this.toast('보관함이 가득 차 운반 자원을 든 채 대기합니다.');if(e.type==='attack-hit'){const refund=e.staminaRefund>0?' · 기력 +'+Math.round(e.staminaRefund):'';this.showCombatFeedback((e.guardBreak?'✦ 방어 붕괴 ':e.stagger?'✦ 강인도 붕괴 ':e.lethal?'✦ 처치 ':e.blocked?'⛨ 방어됨 ':'✦ 명중 ')+e.damage+refund,650);if(e.staminaRefund>0){const v=$('vitals');v.classList.remove('stamina-refund');void v.offsetWidth;v.classList.add('stamina-refund');setTimeout(()=>v.classList.remove('stamina-refund'),260);}}
+  if(e.type==='wall')this.showCombatFeedback('지형에 막힘',350);
+if(e.type==='pickup')this.toast(ITEMS[e.item].name+' +'+e.count);if(e.type==='exhausted')this.toast('스태미나가 부족해요.');if(e.type==='no-arrow')this.toast('화살이 필요해요.');if(e.type==='open-station'){this.toggleInventory(true);}}
+  if(e.type==='chest-open'&&e.actorId===this.localId)this.toast('보물함 발견 · '+e.loot.map(i=>ITEMS[i.id].name+' ×'+i.count).join(' / '));if(e.type==='level-up'&&e.actorId===this.localId)this.toast('레벨 '+e.level+'! 성장 포인트 +1 (J)');if(e.type==='skill-up'&&e.actorId===this.localId)this.toast(RPG_SKILLS[e.skill].name+' 강화 +1');
+   if(e.type==='dungeon-enter')this.toast((e.name||'고대 유적')+' · 수호체가 깨어났습니다.');if(e.type==='dungeon-clear')this.toast('유적 정화 완료 · 경험치와 희귀 보물을 확인하세요.');if(e.type==='victory'){this.open('ending');}if(e.type==='boss-spawn')this.toast('잠든 화원의 수호자가 깨어났습니다.');}
+ presentEvent(event){this.renderer.presentEvent(event,this.sim,this.localId);this.handleEvent(event);}
+ afterAdvance(session){this.scene.publish(this.sim);const events=this.sim.drainEffects(),confirmed=session===this.localSession?this.sim.tick-1:Math.min(session.confirmedTick??-1,(session.tick??this.sim.tick)-1);this.presentation.ingest(events,confirmed);}
+ start(){this.localScheduler.start();this.lifecycleRelease=()=>{this.controls.release();this.localLoop.releaseInput();this.net.loop?.releaseInput();this.localLoop.resetTiming();this.net.loop?.resetTiming();};window.addEventListener('blur',this.lifecycleRelease);document.addEventListener('visibilitychange',()=>{if(document.hidden)this.lifecycleRelease();else{this.localLoop.resetTiming();this.localScheduler.rebase();this.net.loop?.resetTiming();this.net.scheduler?.rebase();this.net.scheduler?.wake();}});const frame=now=>{const frameDt=this.last?now-this.last:16,dt=Math.min(100,frameDt);this.last=now;METRICS.add('render.frameInterval',frameDt);try{this.presentation.update();const actor=this.actor();if(actor&&this.started){const displayFrame=this.scene.frame(this.sim);const began=performance.now();this.renderer.render(this.sim,actor,dt,displayFrame);METRICS.add('render.frameWork',performance.now()-began);if(now-this.uiAt>100){this.refreshUI();this.uiAt=now;}}if(now>this.toastUntil)$('toast').classList.remove('show');if(now>this.attackFeedbackUntil)$('attack-feedback').classList.remove('visible');}catch(e){this.fatal(e);}this.raf=requestAnimationFrame(frame);};this.raf=requestAnimationFrame(frame);}
+
+ fatal(e){const message=e?.stack||String(e);if(this.failures.includes(message))return;this.failures.push(message);console.error(e);window.BloomDiagnostics.report(e,{kind:'gameplay-error',visibility:'fatal',origin:'runtime'});this.started=false;this.localScheduler?.stop();this.net.scheduler?.stop();this.audio.stopAll();this.toast('실행 오류: '+e.message);$('mode-label').textContent='오류로 중단: '+e.message;}
+ async save(){if(this.net.session)return this.toast('협동 세계는 파일 내보내기로 보존하세요.');try{const bytes=this.sim.save();await storeSave(bytes);$('save-status').textContent='저장됨 · '+bytes.length.toLocaleString()+' bytes';this.toast('물리 상태까지 저장했어요.');}catch(e){window.BloomDiagnostics.report(e,{kind:'save-error',visibility:'notice',origin:'storage'});this.toast('저장 실패: '+e.message);}}
+ async load(){if(this.net.session)return;try{const bytes=await readSave();if(!bytes)throw Error('저장된 세계가 없습니다.');this.sim.load(bytes);const id=Object.values(this.sim.actors).find(a=>!a.enemy&&!a.speciesId&&!a.boss)?.id;if(id)this.localId=id;this.renderer.worldRef=null;this.selected=this.actor().inventory.selected;this.presentation.reset();this.scene.reset();this.localLoop.resetTiming();this.localScheduler.rebase();this.closeAll();this.toast('저장된 세계와 물리 상태를 복원했어요.');}catch(e){window.BloomDiagnostics.report(e,{kind:'load-error',visibility:'notice',origin:'storage'});this.toast('불러오기 실패: '+e.message);}}
+ export(){const b=this.sim.save(),url=URL.createObjectURL(new Blob([b],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download='Digmori-'+this.sim.terrain.seed+'-'+this.sim.tick+'.bloom';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ async import(file){if(this.net.session)return this.toast('협동 중에는 불러올 수 없습니다.');try{const b=new Uint8Array(await file.arrayBuffer());this.sim.load(b);this.localId=Object.values(this.sim.actors).find(a=>!a.enemy&&!a.speciesId&&!a.boss).id;this.selected=this.actor().inventory.selected;this.renderer.worldRef=null;this.presentation.reset();this.scene.reset();this.localLoop.resetTiming();this.localScheduler.rebase();this.closeAll();this.toast('월드 파일을 복원했어요.');}catch(e){window.BloomDiagnostics.report(e,{kind:'import-error',visibility:'notice',origin:'storage'});this.toast('파일 불러오기 실패: '+e.message);}}
+ networkStatus(text){this.net.status=text;$('network-status').textContent=text;}
+ async connect(role,{backup=null}={}){if(this.net.busy||this.net.session)return;const code=$('room-code').value.trim();if(role==='join'&&!/^\d{4}$/.test(code))return this.networkStatus('4자리 방 코드를 입력하세요.');this.net.busy=true;this.controls.release();this.pending=[];this.net.backup=backup||{bytes:this.sim.save(),id:this.localId};
+  try{this.net.phase='module-import';this.networkStatus('1/3 · Gamekit 전송·세션 모듈을 불러오는 중');
+   const dep=DEPENDENCIES.gamekit,base=gamekitBase(dep),[transport,rollback]=await Promise.all(['transport','rollback'].map(name=>importGamekitModule(base+dep.networkModules[name].file,name,dep.timeoutMs)));
+   this.net.phase='signaling';this.networkStatus('2/3 · 공개 릴레이와 WebRTC 연결 중');const room=await transport.createNostrDynamicRoom({role,room:code||undefined,namespace:'bloom-sandbox-0170',resume:{storage:sessionStorage},maxPlayers:4,timeoutMs:40000,onStatus:e=>this.networkStatus('연결: '+e.type+(e.reason?' · '+e.reason:''))});this.net.room=room;
+   this.sim.free();this.sim=new Simulation(this.R,hashStr(room.room)||CFG.worldSeed);this.localId=room.localPlayerId;this.renderer.worldRef=null;this.presentation.reset();this.scene.reset();
+   this.net.phase='session';this.networkStatus('3/3 · 공유 월드 입장 및 상태 검증');const session=rollback.createRoomSession({mode:'online',room,simulationVersion:'bloom-'+VERSION+'-rapier0210',seed:this.sim.terrain.seed,inputSize:CFG.net.inputSize,adapter:this.sim.adapter(),profile:{...rollback.profiles.lockstep,tickRate:CFG.tickRate,baseInputDelayTicks:CFG.net.inputDelayTicks,checksumInterval:CFG.net.checksumTicks,stateHistorySize:CFG.net.historyTicks,maxCatchupSteps:CFG.timing.maxCatchUp,maxSnapshotBytes:16*1024*1024,maxHistoryBytes:64*1024*1024},membership:{maxPlayers:4,maxTransferBytes:24*1024*1024,transitionTimeoutMs:30000},availability:{mode:'available',heartbeatMs:250,silenceMs:3000,inputGraceMs:3000,resumeGapMs:3000,roundTimeoutMs:5000,retryMs:500,autoTransfer:{enabled:false}},onEvent:e=>{
+    if(e.type==='rollback'){this.presentation.beginRollback(e.tick);this.scene.reset('rollback');}if(e.type==='membership-committed'){this.renderer.worldRef=null;this.sim.drainEffects();this.presentation.reset();this.scene.reset();this.net.phase='running';}
+    this.networkStatus('방 '+room.room+' · '+e.type+'\n'+(e.reason||''));}});this.net.session=session;
+   this.net.loop=this.gamekit.simloop.createLoop({session,getInput:()=>this.packet(),canAdvance:()=>!!this.actor(),canObserveInput:()=>!!this.actor(),render:()=>{},onAdvance:()=>this.afterAdvance(session),onError:e=>this.fatal(e)});
+   this.net.scheduler=this.gamekit.simloop.createDeadlineScheduler({getIntervalMs:()=>CFG.stepMs,pulse:t=>this.net.loop.pulse(t,{render:false}),onGap:()=>this.net.loop.resetTiming()});this.net.scheduler.start();$('room-code').value=room.room;this.networkStatus('방 '+room.room+' · 입장 중');this.closeAll();
+  }catch(e){window.BloomDiagnostics.report(e,{kind:'network-error',visibility:'notice',origin:'network.'+this.net.phase});this.net.room?.close();this.net.room=null;this.net.session=null;this.networkStatus('실패 단계: '+this.net.phase+'\n'+e.message+'\n개인 세계는 그대로 보존됩니다.');if(this.net.backup){this.sim.load(this.net.backup.bytes);this.localId=this.net.backup.id;this.renderer.worldRef=null;this.presentation.reset();this.scene.reset();}}
+  finally{this.net.busy=false;}
+ }
+ async reconnect(){if(this.net.busy||!this.net.session)return;const backup=this.net.backup;this.controls.release();this.net.scheduler?.stop();this.net.loop?.stop();this.net.session.close();this.net.room?.close();this.net.session=null;this.net.room=null;this.net.scheduler=null;this.net.loop=null;await this.connect('join',{backup});}
+ async leave(){if(this.net.busy)return;if(!this.net.session)return;this.net.busy=true;try{await withTimeout(this.net.session.leave(),20000,'정상 퇴장');this.net.scheduler?.stop();this.net.loop?.stop();this.net.session.close();this.net.room?.close();this.net.session=null;this.net.room=null;this.net.scheduler=null;this.net.loop=null;
+   this.sim.load(this.net.backup.bytes);this.localId=this.net.backup.id;this.renderer.worldRef=null;this.presentation.reset();this.scene.reset();this.networkStatus('개인 세계로 돌아왔습니다.');
+  }catch(e){this.networkStatus('퇴장 실패: '+e.message+' · 방을 강제로 분리하지 않았습니다.');}finally{this.net.busy=false;}}
+ debugKit(){if(!this.debug||this.net.session)return;const i=this.actor().inventory;for(const [id,n]of [['iron_sword',1],['iron_pick',1],['wood_bow',1],['iron_shield',1],['arrow',64],['food',16],['sigil',2],['workbench',1],['furnace',1],['log',16],['coal',16],['rawIron',16],['diamond',16],['iron',64],['seed',16]])Inventory.addTo(i.slots,id,n);this.refreshUI(true);}
+ debugEnemy(){if(!this.debug||this.net.session)return;const a=this.actor(),wild=Object.values(this.sim.actors).filter(x=>x.speciesId&&!x.boss&&!x.dead&&!x.structureKey);while(wild.length>=CFG.creatures.maxWild){wild.sort((x,y)=>V.len(V.sub(y.pos,a.pos))-V.len(V.sub(x.pos,a.pos)));const removed=wild.shift();this.sim.physics.removeBody(removed);delete this.sim.actors[removed.id];}this.sim.addCreature('shell',V.add(a.pos,V.scale(a.facing,3)));}
+ debugBoss(){if(!this.debug||this.net.session)return;this.sim.addBoss({x:this.actor().pos.x+4,y:this.actor().pos.y+1,z:this.actor().pos.z-5});}
 }
+

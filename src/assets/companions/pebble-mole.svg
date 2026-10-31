@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <metadata id="vector-asset">{
+    "schemaVersion": 1,
+    "id": "digmori-pebble-mole",
+    "defaultExpression": "front",
+    "parts": [
+      { "id": "body", "parent": null, "pivot": [128, 159] },
+      { "id": "shell", "parent": "body", "pivot": [128, 119] },
+      { "id": "left-arm", "parent": "body", "pivot": [88, 168] },
+      { "id": "right-arm", "parent": "body", "pivot": [168, 168] },
+      { "id": "left-paw", "parent": "body", "pivot": [81, 199] },
+      { "id": "right-paw", "parent": "body", "pivot": [180, 199] },
+      { "id": "face-front", "parent": "body", "pivot": [153, 160] },
+      { "id": "face-back", "parent": "body", "pivot": [128, 156] }
+    ],
+    "expressions": {
+      "front": { "show": ["face-front"], "hide": ["face-back"] },
+      "back": { "show": ["face-back"], "hide": ["face-front"] }
+    },
+    "sockets": {
+      "nose": { "part": "face-front", "point": [177, 163] },
+      "digging-paw": { "part": "right-paw", "point": [188, 199] }
+    },
+    "clips": {
+      "idle": {
+        "durationMs": 800,
+        "loop": "repeat",
+        "easing": "inOutSine",
+        "keyframes": [
+          { "timeMs": 0, "easing": "inOutSine", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-paw": { "rotation": 0 }, "right-paw": { "rotation": 0 } } },
+          { "timeMs": 400, "easing": "inOutSine", "parts": { "body": { "y": -3, "scaleX": 1.015, "scaleY": 0.99 }, "shell": { "rotation": -0.018 }, "left-paw": { "rotation": -0.025 }, "right-paw": { "rotation": 0.025 } } },
+          { "timeMs": 800, "easing": "inOutSine", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-paw": { "rotation": 0 }, "right-paw": { "rotation": 0 } } }
+        ]
+      },
+      "walk": {
+        "durationMs": 500,
+        "loop": "repeat",
+        "easing": "inOutSine",
+        "keyframes": [
+          { "timeMs": 0, "easing": "inOutSine", "parts": { "body": { "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0.015 }, "left-paw": { "rotation": -0.08 }, "right-paw": { "rotation": 0.08 } } },
+          { "timeMs": 250, "easing": "inOutSine", "parts": { "body": { "y": -4, "rotation": 0.018, "scaleX": 1.02, "scaleY": 0.985 }, "shell": { "rotation": -0.018 }, "left-paw": { "rotation": 0.08 }, "right-paw": { "rotation": -0.08 } } },
+          { "timeMs": 500, "easing": "inOutSine", "parts": { "body": { "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0.015 }, "left-paw": { "rotation": -0.08 }, "right-paw": { "rotation": 0.08 } } }
+        ]
+      },
+      "work": {
+        "durationMs": 420,
+        "loop": "repeat",
+        "easing": "inOutSine",
+        "keyframes": [
+          { "timeMs": 0, "easing": "inOutSine", "parts": { "body": { "x": 0, "y": -1, "rotation": -0.025, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": -0.02 }, "face-front": { "x": 0, "y": 0, "rotation": 0 }, "left-arm": { "rotation": -0.08 }, "right-arm": { "rotation": 0.14 }, "left-paw": { "rotation": 0.02 }, "right-paw": { "rotation": -0.04 } } },
+          { "timeMs": 140, "easing": "inOutSine", "parts": { "body": { "x": -8, "y": -7, "rotation": -0.12, "scaleX": 0.94, "scaleY": 1.06 }, "shell": { "rotation": -0.07 }, "face-front": { "x": -3, "y": -1, "rotation": -0.035 }, "left-arm": { "rotation": -0.28 }, "right-arm": { "rotation": 0.34 }, "left-paw": { "rotation": -0.09 }, "right-paw": { "rotation": 0.12 } } },
+          { "timeMs": 280, "easing": "inOutSine", "parts": { "body": { "x": 18, "y": 5, "rotation": 0.12, "scaleX": 1.08, "scaleY": 0.92 }, "shell": { "rotation": 0.11 }, "face-front": { "x": 12, "y": 4, "rotation": 0.08 }, "left-arm": { "rotation": 0.17 }, "right-arm": { "rotation": -0.18 }, "left-paw": { "rotation": 0.1 }, "right-paw": { "rotation": -0.14 } } },
+          { "timeMs": 420, "easing": "inOutSine", "parts": { "body": { "x": 0, "y": -1, "rotation": -0.025, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": -0.02 }, "face-front": { "x": 0, "y": 0, "rotation": 0 }, "left-arm": { "rotation": -0.08 }, "right-arm": { "rotation": 0.14 }, "left-paw": { "rotation": 0.02 }, "right-paw": { "rotation": -0.04 } } }
+        ]
+      },
+      "prepare": {
+        "durationMs": 700,
+        "loop": "once",
+        "easing": "outQuad",
+        "keyframes": [
+          { "timeMs": 0, "easing": "outQuad", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-arm": { "rotation": 0 }, "right-arm": { "rotation": 0 } } },
+          { "timeMs": 450, "easing": "outQuad", "parts": { "body": { "y": -10, "scaleX": 0.94, "scaleY": 1.08 }, "shell": { "rotation": 0.075 }, "left-arm": { "rotation": -0.2 }, "right-arm": { "rotation": 0.36 } } },
+          { "timeMs": 700, "easing": "outQuad", "parts": { "body": { "y": -5, "scaleX": 0.97, "scaleY": 1.04 }, "shell": { "rotation": 0.035 }, "left-arm": { "rotation": -0.1 }, "right-arm": { "rotation": 0.2 } } }
+        ]
+      },
+      "flight": {
+        "durationMs": 360,
+        "loop": "once",
+        "easing": "inOutSine",
+        "keyframes": [
+          { "timeMs": 0, "easing": "inOutSine", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-arm": { "rotation": 0.28 }, "right-arm": { "rotation": -0.28 }, "left-paw": { "rotation": 0.1 }, "right-paw": { "rotation": -0.1 } } },
+          { "timeMs": 180, "easing": "inOutSine", "parts": { "body": { "y": -5, "scaleX": 0.92, "scaleY": 1.07 }, "shell": { "rotation": -0.035 }, "left-arm": { "rotation": 0.5 }, "right-arm": { "rotation": -0.5 }, "left-paw": { "rotation": 0.2 }, "right-paw": { "rotation": -0.2 } } },
+          { "timeMs": 360, "easing": "inOutSine", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-arm": { "rotation": 0.28 }, "right-arm": { "rotation": -0.28 }, "left-paw": { "rotation": 0.1 }, "right-paw": { "rotation": -0.1 } } }
+        ]
+      },
+      "ground": {
+        "durationMs": 300,
+        "loop": "once",
+        "easing": "outQuad",
+        "keyframes": [
+          { "timeMs": 0, "easing": "outQuad", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 } } },
+          { "timeMs": 120, "easing": "outQuad", "parts": { "body": { "y": -4, "scaleX": 1.12, "scaleY": 0.84 }, "shell": { "rotation": -0.045 }, "left-arm": { "rotation": -0.16 }, "right-arm": { "rotation": 0.16 } } },
+          { "timeMs": 300, "easing": "outQuad", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 }, "left-arm": { "rotation": 0 }, "right-arm": { "rotation": 0 } } }
+        ]
+      },
+      "return": {
+        "durationMs": 350,
+        "loop": "once",
+        "easing": "outQuad",
+        "keyframes": [
+          { "timeMs": 0, "easing": "outQuad", "parts": { "body": { "y": 0, "scaleX": 1.08, "scaleY": 0.9 }, "shell": { "rotation": -0.04 } } },
+          { "timeMs": 170, "easing": "outQuad", "parts": { "body": { "y": -8, "scaleX": 0.94, "scaleY": 1.06 }, "shell": { "rotation": 0.04 } } },
+          { "timeMs": 350, "easing": "outQuad", "parts": { "body": { "y": 0, "scaleX": 1, "scaleY": 1 }, "shell": { "rotation": 0 } } }
+        ]
+      }
+    }
+  }</metadata>
+  <g id="body">
+    <path id="body-outline" d="M49 153 C48 125 59 101 81 91 C93 75 114 68 139 72 C167 75 196 94 205 119 C216 148 199 179 173 190 C146 202 91 196 67 181 C56 174 50 165 49 153 Z" fill="#85543f" stroke="#432d2a" stroke-width="8" stroke-linejoin="round"/>
+    <path id="body-fur" d="M57 151 C56 126 68 107 88 99 C101 85 118 80 139 83 C164 85 187 102 195 124 C204 148 190 170 168 181 C143 192 96 187 73 174 C63 169 58 161 57 151 Z" fill="#c58b61"/>
+    <path id="belly-shadow" d="M94 148 C111 136 144 137 163 151 C177 162 179 177 168 184 C146 195 110 187 96 175 C89 168 88 156 94 148 Z" fill="#a86e4d"/>
+    <ellipse id="ear-left" cx="63" cy="117" rx="16" ry="18" fill="#b77d5e" stroke="#432d2a" stroke-width="5"/>
+    <ellipse id="ear-right" cx="194" cy="118" rx="15" ry="17" fill="#b77d5e" stroke="#432d2a" stroke-width="5"/>
+    <ellipse id="ear-left-inner" cx="65" cy="118" rx="7" ry="9" fill="#e4aa80"/>
+    <ellipse id="ear-right-inner" cx="193" cy="119" rx="6" ry="8" fill="#e4aa80"/>
+    <path id="body-highlight" d="M77 118 C86 99 106 90 123 91" fill="none" stroke="#e4b480" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g id="shell">
+    <path id="shell-outline" d="M45 137 C36 119 39 96 51 79 C65 59 89 47 112 49 C129 35 155 39 170 52 C193 53 210 71 213 94 C221 112 213 135 198 150 C179 166 155 163 136 155 C113 164 87 159 69 151 C58 149 50 144 45 137 Z" fill="#615850" stroke="#392f2a" stroke-width="8" stroke-linejoin="round"/>
+    <path id="shell-top" d="M51 129 C44 112 47 94 58 80 C72 62 92 55 113 57 C131 43 153 47 166 60 C187 60 202 76 205 96 C212 112 205 130 192 142 C175 155 154 151 136 145 C113 153 91 150 73 143 C63 141 55 136 51 129 Z" fill="#92887b"/>
+    <path id="shell-facet-light" d="M67 85 C80 67 98 62 116 64 C105 78 101 91 106 104 C93 108 76 101 67 85 Z" fill="#b5aa97"/>
+    <path id="shell-facet-deep" d="M116 64 C132 52 151 54 164 67 C177 71 186 83 188 96 C174 102 157 96 148 88 C135 84 123 77 116 64 Z" fill="#777064"/>
+    <path id="shell-facet-low" d="M62 119 C77 108 94 109 108 119 C118 131 117 143 106 150 C90 150 76 145 65 137 Z" fill="#81796f"/>
+    <path id="shell-facet-right" d="M149 101 C162 95 183 101 197 113 C200 124 196 135 187 142 C173 147 157 141 148 131 C144 120 144 110 149 101 Z" fill="#a69b89"/>
+    <path id="shell-fleck-one" d="M123 93 C130 86 139 88 141 95 C138 102 128 105 123 101 Z" fill="#d3c5ae"/>
+    <path id="shell-fleck-two" d="M87 124 C92 118 99 119 101 126 C99 132 92 134 88 130 Z" fill="#c9bea9"/>
+    <path id="shell-moss-left" d="M54 89 C59 78 69 73 78 76 C77 84 70 90 63 93 C68 96 75 93 79 90 C79 99 71 104 61 101 C55 98 52 94 54 89 Z" fill="#a6b84b"/>
+    <path id="shell-moss-top" d="M132 56 C140 48 151 49 156 57 C153 63 147 65 141 62 C145 69 153 68 158 65 C155 74 144 78 136 72 C131 68 129 61 132 56 Z" fill="#b2c654"/>
+    <circle id="shell-moss-dot" cx="72" cy="117" r="4" fill="#b2c654"/>
+  </g>
+  <g id="left-arm">
+    <path id="left-arm-shadow" d="M91 157 C82 165 78 175 79 184" fill="none" stroke="#432d2a" stroke-width="15" stroke-linecap="round"/>
+    <path id="left-arm-fur" d="M91 157 C82 165 78 175 79 184" fill="none" stroke="#c58b61" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <g id="right-arm">
+    <path id="right-arm-shadow" d="M164 157 C174 166 180 175 181 185" fill="none" stroke="#432d2a" stroke-width="15" stroke-linecap="round"/>
+    <path id="right-arm-fur" d="M164 157 C174 166 180 175 181 185" fill="none" stroke="#c58b61" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <g id="left-paw">
+    <path id="left-paw-shape" d="M63 191 C66 179 83 174 99 181 C111 186 119 196 116 204 C113 210 103 210 96 205 C87 211 75 209 68 204 C63 201 61 196 63 191 Z" fill="#a86e4d" stroke="#432d2a" stroke-width="6" stroke-linejoin="round"/>
+    <path id="left-paw-toes" d="M82 196 C84 191 89 191 91 198 M99 197 C101 192 106 194 106 200" fill="none" stroke="#e6b88c" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="right-paw">
+    <path id="right-paw-shape" d="M146 191 C149 179 165 175 181 181 C194 186 202 196 199 204 C196 210 186 210 179 205 C170 211 158 209 151 204 C146 201 144 196 146 191 Z" fill="#a86e4d" stroke="#432d2a" stroke-width="6" stroke-linejoin="round"/>
+    <path id="right-paw-toes" d="M164 196 C166 191 171 191 173 198 M181 197 C183 192 188 194 188 200" fill="none" stroke="#e6b88c" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="face-front">
+    <path id="face-mask" d="M113 123 C126 111 148 110 163 117 C180 124 190 139 188 155 C186 174 168 185 147 182 C126 181 112 169 108 153 C105 141 107 131 113 123 Z" fill="#f4dfb2" stroke="#7b5142" stroke-width="5" stroke-linejoin="round"/>
+    <ellipse id="face-eye-left" cx="137" cy="143" rx="7" ry="10" fill="#392d2b"/>
+    <ellipse id="face-eye-right" cx="169" cy="145" rx="7" ry="10" fill="#392d2b"/>
+    <ellipse id="face-eye-shine-left" cx="135" cy="140" rx="2.5" ry="3.5" fill="#fff8e7"/>
+    <ellipse id="face-eye-shine-right" cx="167" cy="142" rx="2.5" ry="3.5" fill="#fff8e7"/>
+    <ellipse id="face-cheek-left" cx="125" cy="158" rx="7" ry="4" fill="#e99c83"/>
+    <ellipse id="face-cheek-right" cx="180" cy="160" rx="7" ry="4" fill="#e99c83"/>
+    <ellipse id="face-nose" cx="186" cy="157" rx="5" ry="4" fill="#73453d"/>
+    <path id="face-smile" d="M148 163 Q157 173 169 164" fill="none" stroke="#563830" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="face-back">
+    <ellipse id="back-tail-outline" cx="79" cy="160" rx="15" ry="13" fill="#432d2a"/>
+    <ellipse id="back-tail" cx="79" cy="158" rx="10" ry="9" fill="#d0a580"/>
+    <path id="back-shell-glint" d="M88 73 C103 61 117 60 127 64 M172 76 C183 80 189 89 190 97" fill="none" stroke="#d5c9b8" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

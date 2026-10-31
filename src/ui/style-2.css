@@ -1,0 +1,16 @@
+
+@media(pointer:coarse){
+body{overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+#joystick{left:max(18px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));width:108px;height:108px;z-index:15}#stick{left:30px;top:30px}
+.touch-actions{right:max(18px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(2,54px);gap:7px;z-index:15}
+.mobile-button{width:54px;height:54px;font-size:11px;touch-action:none}
+.touch-actions [data-touch=left]{grid-column:3;grid-row:1;background:#79543ad9;border-color:#dfba83}
+.touch-actions [data-touch=right]{grid-column:3;grid-row:2;background:#40576bdf;border-color:#a8c4dc}
+.touch-actions [data-touch=roll]{grid-column:2;grid-row:2}.touch-actions [data-touch=jump]{grid-column:2;grid-row:1}.touch-actions [data-touch=sprint]{grid-column:1;grid-row:2}#touch-use{grid-column:1;grid-row:1}
+#topbar{top:max(4px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right))}#topbar .brand{font-size:15px!important}#topbar .brand small{font-size:8px}.toolbar button{font-size:11px;padding:6px 8px;min-height:34px}
+#guide{top:48px;left:max(12px,env(safe-area-inset-left));width:min(195px,24vw);font-size:10px;line-height:1.35;padding:5px 8px;max-height:65px;overflow:hidden}
+#vitals{left:50%;bottom:65px;width:min(260px,32vw)}#hotbar{bottom:max(6px,env(safe-area-inset-bottom));grid-template-columns:repeat(9,min(4vw,38px));gap:2px;padding:3px}#hotbar .slot{width:min(4vw,38px);height:min(4.3vw,40px)}#hotbar .icon{font-size:clamp(14px,2.8vw,23px)}#equipped{bottom:51px;font-size:10px}#mode-label{display:none}
+#inventory .panel{width:min(95vw,850px);max-height:94dvh;overflow:auto}#inventory-panel{flex-direction:row;gap:12px}#recipe-book{width:155px;flex-shrink:0;border-right:1px solid var(--line);padding-right:10px;display:block}#recipe-book h3{display:block}#recipe-list{display:grid;grid-template-columns:repeat(3,1fr);max-height:52dvh;overflow:auto}#recipe-list button{width:40px;height:40px;font-size:22px}.inv-main{width:min(410px,55vw)}#inventory-grid{grid-template-columns:repeat(9,min(4vw,40px));gap:2px}#inventory-grid .slot{width:min(4vw,40px);height:min(4vw,40px)}.craft-grid{grid-template-columns:repeat(3,38px)}.craft-grid.personal{grid-template-columns:repeat(2,38px)}.craft-grid .slot{width:38px;height:38px}.top-inventory{min-height:125px}
+}
+@media(pointer:coarse) and (orientation:portrait){#rotate-notice{display:flex!important}}
+#rotate-notice{display:none;position:fixed;inset:0;z-index:190;background:#12271eec;align-items:center;justify-content:center;padding:24px;text-align:center}#rotate-notice .rotate-card{max-width:320px;background:#203b2b;border:1px solid #91a47b;border-radius:14px;padding:26px}#rotate-notice .rotate-icon{font-size:45px;margin-bottom:12px}#rotate-notice button{margin-top:16px;background:#b3c999;color:#15271b;font-weight:800}
