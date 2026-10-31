@@ -4,12 +4,16 @@
   "title": "디그모리",
   "en": "DIGMORI",
   "genre": "sandbox",
-  "tags": ["2.5D", "채굴·건설", "탐험"],
-  "desc": "지형을 채굴하고 건설하며 동굴과 던전을 탐험하는 샌드박스 게임입니다.",
-  "points": [
-    "절차적 지형·동굴 생성",
-    "채굴·건축·탐험",
-    "동료 편성과 전투"
+  "tags": [
+    "2.5D",
+    "육성",
+    "액션"
   ],
-  "showcase": "https://byh-playground.github.io/bloom-digmori/#/showcase"
+  "desc": "복셀 월드를 탐험하며 귀여운 생물을 키워 함께 싸우는 2.5D 액션 육성 게임입니다. 지금은 새 플레이어 캐릭터 슬라이스 단계입니다.",
+  "points": [
+    "컷아웃 부품 애니메이션 플레이어",
+    "평타 3연타·구르기",
+    "장비 단계 색 교체"
+  ],
+  "showcase": "https://byh-playground.github.io/bloom-digmori/"
 }
