@@ -38,9 +38,9 @@
   "egg": {"group": "egg","size": [112,134],"anchor": [55.5,131]},
   "leaves_back_g1": {"group": "leaves","size": [148,68],"anchor": [73,66]},
   "leaves_back_g2": {"group": "leaves","size": [151,89],"anchor": [74.5,87]},
-  "leaves_back_g3": {"group": "leaves","size": [156,104],"anchor": [76.5,102]},
-  "leaves_back_g4": {"group": "leaves","size": [159,108],"anchor": [79.5,106]},
-  "hat_back": {"group": "hat","size": [219,140],"anchor": [109,137]},
+  "leaves_back_g3": {"group": "leaves","size": [156,90],"anchor": [77.5,89]},
+  "leaves_back_g4": {"group": "leaves","size": [159,94],"anchor": [78.5,93]},
+  "hat_back": {"group": "hat","size": [219,137],"anchor": [109.5,135]},
   "sprout_front": {"group": "sprout","size": [119,61],"anchor": [57.5,59]},
   "sprout_side": {"group": "sprout","size": [63,67],"anchor": [9,65]},
   "sprout_back": {"group": "sprout","size": [117,63],"anchor": [60.5,61]}

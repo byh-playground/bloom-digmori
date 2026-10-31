@@ -10,3 +10,7 @@
 #journal-quests li{margin:6px 0;padding:4px 0}#journal-quests .done{color:#a9e2b8}#journal-explore li{margin:7px 0}
 @media(pointer:coarse){#rpg-inline{top:76px;left:12px;font-size:10px}#guide{top:109px}#resource-guide{top:180px} .rpg-panel{max-height:88dvh}.rpg-content{gap:12px}}
 @media(max-width:620px){.rpg-content{grid-template-columns:1fr}.rpg-panel{max-width:99vw}}
+
+/* 0.34.0 storage chest view (inventory panel, like the furnace view): 3 x 3 slots. */
+#chest-view{width:260px}#chest-view h3{margin:0 0 4px}#chest-grid{display:grid;gap:3px;grid-template-columns:repeat(3,38px)}#chest-grid .slot{width:38px;height:38px}#chest-view small{display:block;margin-top:4px;font-size:10px;line-height:1.35}
+@media(pointer:coarse) and (orientation:landscape){#inventory #chest-view h3{font-size:11px;margin:0 0 3px}#chest-grid{grid-template-columns:repeat(3,28px);gap:2px}#chest-grid .slot{width:28px;height:28px}#chest-view small{display:none}}

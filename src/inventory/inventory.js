@@ -12,11 +12,16 @@ class Inventory {
  static takeFrom(slots,id,n){if(slots.reduce((t,s)=>t+(s?.id===id?s.count:0),0)<n)return false;for(let j=slots.length-1;j>=0&&n;j--){const s=slots[j];if(s?.id!==id)continue;const k=Math.min(n,s.count);s.count-=k;n-=k;if(!s.count)slots[j]=null;}return true;}
  static selected(i){return i.slots[i.selected];}
  static area(actor,area,sim){const i=actor.inventory;if(area==='bag')return i.slots;if(area==='grid')return i.grid;
-  if(area==='furnace'&&i.station&&sim.stationInReach(actor,i.station,'furnace'))return sim.furnaces[i.station]?.slots||null;return null;}
+  if(area==='furnace'&&i.station&&sim.stationInReach(actor,i.station,'furnace'))return sim.furnaces[i.station]?.slots||null;
+  if(area==='chest'&&i.station&&sim.stationInReach(actor,i.station,'chest'))return sim.chests[i.station]?.slots||null;return null;}
+ static openChest(actor,sim){const key=actor.inventory.station;return key&&sim.stationInReach(actor,key,'chest')?sim.chests[key]?.slots||null:null;}
  static click(actor,command,sim){const i=actor.inventory,area=command.area,index=command.index;let target;
   if(area==='armor'){if(!ARMOR_SLOTS.includes(index))return false;target=i.armor;}else{target=this.area(actor,area,sim);if(!target||!Number.isInteger(index)||index<0||index>=target.length)return false;
     if(area==='grid'&&!sim.stationInReach(actor,i.station,'craft')&&![0,1,3,4].includes(index))return false;}
   const stack=target[index],held=i.cursor,accept=s=>!s||area==='armor'?(!s||ITEMS[s.id].armor===index):area==='furnace'?(index===0?!!SMELT[s.id]:index===1?!!FUELS[s.id]:false):true;
+  // Shift-click with a storage chest open moves between the chest and the bag, like a Minecraft chest.
+  const chest=area==='bag'?this.openChest(actor,sim):null;
+  if(command.shift&&stack&&chest){const left=this.addTo(chest,stack.id,stack.count);if(left===stack.count)return false;target[index]=left?{id:stack.id,count:left}:null;return true;}
   if(command.shift&&stack&&area!=='grid'){
    let range=area==='bag'? (index<9?i.slots.slice(9):i.slots.slice(0,9)):i.slots.slice();let left=this.addTo(range,stack.id,stack.count);
    if(left===stack.count)return false;
@@ -38,7 +43,7 @@ class Inventory {
  }
  /** Double-click matching stack: collect from bag/grid up to stack cap, replay safe. */
  static collect(actor,c,sim){const i=actor.inventory,held=i.cursor;if(!held)return false;const max=this.limit(held.id);if(held.count>=max)return false;
-  const areas=[i.slots,i.grid];if(i.station&&sim.stationInReach(actor,i.station,'furnace'))areas.push(sim.furnaces[i.station]?.slots||[]);
+  const areas=[i.slots,i.grid];if(i.station&&sim.stationInReach(actor,i.station,'furnace'))areas.push(sim.furnaces[i.station]?.slots||[]);const chest=this.openChest(actor,sim);if(chest)areas.push(chest);
   for(const arr of areas)for(let k=0;k<arr.length&&held.count<max;k++){if(arr===i.grid&&!sim.stationInReach(actor,i.station,'craft')&&![0,1,3,4].includes(k))continue;if(arr.length===3&&k===2)continue;const slot=arr[k];if(!slot||slot.id!==held.id)continue;const n=Math.min(max-held.count,slot.count);held.count+=n;slot.count-=n;if(!slot.count)arr[k]=null;}return true;
  }
  /** Minecraft cursor-stack drag distribution: left evenly, right one per cell. */

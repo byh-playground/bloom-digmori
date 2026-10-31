@@ -45,7 +45,14 @@ const BLOCKS=[
  // Appended only: block ids are saved terrain edits, so existing indices never move.
  {id:'rootEgg',name:'뿌리 알',color:'#d8c79a',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'root'},
  {id:'rockChickEgg',name:'바위 병아리 알',color:'#c8c2b4',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'rock-chick'},
- {id:'mushroomSnailEgg',name:'버섯 달팽이 알',color:'#e0c4cf',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'mushroom-snail'}
+ {id:'mushroomSnailEgg',name:'버섯 달팽이 알',color:'#e0c4cf',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'mushroom-snail'},
+ // Ranching (D-103/D-106, 0.34.0). A fence and a closed gate are one solid voxel for players and physics, but owned units
+ // treat them as 1.5 blocks high (Ranch.passable/standable): never crossed, climbed or stood on. Both are drawn as posts
+ // and rails (Renderer.drawFences), not as cubes. The open gate is its own non-solid block so the voxel collider opens.
+ {id:'fence',name:'나무 울타리',color:'#b48552',hardness:1000,tool:'axe',tier:0,mesh:false,fence:true},
+ {id:'fenceGate',name:'울타리 문',color:'#c39762',hardness:1000,tool:'axe',tier:0,mesh:false,fence:true,gate:'closed'},
+ {id:'fenceGateOpen',name:'열린 울타리 문',color:'#c39762',hardness:1000,tool:'axe',tier:0,solid:false,mesh:false,gate:'open',drop:'fenceGate'},
+ {id:'storageChest',name:'보관 상자',color:'#b27a45',hardness:1200,tool:'axe',tier:0,station:'chest'}
 ];
 const BID=Object.fromEntries(BLOCKS.map((b,i)=>[b.id,i]));
 const RESOURCE_DEFS=Object.freeze([
@@ -67,8 +74,10 @@ const WEAPONS={
 };
 const ITEMS={};
 function defineItem(id,name,icon,opts={}){ITEMS[id]={id,name,icon,stack:64,...opts};}
-for(const b of BLOCKS)if(!['air','grass','bedrock','altar','coalOre','ironOre','goldOre','diamondOre','lootChest'].includes(b.id))defineItem(b.id,b.name,({log:'▥',leaves:'✿',stone:'◆',dirt:'■',planks:'▤',workbench:'▦',furnace:'▣',torch:'♨',cap:'🍄',stem:'▥',trophy:'✧'})[b.id]||'◆',{block:BID[b.id]});
+for(const b of BLOCKS)if(!['air','grass','bedrock','altar','coalOre','ironOre','goldOre','diamondOre','lootChest','fenceGateOpen'].includes(b.id))defineItem(b.id,b.name,({log:'▥',leaves:'✿',stone:'◆',dirt:'■',planks:'▤',workbench:'▦',furnace:'▣',torch:'♨',cap:'🍄',stem:'▥',trophy:'✧',fence:'#',fenceGate:'⊓',storageChest:'▤'})[b.id]||'◆',{block:BID[b.id]});
 for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['leather','가죽','▱'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚'],['relic','고대의 유물','✧']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
+// D-104 merge potion: thrown like a splash potion (right-click), merges owned adults hit by the splash (Simulation.splashPotion).
+defineItem('mergePotion','합성 물약','⚗',{stack:16,throwable:true});
 for(const [mat,m]of Object.entries(MATERIALS)){
  defineItem(mat+'_pick',m.name+' 곡괭이','⛏',{stack:1,material:mat,tool:'pick',tier:m.tier,miningSpeed:m.speed,weight:4});
  for(const [type,w]of Object.entries(WEAPONS))
@@ -102,6 +111,10 @@ for(const mat of ['leather','iron','diamond']){
 }
 recipe('healingSalve','healingSalve',1,['FF','CS'],{F:'food',C:'crystalShard',S:'fiber'},2);
 recipe('trophy','trophy',1,[' D ','IHI','PPP'],{D:'diamond',I:'iron',H:'heart',P:'planks'},3,'boss');
+// Ranch (0.34.0), Minecraft-shaped: fence = planks/stick/planks ×2 rows → 3, gate = stick/planks/stick ×2 rows, chest = planks ring.
+// Merge potion = 공명 수정 조각 over 열매 (crystal + fruit, the healing salve's ingredients without the fiber) → 1 in the 2×2 grid.
+recipe('fence','fence',3,['PSP','PSP'],{P:'planks',S:'stick'},3);recipe('fenceGate','fenceGate',1,['SPS','SPS'],{P:'planks',S:'stick'},3);
+recipe('storageChest','storageChest',1,['PPP','P P','PPP'],{P:'planks'},3);recipe('mergePotion','mergePotion',1,['C','F'],{C:'crystalShard',F:'food'},2);
 const FUELS={coal:48000,charcoal:48000,log:9000,planks:9000,stick:3000};
 const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:'charcoal',ms:6000},cobble:{out:'stone',ms:6000}};
 const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'})});
@@ -112,6 +125,9 @@ const QUESTS=Object.freeze([
  Object.freeze({id:'chests',title:'고대의 보물',hint:'폐광 또는 유적의 보물함을 F로 여세요.'}),
  Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 적대 생물을 모두 쓰러뜨리세요.'}),
  Object.freeze({id:'boss',title:'보스 구조물',hint:'초원의 꽃 고리, 균류 숲의 버섯 고리, 동굴 유적 최심부에서 보스를 쓰러뜨리세요.'}),
- Object.freeze({id:'hatched',title:'첫 부화',hint:'보스가 남긴 알을 땅에 놓고 부화를 기다리세요.'})
+ Object.freeze({id:'hatched',title:'첫 부화',hint:'보스가 남긴 알을 땅에 놓고 부화를 기다리세요.'}),
+ Object.freeze({id:'grown',title:'목장의 성체',hint:'울타리 안에 먹이를 던져(Q) 아기에게 세 번 먹이세요.'}),
+ Object.freeze({id:'merged',title:'첫 합성',hint:'같은 종·같은 등급 성체 둘에게 합성 물약을 던지세요.'}),
+ Object.freeze({id:'labor',title:'상자 노동',hint:'울타리 안에 보관 상자와 적성 블록을 두면 성체가 캐서 상자에 넣습니다.'})
 ]);
 
