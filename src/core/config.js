@@ -17,7 +17,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.34.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.35.1',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -29,7 +29,7 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   water:{horizontalRange:7,updateEveryTicks:ticksForMs(100),activateEveryTicks:ticksForMs(1000),maxUpdatesPerStep:160,activationRadius:16,simulationRadius:64,retireEveryTicks:ticksForMs(2000),maxFlowCells:24000,swimSpeed:2.8,sprintSpeed:4.8,riseSpeed:3.0,diveSpeed:-2.4},
   // Foot contact must be at the actor's actual sole; a higher ledge under a
   // forward corner must not turn a submerged/airborne actor into "grounded".
-  movement:{groundGap:.10,footInset:.025,footPenetration:.045,autoJumpLook:.80,ceilingGap:.04,autoStepRise:1.12,bankRiseSpeed:4.5},
+  movement:{groundGap:.10,footInset:.025,footPenetration:.045,autoJumpLook:.80,ceilingGap:.04,autoStepRise:1.12,bankRiseSpeed:4.5,fenceHeight:1.5},
   render:{uploadBudgetMs:2,maxUploads:2,maxPending:3,workerBudgetMs:3,waterMeshBudgetMs:2.5,maxWaterMeshesPerFrame:2},
   combat:{combo:{window:650,chainRecovery:.45,minRecovery:75},hit:{radius:.26,angularStep:.11,maxSamples:40,skin:.008},
    knockback:{drag:3.5,maxSpeed:14,duration:340,bossResistance:.26,playerResistance:.76,

@@ -53,7 +53,7 @@ class App {
   };
   document.addEventListener('pointerup',releaseSlot);document.addEventListener('pointercancel',releaseSlot);
   invNode.addEventListener('contextmenu',e=>e.preventDefault());
-  $('recipe-list').onclick=e=>{const b=e.target.closest('[data-recipe]');if(!b)return;const id=b.dataset.recipe,r=RECIPES.find(r=>r.id===id);$('recipe-detail').textContent=ITEMS[r.out].name+'\n'+Object.entries(r.keys).map(([char,val])=>{const n=r.pattern.join('').split(char).length-1,ids=Array.isArray(val)?val:[val];return ids.map(i=>ITEMS[i].name).join(' / ')+' ×'+n;}).join(' · ');this.command({op:'recipe',id});};
+  $('recipe-list').onclick=e=>{const b=e.target.closest('[data-recipe]');if(!b)return;const id=b.dataset.recipe,r=RECIPES.find(r=>r.id===id);$('recipe-detail').textContent=recipeDetailText(r);this.command({op:'recipe',id});};
   $('craft-result').onclick=e=>this.command({op:'craft',all:e.shiftKey});$('recipe-search').oninput=()=>this.refreshInventory(true);$('craftable-only').onchange=()=>this.refreshInventory(true);
   // Touch: long press a slot to split. PC: right-click.
   $('drop-held').onclick=()=>this.command({op:'drop',all:true});
@@ -103,7 +103,7 @@ class App {
   const companion=this.sim.companions.equipped(a);if(companion)equippedText=SPECIES[companion.kind].name+' · '+this.sim.companions.activity(companion);
   if(c.state==='attack'&&c.action?.comboLabel)equippedText+=' · '+(c.action.combo+1)+' / '+c.action.comboCount+' '+c.action.comboLabel+(c.queued?' · 다음 타격 예약':'');
   $('equipped').innerHTML=(!companion&&stats.item?this.itemIconHTML(stats.item.id,'equipped-icon'):'')+'<span>'+escapeHtml(equippedText)+'</span>';
-  const realm=this.sim.terrain.realm(a.pos.x,a.pos.y,a.pos.z);$('location').textContent=(a.swim?.inWater?(a.swim.underwater?'잠수 중 · ':'수영 중 · '):'')+this.sim.terrain.biome(a.pos.x,a.pos.z)+(realm?' ('+REALMS[realm].name+')':'')+' · '+(this.sim.night()?'밤':'낮')+' '+this.sim.clock()+'\n'+[a.pos.x,a.pos.y,a.pos.z].map(Math.floor).join(' / ');
+  updateGearHUD(this.sim,a);const realm=this.sim.terrain.realm(a.pos.x,a.pos.y,a.pos.z);$('location').textContent=(a.swim?.inWater?(a.swim.underwater?'잠수 중 · ':'수영 중 · '):'')+this.sim.terrain.biome(a.pos.x,a.pos.z)+(realm?' ('+REALMS[realm].name+')':'')+' · '+(this.sim.night()?'밤':'낮')+' '+this.sim.clock()+'\n'+[a.pos.x,a.pos.y,a.pos.z].map(Math.floor).join(' / ');
   const guide=this.guide();$('guide').innerHTML='<b>'+guide[0]+'</b><br>'+guide[1]+'<br><small>'+guide[2]+'</small>';$('resource-guide').textContent=this.resourceHint(a);
   $('crosshair').classList.toggle('aim-enemy',!!this.sim.physics.aimEnemy(a,Combat.weapon(a,this.sim).reach));$('crosshair').classList.toggle('mining',!!a.mine.target&&a.mine.elapsed>0);const hit=this.renderer.target;if(hit){const b=BLOCKS[hit.id],ratio=a.mine.target===blockKey(hit.x,hit.y,hit.z)?a.mine.elapsed/b.hardness:0;$('target').innerHTML=escapeHtml(b.name)+(b.station==='loot'?' · F 열기':b.station==='chest'?' · 우클릭·F 열기':b.gate?' · 우클릭 '+(b.gate==='open'?'닫기':'열기'):b.station?' · F 사용':'')+'<progress value="'+ratio+'" max="1"></progress>';}else $('target').textContent='';
   const boss=Object.values(this.sim.actors).filter(x=>x.boss&&!x.dead&&V.len(V.sub(x.pos,a.pos))<40).sort((x,y)=>V.len(V.sub(x.pos,a.pos))-V.len(V.sub(y.pos,a.pos))||cmp(x.id,y.id))[0];$('bossbar').hidden=!boss;if(boss){$('boss-name').textContent=SPECIES[boss.speciesId].boss.name+' · '+Math.ceil(boss.hp)+' / '+boss.maxHp+' · '+(boss.hp<boss.maxHp*.5?'각성':'잠에서 깸');$('boss-fill').style.width=boss.hp/boss.maxHp*100+'%';}

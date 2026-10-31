@@ -153,7 +153,13 @@ class Combat {
   const c=target.combat,point=contact?.point||V.add(target.pos,{x:0,y:target.offset||.9,z:0});
   if(c.invul>0||c.state==='roll'&&c.elapsed>=CFG.iframes.start&&c.elapsed<CFG.iframes.end){sim.emit('evade',target,{point,sourceId});return false;}
   const stats=target.boss||target.speciesId||target.enemy?{defense:target.boss?25:0}:Inventory.stats(target),projectile=payload.type==='shot';
-  const damage=Math.max(1,Math.round(payload.damage*CFG.armorK/(CFG.armorK+stats.defense)));target.hp=Math.max(0,target.hp-damage);
+  let damage=Math.max(1,Math.round(payload.damage*CFG.armorK/(CFG.armorK+stats.defense)));
+  // 0.35.1 equipment progression (Gear): a player's own strike uses its realm attack factor (무기 below tier ×0.4, diamond
+  // ×1.6); a player hit takes its realm armor factor (below tier ×2, diamond ×0.6). Unit strikes are not scaled.
+  const isPlayer=a=>a&&!a.enemy&&!a.speciesId&&!a.boss;
+  if(isPlayer(source)&&!payload.companionId)damage=Gear.scale(damage,Gear.status(source,sim.terrain).attack);
+  if(isPlayer(target))damage=Gear.scale(damage,Gear.status(target,sim.terrain).taken);
+  target.hp=Math.max(0,target.hp-damage);
   const heavy=!!payload.heavy,lethal=target.hp<=0;
   if(target.speciesId&&source){target.wildState='retaliating';target.enemy=true;target.targetId=source.id;}
   if(!target.enemy)c.invul=200;

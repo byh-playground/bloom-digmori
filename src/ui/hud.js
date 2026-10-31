@@ -11,6 +11,25 @@ function projectWorldToScreen(m,pos,width,height){
  if(![nx,ny,depth].every(Number.isFinite)||depth< -1||depth>1)return null;
  return{x:(nx*.5+.5)*width,y:(.5-ny*.5)*height,depth,w};
 }
+// 0.35.1 equipment HUD (doc §3.3): one small line above the HP bar. It names the realm's recommended tier, and for every
+// slot below it which slot is short and what that costs; diamond bonuses show in gold. A realm that asks for nothing and
+// gives no bonus hides it. The screen edge takes the hazard's tint (추위 blue, 포자 독 yellow-green) while it drains.
+const gearFactorText=m=>'×'+String(m/1000),gearSeconds=ticks=>{const s=Math.round(ticks*CFG.stepMs)/1000;return s===1?'':String(s);};
+function gearStatusParts(status,actor){const rule=REALMS[status.realm],need=status.need,parts=[];
+ for(const [slot,def]of Object.entries(GEAR_RULES.slots)){const s=status.slots[slot],label=slot==='armor'?'피해':def.label;
+  if(s.grade==='below'){let what;if(slot==='armor'){const have=ARMOR_SLOTS.filter(k=>actor.inventory.armor[k]&&Gear.itemTier(actor.inventory.armor[k].id)>=need).length;what=GEAR_TIER_NAMES[need]+' '+def.name+' '+have+'/'+ARMOR_SLOTS.length;}else what=s.tier?GEAR_TIER_NAMES[s.tier]+' '+def.name:def.name+' 없음';
+   const hazard=slot==='armor'&&status.hazard?GEAR_RULES.hazards[status.hazard]:null;
+   parts.push({slot,kind:'below',text:def.icon+' '+what+' · '+label+' '+gearFactorText(s.factor)+(hazard?' · '+hazard.name+' −'+hazard.damage+'/'+gearSeconds(hazard.everyTicks)+'초':'')});}
+  else if(s.grade==='bonus')parts.push({slot,kind:'bonus',text:def.icon+' '+def.label+' '+gearFactorText(s.factor)});}
+ if(!need&&!parts.length)return null;
+ return{title:(rule?.name||'')+' · 권장 '+(need?GEAR_TIER_NAMES[need]:'맨손'),ok:!parts.some(p=>p.kind==='below'),parts};}
+function updateGearHUD(sim,actor){const node=document.getElementById('gear-status');if(!node)return;const status=Gear.status(actor,sim.terrain),view=actor.dead?null:gearStatusParts(status,actor),key=JSON.stringify(view);
+ document.body.classList.toggle('hazard-cold',status.hazard==='cold'&&!actor.dead);document.body.classList.toggle('hazard-spore',status.hazard==='spore'&&!actor.dead);
+ if(node.dataset.key===key)return;node.dataset.key=key;node.hidden=!view;if(!view){node.innerHTML='';return;}
+ node.innerHTML='<b class="'+(view.ok?'ok':'warn')+'">'+escapeHtml(view.title)+(view.ok?' ✓':' · 페널티')+'</b>'+view.parts.map(p=>'<span class="'+p.kind+'" data-slot="'+p.slot+'">'+escapeHtml(p.text)+'</span>').join('');}
+// Recipe card text: ingredients with counts; an ingredient from the realm before the gear's realm is tagged with it.
+function recipeDetailText(r){const prior=recipePriorIngredients(r);
+ return ITEMS[r.out].name+'\n'+Object.entries(r.keys).map(([char,val])=>{const n=r.pattern.join('').split(char).length-1,ids=Array.isArray(val)?val:[val],tag=prior.find(p=>p.key===char);return ids.map(i=>ITEMS[i].name).join(' / ')+' ×'+n+(tag?' ('+REALMS[tag.realm].name+' 자원)':'');}).join(' · ');}
 // Wild units are plain wildlife since 0.33.0 (no recruitment): name plus state; structure bosses show their own name.
 function enemyLabelName(a){if(a.boss)return SPECIES[a.speciesId].boss.name+' · 보스';if(a.speciesId)return SPECIES[a.speciesId].name+(a.wildState==='retaliating'?' · 반격 중':' · 야생');return a.enemy?'적대 생물':'플레이어 · '+String(a.id).slice(0,6);}
 class EnemyHealthHUD {
