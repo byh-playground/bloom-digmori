@@ -1,0 +1,16 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>Digmori · 새 동료 3종 리그</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101c20;color:#e4e9da;font:13px system-ui,sans-serif}header,main{max-width:1600px;margin:auto;padding:14px 20px}header{border-bottom:1px solid #34453f}h1{font-size:20px;margin:4px 0}h2{font-size:16px;margin:22px 0 6px;color:#e7c47a}h3{font-size:12px;margin:12px 0 4px;color:#a9beb3;font-weight:600}p{color:#a9beb3;line-height:1.55;margin:4px 0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}label{display:flex;gap:6px;align-items:center;color:#c5d3c5;font-size:12px}select,button{border:1px solid #52665c;background:#24382f;color:#e7ecd9;border-radius:6px;padding:6px 10px}
+.row{display:flex;flex-wrap:wrap;gap:6px}.cell{display:flex;flex-direction:column;align-items:center;border:1px solid #2c3d37;border-radius:6px;overflow:hidden}.cell span{font:11px ui-monospace,monospace;color:#9fb3a8;padding:2px 4px;text-align:center}
+canvas{display:block}body.light .cell canvas{background:#f2eee4}body.dark .cell canvas{background:#1b2226}body.green .cell canvas{background:#4f7d45}.error{background:#ffdfc4;color:#5c1920;padding:20px;display:none;white-space:pre-wrap}
+@media(max-width:700px){header,main{padding:10px 16px}}
+</style>
+<header><h1>새 동료 3종 컷아웃 리그</h1><p>뿌리 · 바위 병아리 · 버섯 달팽이의 PNG 부품을 런타임에 조립한 결정적 프리뷰입니다. 게임 액터에는 아직 연결하지 않았습니다. 주소 파라미터: <code>?bg=light|dark|green</code>, <code>?species=root</code>, <code>?play=1</code>.</p>
+<div class="controls"><label>종<select id="species"><option value="">전체</option><option value="root">뿌리</option><option value="rock-chick">바위 병아리</option><option value="mushroom-snail">버섯 달팽이</option></select></label><label>배경<select id="bg"><option value="light">밝게</option><option value="dark">어둡게</option><option value="green">풀밭</option></select></label><button id="play">재생</button></div></header>
+<main><div id="error" class="error"></div><div id="out"></div></main>
+<script defer src="../../src/core/config.js"></script>
+<script defer src="../../src/presentation/player-rig.js"></script>
+<script defer src="../../src/presentation/unit-rig.js"></script>
+<script defer src="preview.js"></script>
+</html>

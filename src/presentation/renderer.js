@@ -39,7 +39,7 @@ class DynamicGeometry {
 }
 function interleavedGeometry(T,layout,vertices){const stride=layout.reduce((n,[,size])=>n+size,0),buffer=new T.InterleavedBuffer(vertices,stride),geometry=new T.BufferGeometry();let offset=0;for(const [name,size]of layout){geometry.setAttribute(name,new T.InterleavedBufferAttribute(buffer,size,offset));offset+=size;}return geometry;}
 class Renderer {
- constructor(canvas,gamekit,companionVector,THREE,playerRig){
+ constructor(canvas,gamekit,companionVector,THREE,playerRig,unitRigs){
   if(typeof THREE?.WebGLRenderer!=='function')throw Error('three.js 모듈이 필요한 게임입니다.');
   const T=this.T=THREE;T.ColorManagement.enabled=false;this.canvas=canvas;
   // An opaque drawing buffer (three.js would otherwise request alpha:true), so straight-alpha
@@ -59,6 +59,8 @@ class Renderer {
   const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
   this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
   this.companionRenderer=new CompanionRenderer(this,gamekit,companionVector);this.playerRig=new PlayerRigRenderer(this,playerRig);
+  // New species cut-out rig (0.32.0): loaded and drawn by the same three.js path, but no actor is routed to it yet.
+  this.unitRig=new UnitRigRenderer(this,unitRigs);
  }
  // Players are the cut-out PNG rig; enemies, NPCs and companions keep their GameKit SVG meshes.
  hasCharacter(kind){return kind==='player'||this.companionRenderer.hasCharacter(kind);}
@@ -77,8 +79,8 @@ class Renderer {
  // a shared placeholder sphere keeps it from scanning every streamed buffer.
  submit(object){object.visible=true;object.renderOrder=this.drawOrder++;this.stats.drawCalls++;object.geometry.boundingSphere??=this.unusedBounds;}
  beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values())m.object.visible=false;for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
-  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.companionRenderer.beginFrame();this.playerRig.beginFrame();}
- endFrame(){this.three.render(this.scene,this.view);this.companionRenderer.endFrame();this.playerRig.endFrame();}
+  this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.companionRenderer.beginFrame();this.playerRig.beginFrame();this.unitRig.beginFrame();}
+ endFrame(){this.three.render(this.scene,this.view);this.companionRenderer.endFrame();this.playerRig.endFrame();this.unitRig.endFrame();}
  dynamic(kind,layout,uniforms,options){return this.pooled(kind,()=>{const geometry=new DynamicGeometry(this.T,layout),[vertex,fragment]=layout===RENDER_LAYOUT.mesh?[RENDER_GLSL.meshVertex,RENDER_GLSL.meshFragment]:layout===RENDER_LAYOUT.sprite?[RENDER_GLSL.spriteVertex,RENDER_GLSL.spriteFragment]:[RENDER_GLSL.vfxVertex,RENDER_GLSL.vfxFragment];return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(vertex,fragment,uniforms(),options))};});}
  submitDynamic(item,vertices,stride){item.object.geometry=item.geometry.upload(vertices);this.submit(item.object);this.stats.vertices+=vertices.length/stride;}
  // Lit vertex-colored boxes and beams; overlay draws (view arms) skip depth.
@@ -246,10 +248,10 @@ class Renderer {
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
   this.companionRenderer.prepare(view,sim,actor,dyn);
   this.drawColored(dyn);
-  this.companionRenderer.drawCharacters('world');this.playerRig.draw('world');this.companionRenderer.draw(false);
+  this.companionRenderer.drawCharacters('world');this.playerRig.draw('world');this.unitRig.draw('world');this.companionRenderer.draw(false);
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
   this.companionRenderer.draw(true);this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
-  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.companionRenderer.drawCharacters('late');this.playerRig.draw('late');this.combatFx.ui(sim);
+  const effects=[],effectSprites=[];this.combatFx.draw(effects,effectSprites,view);this.drawVfx(effects);this.drawSprites(effectSprites,this.atlas.texture,{ambient:1,blend:true});this.companionRenderer.drawCharacters('late');this.playerRig.draw('late');this.unitRig.draw('late');this.combatFx.ui(sim);
   if(this.camera.first&&!actor.dead&&actor.companionSlot<0&&actor.combat.state!=='roll')this.renderViewArms(this.combatFx.pose(actor));this.healthHud.update(sim,actor,dt,view.actors,authority);this.endFrame();
  }
  // Reusable per-section water meshes. World streaming controls the same 3D readyChunks
@@ -337,7 +339,7 @@ class Renderer {
   // Drawn *after* world+sprites with depth disabled so it never clips through local terrain.
   this.drawColored(geom,{overlay:true,lights:NO_LIGHTS,vp:matrixMul(projection(65*Math.PI/180,this.canvas.width/this.canvas.height,.035,20),viewMatrix([0,0,0],[0,0,-1])),eye:[0,0,0],ambient:Math.max(.6,this.ambient),fog:[.69,.85,.86]});
  }
- free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.companionRenderer.dispose();this.playerRig.dispose();
+ free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.companionRenderer.dispose();this.playerRig.dispose();this.unitRig.dispose();
   for(const pool of this.pools.values())for(const item of pool.items){item.geometry?.dispose();item.object.material.dispose();}this.pools.clear();
   for(const m of [this.terrainMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
   this.combatFx.reset();this.healthHud.reset();this.three.dispose();}

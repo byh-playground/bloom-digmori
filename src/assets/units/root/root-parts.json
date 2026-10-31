@@ -1,0 +1,55 @@
+{
+ "species": "root",
+ "walk": "hop",
+ "scale": {
+  "body": 0.42,
+  "face": 0.6,
+  "leaves": 0.72,
+  "hat": 0.5,
+  "egg": 0.42
+ },
+ "parts": {
+  "body_front": {"group": "body","size": [284,236],"anchor": [142,234]},
+  "body_side": {"group": "body","size": [237,241],"anchor": [119,238]},
+  "body_back": {"group": "body","size": [284,239],"anchor": [142,236]},
+  "face_front_neutral": {"group": "face","size": [132,57],"anchor": [66,28.5]},
+  "face_front_happy": {"group": "face","size": [132,57],"anchor": [66,28.5]},
+  "face_front_surprised": {"group": "face","size": [132,57],"anchor": [66,28.5]},
+  "face_front_hurt": {"group": "face","size": [132,57],"anchor": [66,28.5]},
+  "face_front_attack": {"group": "face","size": [132,57],"anchor": [66,28.5]},
+  "face_front_sleep": {"group": "face","size": [132,57],"anchor": [66,28.5]},
+  "face_side_neutral": {"group": "face","size": [76,59],"anchor": [38,29.5]},
+  "face_side_happy": {"group": "face","size": [76,59],"anchor": [38,29.5]},
+  "face_side_surprised": {"group": "face","size": [76,59],"anchor": [38,29.5]},
+  "face_side_hurt": {"group": "face","size": [76,59],"anchor": [38,29.5]},
+  "face_side_attack": {"group": "face","size": [76,59],"anchor": [38,29.5]},
+  "face_side_sleep": {"group": "face","size": [76,59],"anchor": [38,29.5]},
+  "leaves_front_g1": {"group": "leaves","size": [142,90],"anchor": [70.5,87]},
+  "leaves_front_g2": {"group": "leaves","size": [141,93],"anchor": [71,90]},
+  "leaves_front_g3": {"group": "leaves","size": [148,102],"anchor": [74.5,99]},
+  "leaves_front_g4": {"group": "leaves","size": [163,116],"anchor": [81,114]},
+  "leaves_side_g1": {"group": "leaves","size": [101,94],"anchor": [34,92]},
+  "leaves_side_g2": {"group": "leaves","size": [102,91],"anchor": [42,88]},
+  "leaves_side_g3": {"group": "leaves","size": [113,102],"anchor": [50.5,99]},
+  "leaves_side_g4": {"group": "leaves","size": [129,102],"anchor": [68,99]},
+  "hat_front": {"group": "hat","size": [193,114],"anchor": [96,111]},
+  "hat_side": {"group": "hat","size": [164,124],"anchor": [81.5,121]},
+  "egg": {"group": "egg","size": [112,134],"anchor": [55.5,131]}
+ },
+ "slots": {
+  "front": {
+   "face": [0,50],
+   "leaves": [0,92],
+   "hat": [0,84]
+  },
+  "side": {
+   "face": [-27,50],
+   "leaves": [4,92],
+   "hat": [-4,80]
+  },
+  "back": {
+   "leaves": [0,92],
+   "hat": [0,84]
+  }
+ }
+}

@@ -10,7 +10,9 @@ const DEPENDENCIES=Object.freeze({
   // The old sprout player SVG now only feeds the preserved companion-combat preview; the game draws players with the PNG rig.
   preview:Object.freeze({sprout:Object.freeze({url:'src/assets/characters/sprout.svg',sourcePath:'src/assets/characters/sprout.svg',sha256:'59aaac5cd245cd19321a529681f58880e7634fa0c991465719dc8bf9c88de032',maxBytes:65536,curveSegments:16})})}),
  // Authored cut-out player parts (PNG) and weapon grip points, assembled at runtime by PlayerRig.
- playerArt:Object.freeze({base:'src/assets/player/'})
+ playerArt:Object.freeze({base:'src/assets/player/'}),
+ // Authored cut-out parts (PNG) of the three new companion species, assembled at runtime by UnitRig (not routed to actors yet).
+ unitArt:Object.freeze({base:'src/assets/units/'})
 });
 /* Digmori — 게임별 스탯 프로필의 SSOT. 시간=ms, 거리=m, HP=생명력. */
 // 표시값을 임의로 떼우지 않는다. 설정 피해는 5단위,
@@ -18,7 +20,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.31.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.32.0',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,

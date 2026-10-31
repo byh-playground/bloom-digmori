@@ -1,0 +1,58 @@
+{
+ "species": "mushroom-snail",
+ "walk": "slide",
+ "scale": {
+  "body": 0.42,
+  "face": 0.6,
+  "shell": 0.58,
+  "shrooms": 0.45,
+  "hat": 0.5,
+  "egg": 0.42
+ },
+ "parts": {
+  "body_front": {"group": "body","size": [237,238],"anchor": [119,236]},
+  "body_side": {"group": "body","size": [277,239],"anchor": [138.5,236]},
+  "body_back": {"group": "body","size": [231,240],"anchor": [115.5,237]},
+  "face_front_neutral": {"group": "face","size": [142,65],"anchor": [71,32.5]},
+  "face_front_happy": {"group": "face","size": [142,65],"anchor": [71,32.5]},
+  "face_front_surprised": {"group": "face","size": [142,65],"anchor": [71,32.5]},
+  "face_front_hurt": {"group": "face","size": [142,65],"anchor": [71,32.5]},
+  "face_front_attack": {"group": "face","size": [142,65],"anchor": [71,32.5]},
+  "face_front_sleep": {"group": "face","size": [142,65],"anchor": [71,32.5]},
+  "face_side_neutral": {"group": "face","size": [86,62],"anchor": [43,31]},
+  "face_side_happy": {"group": "face","size": [86,62],"anchor": [43,31]},
+  "face_side_surprised": {"group": "face","size": [86,62],"anchor": [43,31]},
+  "face_side_hurt": {"group": "face","size": [86,62],"anchor": [43,31]},
+  "face_side_attack": {"group": "face","size": [86,62],"anchor": [43,31]},
+  "face_side_sleep": {"group": "face","size": [86,62],"anchor": [43,31]},
+  "shell_front": {"group": "shell","size": [164,166],"anchor": [82,163]},
+  "shell_side": {"group": "shell","size": [174,165],"anchor": [87,162]},
+  "shell_back": {"group": "shell","size": [178,167],"anchor": [88.5,165]},
+  "shrooms_g1": {"group": "shrooms","size": [61,66],"anchor": [31,63]},
+  "shrooms_g2": {"group": "shrooms","size": [109,81],"anchor": [55,78]},
+  "shrooms_g3": {"group": "shrooms","size": [118,88],"anchor": [59,86]},
+  "shrooms_g4": {"group": "shrooms","size": [164,113],"anchor": [82,111]},
+  "hat_front": {"group": "hat","size": [188,120],"anchor": [94,118]},
+  "hat_side": {"group": "hat","size": [167,129],"anchor": [83,127]},
+  "egg": {"group": "egg","size": [92,129],"anchor": [46.5,126]}
+ },
+ "slots": {
+  "front": {
+   "face": [0,50],
+   "shell": [6,22,1.15],
+   "shrooms": [16,112],
+   "hat": [0,84]
+  },
+  "side": {
+   "face": [-40,54],
+   "shell": [26,18,0.86],
+   "shrooms": [30,92],
+   "hat": [-34,60]
+  },
+  "back": {
+   "shell": [0,12,1.1],
+   "shrooms": [-6,108],
+   "hat": [0,84]
+  }
+ }
+}

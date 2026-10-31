@@ -80,6 +80,9 @@ try{
  const playerIdle=await page.evaluate(id=>{const r=Bloom.app.renderer,s=r.playerRig.samples.find(s=>s.key===id);return s&&{mode:s.mode,kind:s.kind,anim:s.anim,view:s.view,flip:s.flip,head:s.head,depthTest:s.depthTest,depthWrite:s.depthWrite,svgPlayer:r.companionRenderer.characterSamples.some(v=>v.key===id)};},playerId);
  assert.equal(playerIdle.mode,'rig');assert.equal(playerIdle.kind,'player');assert.equal(playerIdle.depthTest,true);assert.equal(playerIdle.depthWrite,false);assert.equal(playerIdle.svgPlayer,false,'the player must not also be drawn through the SVG mesh path');
  pass('the live player is drawn as the PNG cut-out rig in the existing world pass',playerIdle);
+ const units=await page.evaluate(()=>{const r=Bloom.app.renderer.unitRig;return{species:Object.keys(r.rigs).sort(),samples:r.samples.length};});
+ assert.deepEqual(units.species,['mushroom-snail','rock-chick','root']);assert.equal(units.samples,0,'0.32.0 loads the new species rig but routes no actor to it');
+ pass('the new species cut-out rig loads at boot with the renderer and no actor is routed to it yet',units);
  const playerShot=path.join(out,'player-rig-live-webgl.png');await page.locator('#world').screenshot({path:playerShot});evidence.screenshots.push(path.relative(root,playerShot));
  await page.keyboard.down('KeyW');
  await page.waitForFunction(id=>Bloom.app.renderer.playerRig.samples.some(s=>s.key===id&&s.anim==='walk'),playerId,{timeout:5000});

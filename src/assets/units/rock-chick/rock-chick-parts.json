@@ -1,0 +1,99 @@
+{
+ "species": "rock-chick",
+ "walk": "waddle",
+ "scale": {
+  "body": 0.42,
+  "face": 0.6,
+  "shell": 0.52,
+  "ore": 0.5,
+  "hat": 0.5,
+  "egg": 0.42
+ },
+ "parts": {
+  "body_front": {"group": "body","size": [274,243],"anchor": [137,240]},
+  "body_side": {"group": "body","size": [263,243],"anchor": [131,241]},
+  "body_back": {"group": "body","size": [283,242],"anchor": [142,239]},
+  "face_front_neutral": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_happy": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_surprised": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_hurt": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_attack": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_sleep": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_side_neutral": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_happy": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_surprised": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_hurt": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_attack": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_sleep": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_front_peek": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_peek_hurt": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_front_peek_sleep": {"group": "face","size": [130,61],"anchor": [65,30.5]},
+  "face_side_peek": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_peek_hurt": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "face_side_peek_sleep": {"group": "face","size": [94,67],"anchor": [47,33.5]},
+  "shell_top_front": {"group": "shell","size": [168,104],"anchor": [84,101]},
+  "shell_bottom_front": {"group": "shell","size": [174,97],"anchor": [87,3]},
+  "shell_top_side": {"group": "shell","size": [151,116],"anchor": [75.5,113]},
+  "shell_bottom_side": {"group": "shell","size": [147,97],"anchor": [73.5,3]},
+  "shell_top_back": {"group": "shell","size": [167,106],"anchor": [83.5,103]},
+  "shell_bottom_back": {"group": "shell","size": [170,100],"anchor": [84.5,3]},
+  "ore_iron": {"group": "ore","size": [65,68],"anchor": [32,65]},
+  "ore_crystal": {"group": "ore","size": [50,69],"anchor": [25,67]},
+  "ore_copper": {"group": "ore","size": [59,62],"anchor": [29.5,59]},
+  "ore_gold": {"group": "ore","size": [55,56],"anchor": [27.5,53]},
+  "hat_front": {"group": "hat","size": [123,81],"anchor": [61.5,78]},
+  "hat_side": {"group": "hat","size": [103,79],"anchor": [51.5,76]},
+  "hat_back": {"group": "hat","size": [124,83],"anchor": [62.5,80]},
+  "egg": {"group": "egg","size": [100,118],"anchor": [50,116]}
+ },
+ "slots": {
+  "front": {
+   "face": [0,66],
+   "shellTop": [0,84],
+   "shellBottom": [0,54],
+   "hat": [0,44]
+  },
+  "side": {
+   "face": [-20,66],
+   "shellTop": [6,84],
+   "shellBottom": [8,54],
+   "hat": [0,44]
+  },
+  "back": {
+   "shellTop": [0,84],
+   "shellBottom": [0,54],
+   "hat": [0,44]
+  }
+ },
+ "ores": {
+  "order": ["iron","iron","crystal","copper","crystal","gold","gold"],
+  "count": [2,3,5,7],
+  "front": [
+   [0,46,1.1,0],
+   [-25,34,0.9,-0.35],
+   [24,35,0.95,0.35],
+   [-10,20,0.8,-0.1],
+   [31,14,0.8,0.45],
+   [-32,12,0.8,-0.45],
+   [14,21,0.75,0.15]
+  ],
+  "side": [
+   [2,48,1.1,0],
+   [-22,36,0.9,-0.35],
+   [26,36,0.95,0.35],
+   [-6,22,0.8,-0.1],
+   [33,14,0.8,0.45],
+   [-28,14,0.8,-0.45],
+   [16,23,0.75,0.15]
+  ],
+  "back": [
+   [0,46,1.1,0],
+   [25,34,0.9,0.35],
+   [-24,35,0.95,-0.35],
+   [10,20,0.8,0.1],
+   [-31,14,0.8,-0.45],
+   [32,12,0.8,0.45],
+   [-14,21,0.75,-0.15]
+  ]
+ }
+}
