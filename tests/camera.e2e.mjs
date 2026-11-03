@@ -168,7 +168,16 @@ try{
  const top=await actorState(page);await page.waitForTimeout(400);await shot(page,'pillar-surface-exit');
  assert(top.pos.y>column.surface+.9,'reached the surface: '+JSON.stringify({top:top.pos,column}));assert(steps.filter(s=>'placed'in s).length>=column.surface-column.floor);
  pass('from a cave floor the player reaches the surface with only ceiling digging, jumps and mid-air under-feet right clicks',{column,steps:steps.length,top:top.pos});
- assert.deepEqual(errors,[]);await page.close();
+ assert.deepEqual(errors,[]);
+
+ // 7b. The local player's death ghost is drawn (0.38.2: a typo in the ghost draw threw "constsample is not defined" and the
+ // diagnostics dialog opened on every player death).
+ await page.evaluate(()=>{const sim=Bloom.app.sim;sim.kill(Bloom.app.actor(),null);});
+ await page.waitForFunction(()=>Bloom.app.actor().dead,null,{timeout:3000});await page.waitForTimeout(500);await shot(page,'player-death');
+ assert.deepEqual(errors,[],'death ghost threw: '+errors);assert.equal(await page.evaluate(()=>!document.querySelector('#error-dialog').hidden),false);
+ await page.waitForFunction(()=>!Bloom.app.actor().dead,null,{timeout:15000});
+ pass('the local player dying draws its death ghost without a page error',{});
+ await page.close();
 
  // 8. Landscape touch: a one-finger drag on the world turns the camera (no turn buttons); a pinch zooms.
  const mobileContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true}),mobile=await mobileContext.newPage();mobile.on('pageerror',e=>errors.push(e.message));await mobile.addInitScript(CURSOR_HELPERS);
