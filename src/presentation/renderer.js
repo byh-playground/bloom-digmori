@@ -3,56 +3,20 @@
  * Every draw is submitted in the legacy pass order (sky → terrain → props → characters → sprites →
  * drops → water → effects → late characters): one ordered list via renderOrder with
  * explicit blend/depth state per material, so three.js never re-sorts the frame. */
-// Cave cutaway and line-of-sight fade, shared by the opaque terrain and the translucent first ceiling layer (render only).
-// cut = (first ceiling layer y, look target y, -, radius); cutLine = (target x, target z, slope x, slope z): the cut is a
-// cylinder around the view line (target toward the camera), so it stays open from the camera at every height. The cut is
-// decided per voxel (the cell that owns a face, tested at its centre, like Renderer.cutCell), so the solid cells it slices
-// get exact voxel cross-section faces (Renderer.cutawayFaces) and picking agrees with what is drawn.
-// Terrain within fade.x of the camera-to-target segment (and farther than fade.y from the target) is dithered away, and a
-// face seen from behind (from inside rock: the near wall of a tunnel, a cut cross-section) is not drawn.
-const RENDER_CUT_GLSL=`uniform vec4 cut;uniform vec4 cutLine;uniform vec3 camA;uniform vec3 camB;uniform vec2 fade;
-  float cutDistance(vec3 p){return distance(p.xz,cutLine.xy+cutLine.zw*(p.y-cut.y));}
-  vec3 ownerCell(vec3 p,vec3 n){return floor(p-n*.5)+.5;}
-  float bayer4(vec2 f){ivec2 q=ivec2(mod(floor(f),4.));const float m[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);return(m[q.x+q.y*4]+.5)/16.;}
-  bool fadeOut(vec3 p){vec3 ab=camB-camA;float t=clamp(dot(p-camA,ab)/max(dot(ab,ab),1e-4),0.,1.);return t<.98&&distance(p,camA+ab*t)<fade.x&&distance(p,camB)>fade.y&&bayer4(gl_FragCoord.xy)<.62;}`;
 const RENDER_GLSL=Object.freeze({
  terrainVertex:'in vec3 position;in vec3 n;in float material;uniform mat4 vp;out vec3 wp;out vec3 normal;out float mat;void main(){wp=position;normal=n;mat=material;gl_Position=vp*vec4(position,1.);}',
  terrainFragment:`precision highp float;
   in vec3 wp;in vec3 normal;in float mat;uniform sampler2D tiles;uniform vec3 eye;uniform vec3 fog;uniform vec4 lights[8];uniform float ambient;uniform float textured;out vec4 fragColor;
-  ${RENDER_CUT_GLSL}
-  void main(){vec3 cell=ownerCell(wp,normal);bool above=cut.w>0.&&cell.y>cut.x;if(above&&cutDistance(cell)<cut.w||fadeOut(wp)||dot(normal,eye-wp)<0.)discard;vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
+  // D-165 shoulder camera: the camera never sits inside rock (Renderer.updateCamera pulls it in), so only faces seen
+  // from behind are dropped.
+  void main(){if(dot(normal,eye-wp)<0.)discard;vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
    float face=n.y>.5?0.:n.y<-.5?2.:1.;float tile=floor(mat+.5)*3.+face;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
    vec2 coords=(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.);vec3 pixel=texture(tiles,coords).rgb,average=texture(tiles,(origin+31.5)/vec2(256.,512.)).rgb;
    float footprint=max(length(dFdx(uv)),length(dFdy(uv)))*16.;
    float blend=smoothstep(${CFG.textures.minifyStart.toFixed(2)},${CFG.textures.minifyEnd.toFixed(2)},footprint);
    vec3 c=mix(average,mix(pixel,average,blend),textured);float shade=top?(n.y>.5?1.:.57):abs(n.x)>.5?.79:.90;
    float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
-   c*=shade*clamp(light,.16,1.3);if(above)c*=mix(${CFG.cutaway.rimShade.toFixed(2)},1.,smoothstep(-.5,${CFG.cutaway.vignette.toFixed(2)},cutDistance(wp)-cut.w));fragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);
-  }`,
- // The first ceiling layer inside the cutaway: translucent block faces with bright outlines, so it reads as clickable.
- ceilingFragment:`precision highp float;
-  in vec3 wp;in vec3 normal;in float mat;uniform sampler2D tiles;uniform vec4 lights[8];uniform float ambient;out vec4 fragColor;
-  ${RENDER_CUT_GLSL}
-  void main(){vec3 cell=ownerCell(wp,normal);float cd=cutDistance(wp);if(cut.w<=0.||abs(cell.y-.5-cut.x)>.1||cutDistance(cell)>=cut.w)discard;
-   vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
-   float face=n.y>.5?0.:n.y<-.5?2.:1.;float tile=floor(mat+.5)*3.+face;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
-   vec3 c=texture(tiles,(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.)).rgb;float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
-   c*=clamp(light,.35,1.3);vec2 f=fract(uv);float e=min(min(f.x,1.-f.x),min(f.y,1.-f.y)),edge=1.-smoothstep(.025,.06,e),rim=smoothstep(cut.w,cut.w-.9,cd);
-   fragColor=vec4(mix(c,vec3(1.,.93,.66),edge*.85),(.32+.6*edge)*rim);
-  }`,
- // Cross-section faces of the solid cells the cut slices (Renderer.cutawayFaces): the block's own interior (bottom) tile,
- // darkened by cutaway.sectionTint, deeper toward the outer rim of the cut, with a soft dark line on each voxel edge.
- cutFaceFragment:`precision highp float;
-  in vec3 wp;in vec3 normal;in float mat;uniform sampler2D tiles;uniform vec3 eye;uniform vec4 lights[8];uniform float ambient;uniform float textured;out vec4 fragColor;
-  ${RENDER_CUT_GLSL}
-  void main(){if(fadeOut(wp)||dot(normal,eye-wp)<0.)discard;vec3 n=normal;bool top=abs(n.y)>.5;vec2 uv=top?wp.xz:abs(n.x)>.5?vec2(wp.z,-wp.y):vec2(wp.x,-wp.y);
-   float tile=floor(mat+.5)*3.+2.;vec2 origin=vec2(mod(tile,8.),floor(tile/8.))*32.;
-   vec3 pixel=texture(tiles,(origin+8.+floor(fract(uv)*16.)+.5)/vec2(256.,512.)).rgb,average=texture(tiles,(origin+31.5)/vec2(256.,512.)).rgb;
-   vec3 c=mix(average,pixel,textured);float shade=top?1.:abs(n.x)>.5?.82:.92;
-   float light=ambient;for(int i=0;i<8;i++){light+=lights[i].w*max(0.,1.-distance(lights[i].xyz,wp)/10.)*.75;}
-   vec2 f=fract(uv);float e=min(min(f.x,1.-f.x),min(f.y,1.-f.y)),seam=mix(.72,1.,smoothstep(0.,.09,e));
-   float depth=mix(1.,.8,smoothstep(cut.w-1.5,cut.w+.5,cutDistance(wp)));
-   fragColor=vec4(c*shade*clamp(light,.3,1.3)*${CFG.cutaway.sectionTint.toFixed(2)}*seam*depth,1.);
+   c*=shade*clamp(light,.16,1.3);fragColor=vec4(mix(c,fog,smoothstep(33.,69.,distance(wp,eye))),1.);
   }`,
  vfxVertex:'in vec3 position;in vec4 tint;uniform mat4 vp;out vec4 t;void main(){t=tint;gl_Position=vp*vec4(position,1.);}',
  vfxFragment:'precision mediump float;in vec4 t;out vec4 fragColor;void main(){fragColor=t;}',
@@ -65,7 +29,7 @@ const RENDER_GLSL=Object.freeze({
  waterVertex:'in vec3 position;in vec4 c;uniform mat4 vp;out vec4 tint;out vec3 worldPos;void main(){tint=c;worldPos=position;gl_Position=vp*vec4(position,1.);}',
  waterFragment:'precision mediump float;in vec4 tint;in vec3 worldPos;uniform float phase;out vec4 fragColor;void main(){vec2 xy=floor(worldPos.xz*6.);float line=step(.96,fract(sin(dot(xy,vec2(12.9898,78.233))+floor(phase*3.)*.41)*43758.5453));fragColor=vec4(tint.rgb*(1.+line*.075),tint.a);}'
 });
-const RENDER_LAYOUT=Object.freeze({mesh:[['position',3],['c',3]],cut:[['position',3],['n',3],['material',1]],sprite:[['position',3],['uv',2],['tint',4]],vfx:[['position',3],['tint',4]],water:[['position',3],['c',4]]});
+const RENDER_LAYOUT=Object.freeze({mesh:[['position',3],['c',3]],sprite:[['position',3],['uv',2],['tint',4]],vfx:[['position',3],['tint',4]],water:[['position',3],['c',4]]});
 const NO_LIGHTS=new Float32Array(32);
 // One growable interleaved vertex stream for per-frame CPU geometry.
 class DynamicGeometry {
@@ -92,9 +56,7 @@ class Renderer {
   const blockAtlas=buildBlockAtlas(),blockTexture=new T.DataTexture(blockAtlas.data,blockAtlas.width,blockAtlas.height,T.RGBAFormat,T.UnsignedByteType);this.pixelTexture(blockTexture,false);this.blockAtlas={...blockAtlas,texture:blockTexture};
   this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.eggIcons(unitRigs);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
   this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
-  const cutUniforms=()=>({cut:{value:new Float32Array(4)},cutLine:{value:new Float32Array(4)},camA:{value:new Float32Array(3)},camB:{value:new Float32Array(3)},fade:{value:new Float32Array([CFG.cutaway.fadeRadius,CFG.cutaway.fadeKeep])}});
-  this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture},...cutUniforms()});
-  this.ceilingMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.ceilingFragment,{vp:{value:new Float32Array(16)},lights:{value:new Float32Array(32)},ambient:{value:1},tiles:{value:blockTexture},...cutUniforms()},{blend:'alpha',depthWrite:false});
+  this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture}});
   this.waterMaterial=this.material(RENDER_GLSL.waterVertex,RENDER_GLSL.waterFragment,{vp:{value:new Float32Array(16)},phase:{value:0}},{blend:'alpha',depthWrite:false});this.waterMeshes=new Map();this.waterDrawList=[];
   const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
   this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
@@ -120,7 +82,7 @@ class Renderer {
  // Unique renderOrder fixes the draw order, so three.js's depth tie-break never needs real bounds;
  // a shared placeholder sphere keeps it from scanning every streamed buffer.
  submit(object){object.visible=true;object.renderOrder=this.drawOrder++;this.stats.drawCalls++;object.geometry.boundingSphere??=this.unusedBounds;}
- beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values()){m.object.visible=false;m.ceiling.visible=false;}for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
+ beginFrame(clearColor){this.drawOrder=0;this.stats={drawCalls:0,vertices:0};for(const pool of this.pools.values()){pool.used=0;for(const item of pool.items)item.object.visible=false;}for(const m of this.meshes.values()){m.object.visible=false;}for(const m of this.waterMeshes.values())if(m.object)m.object.visible=false;this.sky.visible=false;
   this.three.setViewport(0,0,this.canvas.width,this.canvas.height);this.three.setClearColor(this.clearColor.setRGB(clearColor[0],clearColor[1],clearColor[2]),1);this.playerRig.beginFrame();this.unitRig.beginFrame();}
  endFrame(){this.three.render(this.scene,this.view);this.playerRig.endFrame();this.unitRig.endFrame();}
  dynamic(kind,layout,uniforms,options){return this.pooled(kind,()=>{const geometry=new DynamicGeometry(this.T,layout),[vertex,fragment]=layout===RENDER_LAYOUT.mesh?[RENDER_GLSL.meshVertex,RENDER_GLSL.meshFragment]:layout===RENDER_LAYOUT.sprite?[RENDER_GLSL.spriteVertex,RENDER_GLSL.spriteFragment]:[RENDER_GLSL.vfxVertex,RENDER_GLSL.vfxFragment];return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(vertex,fragment,uniforms(),options))};});}
@@ -136,68 +98,42 @@ class Renderer {
   u.vp.value.set(this.vp);u.ambient.value=ambient;u.tex.value=texture;this.setBlend(m,blend?'alpha':null);m.depthWrite=depthWrite;this.submitDynamic(item,vertices,9);}
  drawVfx(vertices){if(!vertices.length)return;const item=this.dynamic('vfx',RENDER_LAYOUT.vfx,()=>({vp:{value:new Float32Array(16)}}),{blend:'alpha',depthWrite:false});item.object.material.uniforms.vp.value.set(this.vp);this.submitDynamic(item,vertices,7);}
  resize(){const ratio=Math.min(devicePixelRatio||1,1.5),w=Math.round(this.canvas.clientWidth*ratio),h=Math.round(this.canvas.clientHeight*ratio);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
- // D-114 camera: yawStep 0..7 (45° each, animated over CFG.camera.stepMs), fixed pitch, zoom distance (wheel/pinch).
- resetCamera(){this.camera={yawStep:0,yaw:0,pitch:CFG.camera.pitch,distance:initialCameraDistance(),turn:null};this.viewDistance=this.camera.distance;this.cut={active:false,amount:0,radius:0,y:0,coverMs:0,openMs:0,pendY:null,pendMs:0,frame:null};}
- rotateCamera(dir){const c=this.camera,n=CFG.camera.yawSteps;c.yawStep=((c.yawStep+dir)%n+n)%n;const to=c.yawStep*TAU/n,delta=((to-c.yaw)%TAU+TAU+Math.PI)%TAU-Math.PI;c.turn={from:c.yaw,to:c.yaw+delta,t:0};}
+ // D-165 shoulder camera (Valheim/Enshrouded convention): yaw and pitch follow the mouse (pointer lock) or a touch drag
+ // (Renderer.look), the wheel or a pinch sets the distance. The view pivots at CFG.camera.shoulder m right of the head,
+ // and a wall beside or behind the player pulls the camera in front of it, so it never sits inside rock.
+ resetCamera(){this.camera={yaw:0,pitch:CFG.camera.pitch,distance:initialCameraDistance()};this.viewDistance=this.camera.distance;}
+ look(dx,dy){const c=this.camera,C=CFG.camera;c.yaw=((c.yaw-dx)%TAU+TAU)%TAU;c.pitch=clamp(c.pitch+dy,C.minPitch,C.maxPitch);}
+ // A wall right behind pulls the camera close: the local player fades (fully at `nearest`) so it never covers the view.
+ selfAlpha(){const C=CFG.camera;return clamp((this.viewDistance-C.nearest)/(C.fadeFrom-C.nearest),C.selfMinAlpha,1);}
  zoomCamera(sign){this.setZoom(this.camera.distance*Math.pow(CFG.camera.zoomStep,sign));}
  setZoom(distance){this.camera.distance=clamp(distance,CFG.camera.minDistance,CFG.camera.maxDistance);}
- // Cave cutaway state with hysteresis: a solid non-plant block within CFG.cutaway.probe cells above the head (player's
- // column) is the first ceiling layer. Entering waits enterMs, leaving waits exitMs, the radius opens/closes over fadeMs.
- updateCutaway(sim,pos,dt){const C=CFG.cutaway,k=this.cut,t=sim.terrain,x=Math.floor(pos.x),z=Math.floor(pos.z),head=Math.floor(pos.y+1.95);let ceil=null;
-  for(let y=head;y<=head+C.probe;y++){const id=t.get(x,y,z);if(t.isSolid(id)&&!CUTAWAY_PLANTS.has(id)){ceil=y;break;}}
-  if(ceil===null){k.openMs+=dt;k.coverMs=0;k.pendY=null;if(k.active&&k.openMs>=C.exitMs)k.active=false;}
-  else{k.coverMs+=dt;k.openMs=0;if(ceil!==k.y){if(k.pendY!==ceil){k.pendY=ceil;k.pendMs=0;}else k.pendMs+=dt;if(!k.active||k.pendMs>=C.enterMs){k.y=ceil;k.pendY=null;}}if(!k.active&&k.coverMs>=C.enterMs)k.active=true;}
-  k.amount=clamp(k.amount+(k.active?1:-1)*dt/C.fadeMs,0,1);
-  // Adaptive radius: just past the open space the player stands in (the cells right under the first layer reachable from the
-  // player's column), between minRadius and radius, eased over fadeMs so walking out of a shaft into a tunnel widens smoothly.
-  if(k.active){const want=this.openRadius(t,pos,k.y-1);k.radius=k.amount<=0||!k.radius?want:lerp(k.radius,want,clamp(dt/C.fadeMs,0,1));}}
- // How far (m, horizontally from pos) the open cells of layer y reach, flood-filled from the player's column within radius.
- openRadius(t,pos,y){const C=CFG.cutaway,x0=Math.floor(pos.x),z0=Math.floor(pos.z),R=C.radius,n=Math.ceil(R)+1,w=2*n+1,seen=new Uint8Array(w*w),queue=[x0,z0];seen[n+n*w]=1;let far=0;
-  while(queue.length){const z=queue.pop(),x=queue.pop();far=Math.max(far,Math.hypot(x+.5-pos.x,z+.5-pos.z));
-   for(const [dx,dz]of RANCH_DIRS){const nx=x+dx,nz=z+dz,i=nx-x0+n+(nz-z0+n)*w;if(seen[i]||Math.hypot(nx+.5-pos.x,nz+.5-pos.z)>R)continue;seen[i]=1;if(!t.isSolid(t.get(nx,y,nz)))queue.push(nx,nz);}}
-  return clamp(far+C.openMargin,C.minRadius,R);}
- updateCamera(actor,sim,renderPos,dt){const c=this.camera,C=CFG.camera;
-  if(c.turn){c.turn.t=Math.min(1,c.turn.t+dt/C.stepMs);const e=c.turn.t*c.turn.t*(3-2*c.turn.t);c.yaw=c.turn.from+(c.turn.to-c.turn.from)*e;if(c.turn.t>=1){c.yaw=((c.turn.to%TAU)+TAU)%TAU;c.turn=null;}}
-  this.fov=lerp(this.fov||65,actor.sprinting?71:65,actor.sprinting?.18:.12);this.updateCutaway(sim,renderPos,dt);
-  const forward=direction(c.yaw,c.pitch),back=V.scale(forward,-1),target=V.add(renderPos,{x:0,y:C.target,z:0}),k=this.cut;
-  // In a cave the zoom is capped so the cutaway stays readable; outside one, a line blocked by a thick obstacle (more than
-  // pullThickness solid cells, e.g. inside a hill) pulls the camera in front of it. Thin obstacles are only faded.
-  let want=lerp(c.distance,Math.min(c.distance,C.caveDistance),k.amount);
-  if(!k.active){const hit=sim.terrain.ray(target,back,want);if(hit){let solid=0,last='';for(let d=hit.distance;d<want;d+=.25){const p=V.add(target,V.scale(back,d)),key=Math.floor(p.x)+','+Math.floor(p.y)+','+Math.floor(p.z);if(key!==last){last=key;if(sim.terrain.isSolid(sim.terrain.get(p.x,p.y,p.z)))solid++;}}if(solid>CFG.cutaway.pullThickness)want=Math.max(1.2,hit.distance-.3);}}
-  this.viewDistance=want<this.viewDistance?lerp(this.viewDistance,want,clamp(dt/60,0,1)):lerp(this.viewDistance,want,clamp(dt/350,0,1));
-  let camera=V.add(target,V.scale(back,this.viewDistance));camera=V.add(camera,this.combatFx.cameraOffset());
-  this.eye=camera;this.forward=forward;this.right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)};this.up=V.norm({x:this.right.y*forward.z-this.right.z*forward.y,y:this.right.z*forward.x-this.right.x*forward.z,z:this.right.x*forward.y-this.right.y*forward.x});
+ updateCamera(actor,sim,renderPos,dt){const c=this.camera,C=CFG.camera,t=sim.terrain;
+  this.fov=lerp(this.fov||C.fov,actor.sprinting?C.fov+6:C.fov,actor.sprinting?.18:.12);
+  const forward=direction(c.yaw,c.pitch),back=V.scale(forward,-1),right={x:cosQ(c.yaw),y:0,z:-sinQ(c.yaw)},head=V.add(renderPos,{x:0,y:C.target,z:0});
+  const side=t.ray(head,right,C.shoulder+C.wallGap),pivot=V.add(head,V.scale(right,side?Math.max(0,side.distance-C.wallGap):C.shoulder));
+  const behind=t.ray(pivot,back,c.distance+C.wallGap),want=behind?Math.max(C.nearest,behind.distance-C.wallGap):c.distance;
+  // Pull in at once (never a frame inside rock), ease back out.
+  this.viewDistance=want<this.viewDistance?want:lerp(this.viewDistance,want,clamp(dt/250,0,1));
+  const camera=V.add(V.add(pivot,V.scale(back,this.viewDistance)),this.combatFx.cameraOffset());
+  this.eye=camera;this.pivot=pivot;this.forward=forward;this.right=right;this.up=V.norm({x:right.y*forward.z-right.z*forward.y,y:right.z*forward.x-right.x*forward.z,z:right.x*forward.y-right.y*forward.x});
   this.vp=matrixMul(projection(this.fov*Math.PI/180,this.canvas.width/this.canvas.height,.035,130),viewMatrix(arr(camera),arr(V.add(camera,forward))));
-  const radius=(k.radius||CFG.cutaway.radius)*k.amount*k.amount*(3-2*k.amount),flat=Math.hypot(back.x,back.z)||1,slope=1/Math.tan(c.pitch);
-  k.frame={y:k.y,base:target.y,radius,cx:target.x,cz:target.z,sx:back.x/flat*slope,sz:back.z/flat*slope,camera:{...camera},target:{...target},pos:{...renderPos}};
  }
- // The cutaway centre at height y (the view line), and whether cell (x,y,z) is inside the cut above the first layer
- // (hidden) or in the first ceiling layer itself.
- cutCenter(y){const f=this.cut.frame;return{x:f.cx+f.sx*(y-f.base),z:f.cz+f.sz*(y-f.base)};}
- cutCell(x,y,z){const f=this.cut.frame;if(!f||f.radius<=0||y<f.y)return null;const c=this.cutCenter(y+.5);if(Math.hypot(x+.5-c.x,z+.5-c.z)>=f.radius)return null;return y===f.y?'layer':'hidden';}
- // Cells the line of sight fades (same test as the terrain shader, at the cell centre).
- fadedCell(x,y,z){const f=this.cut.frame;if(!f)return false;const p={x:x+.5,y:y+.5,z:z+.5},a=f.camera,ab=V.sub(f.target,a),t=clamp(V.dot(V.sub(p,a),ab)/Math.max(V.dot(ab,ab),1e-4),0,1);return t<.98&&V.len(V.sub(p,V.add(a,V.scale(ab,t))))<CFG.cutaway.fadeRadius&&V.len(V.sub(p,f.target))>CFG.cutaway.fadeKeep;}
- // Cursor ray (render-side input): a screen point → the block face under it and/or the actor under it, skipping hidden and
- // faded cells. The first ceiling layer is clickable (from below) within ceilingPick m of the player's column; a hit face buried in
- // rock is swapped for the open face that looks toward the camera. point is what the aim yaw/pitch looks at.
- pickAt(sx,sy){if(!this.eye||!this.cut.frame)return null;const w=this.canvas.clientWidth,h=this.canvas.clientHeight,t=Math.tan(this.fov*Math.PI/360),nx=(sx/w*2-1)*t*w/h,ny=(1-sy/h*2)*t;
-  const dir=V.norm(V.add(this.forward,V.add(V.scale(this.right,nx),V.scale(this.up,ny)))),origin={...this.eye},sim=this.simRef,terrain=sim?.terrain,f=this.cut.frame;if(!terrain)return null;
-  // The visible part of the first layer is its underside (the plane y = layer): a ray through that plane over the player
-  // picks the layer cell there, ahead of anything below it. Elsewhere the voxel ray passes through layer and hidden cells.
-  const skip=(x,y,z)=>!!this.cutCell(x,y,z)||this.fadedCell(x,y,z);let block=terrain.ray(origin,dir,80,skip);
-  if(f.radius>0&&dir.y<0){const t=(f.y-origin.y)/dir.y,p=V.add(origin,V.scale(dir,t)),x=Math.floor(p.x),z=Math.floor(p.z),id=terrain.get(x,f.y,z);
-   // 0.36.0: a ray that crosses the underside near the cell's edge and then meets a wall face (side face) below it is aimed
-   // at that wall (the block ahead at head or feet height in a 1-wide tunnel shows through the translucent layer); only the
-   // inner part of the underside (±0.2 m of the cell centre) wins over a wall, so ceiling digging still works in a shaft.
-   const inner=Math.abs(p.x-(x+.5))<.2&&Math.abs(p.z-(z+.5))<.2;
-   if(t>0&&(!block||t<block.distance&&(inner||block.normal.y!==0))&&id&&this.cutCell(x,f.y,z)==='layer'&&Math.hypot(x+.5-f.pos.x,z+.5-f.pos.z)<=CFG.cutaway.ceilingPick&&!terrain.isSolid(terrain.get(x,f.y-1,z)))block={x,y:f.y,z,id,distance:t,normal:{x:0,y:-1,z:0},point:p};}
+ // Cursor ray (render-side input): a screen point (the crosshair at the centre while the pointer is locked) → the block
+ // face under it and/or the actor under it; a hit face buried in rock is swapped for the open face that looks toward the
+ // camera. point is what the aim yaw/pitch looks at.
+ pickAt(sx,sy){if(!this.eye)return null;const w=this.canvas.clientWidth,h=this.canvas.clientHeight,t=Math.tan(this.fov*Math.PI/360),nx=(sx/w*2-1)*t*w/h,ny=(1-sy/h*2)*t;
+  const dir=V.norm(V.add(this.forward,V.add(V.scale(this.right,nx),V.scale(this.up,ny)))),origin={...this.eye},sim=this.simRef,terrain=sim?.terrain;if(!terrain)return null;
+  // Shoulder-camera aim: rock between the camera and the player (the camera fell back into a cave below a shaft) is not
+  // aimed at; the ray starts just short of the player's plane, as third-person shooters trace the crosshair.
+  const skip=this.pivot?Math.max(0,V.dot(V.sub(this.pivot,origin),dir)-CFG.camera.aimSkipMargin):0;
+  let block=terrain.ray(V.add(origin,V.scale(dir,skip)),dir,80);if(block)block.distance+=skip;
   if(block){const open=n=>!terrain.isSolid(terrain.get(block.x+n.x,block.y+n.y,block.z+n.z));
    if(!open(block.normal)){const faces=TARGET_FACES.filter(open).sort((a,b)=>V.dot(b,dir)-V.dot(a,dir));if(faces.length)block.normal={...faces[0]};}}
   let entity=null,entityT=block?block.distance:Infinity,self=false;
-  for(const a of Object.values(this.lastActors||{})){if(a.dead)continue;const s=a.scale||1,r=CFG.player.radius*s+.2,top=a.pos.y+2*(a.offset||.95*s)+.2,hit=rayBox(origin,dir,{x:a.pos.x-r,y:a.pos.y-.1,z:a.pos.z-r},{x:a.pos.x+r,y:top,z:a.pos.z+r});if(hit===null)continue;if(a.id===this.localId){self=true;continue;}if(hit<entityT&&!this.cutCell(Math.floor(a.pos.x),Math.floor(a.pos.y+.5),Math.floor(a.pos.z))){entityT=hit;entity=a;}}
+  for(const a of Object.values(this.lastActors||{})){if(a.dead)continue;const s=a.scale||1,r=CFG.player.radius*s+.2,top=a.pos.y+2*(a.offset||.95*s)+.2,hit=rayBox(origin,dir,{x:a.pos.x-r,y:a.pos.y-.1,z:a.pos.z-r},{x:a.pos.x+r,y:top,z:a.pos.z+r});if(hit===null)continue;if(a.id===this.localId){self=true;continue;}if(hit<entityT){entityT=hit;entity=a;}}
   const local=this.lastActors?.[this.localId];if(local&&!self){const feet=this.projected(local.pos),head=this.projected(V.add(local.pos,{x:0,y:1.9,z:0}));if(feet&&head){const ab={x:head.x-feet.x,y:head.y-feet.y},len=ab.x*ab.x+ab.y*ab.y||1,u=clamp(((sx-feet.x)*ab.x+(sy-feet.y)*ab.y)/len,0,1);self=Math.hypot(sx-feet.x-ab.x*u,sy-feet.y-ab.y*u)<48;}}
   let point=entity?V.add(entity.pos,{x:0,y:(entity.offset||.95),z:0}):block?block.point:null;
-  if(!point){const feetY=local?local.pos.y:f.pos.y;point=Math.abs(dir.y)>1e-4&&(feetY-origin.y)/dir.y>0?V.add(origin,V.scale(dir,(feetY-origin.y)/dir.y)):V.add(origin,V.scale(dir,20));}
+  if(!point){const feetY=local?local.pos.y:origin.y;point=Math.abs(dir.y)>1e-4&&(feetY-origin.y)/dir.y>0?V.add(origin,V.scale(dir,(feetY-origin.y)/dir.y)):V.add(origin,V.scale(dir,20));}
   this.cursor={sx,sy,block:entity?null:block&&{x:block.x,y:block.y,z:block.z,id:block.id,normal:{...block.normal},point:block.point,distance:block.distance},entity:entity?.id||null,self,point};return this.cursor;}
 
  blockFaceLine(out,center,u,v,x0,y0,x1,y1,width,color){
@@ -236,10 +172,10 @@ class Renderer {
   if(!m.materials||m.materials.length!==count)throw Error('텍스처 재질 데이터 누락');
   const indices=count<=65535?new Uint16Array(m.indices):m.indices,geometry=new T.BufferGeometry();
   geometry.setAttribute('position',new T.BufferAttribute(m.vertices,3));geometry.setAttribute('n',new T.BufferAttribute(m.normals,3));geometry.setAttribute('material',new T.BufferAttribute(m.materials,1));geometry.setIndex(new T.BufferAttribute(indices,1));
-  const object=this.worldObject(new T.Mesh(geometry,this.terrainMaterial)),ceiling=this.worldObject(new T.Mesh(geometry,this.ceilingMaterial));METRICS.add('render.upload',performance.now()-started);
-  return{object,ceiling,count:indices.length,revision:m.revision,bytes:m.vertices.byteLength+m.normals.byteLength+m.materials.byteLength+indices.byteLength};
+  const object=this.worldObject(new T.Mesh(geometry,this.terrainMaterial));METRICS.add('render.upload',performance.now()-started);
+  return{object,count:indices.length,revision:m.revision,bytes:m.vertices.byteLength+m.normals.byteLength+m.materials.byteLength+indices.byteLength};
  }
- deleteMesh(m){if(!m)return;this.scene.remove(m.object);this.scene.remove(m.ceiling);m.object.geometry.dispose();}
+ deleteMesh(m){if(!m)return;this.scene.remove(m.object);m.object.geometry.dispose();}
  stream(sim,actor){const started=performance.now();if(this.worldRef!==sim.terrain){for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.worldRef=sim.terrain;this.meshBuilder.reset(sim.terrain);this.streamSignature=null;this.streamComplete=false;this.uploadReady=[];this.visibleChunks.clear();this.readyChunks.clear();this.visibleColumns.clear();this.clearWaterMeshes();this.particles.length=0;}
   this.meshBuilder.sync(sim.terrain);const C=CFG.chunk,cx=Math.floor(actor.pos.x/C),cy=Math.floor(actor.pos.y/C),cz=Math.floor(actor.pos.z/C),want=new Set(),columns=new Set(),todo=[],distances=new Map(),yMin=Math.max(Math.floor(CFG.bottom/C),cy-1),yMax=Math.min(Math.ceil(CFG.top/C)-1,cy+1);
   for(let dz=-this.viewRadius;dz<=this.viewRadius;dz++)for(let dx=-this.viewRadius;dx<=this.viewRadius;dx++){const column=columnKey(cx+dx,cz+dz);columns.add(column);for(let y=yMin;y<=yMax;y++){const key=chunkKey(cx+dx,y,cz+dz),old=this.meshes.get(key),rev=sim.terrain.revisions.get(key)||0,dist=dx*dx+dz*dz+Math.abs(y-cy);want.add(key);distances.set(key,dist);if(!old||old.revision!==rev)todo.push({key,revision:rev,dist,dirty:!!old});}}
@@ -279,40 +215,11 @@ class Renderer {
  drawSky(daylight,phase,alt,twilight){const u=this.sky.material.uniforms;u.yaw.value=this.camera.yaw;u.daylight.value=daylight;u.twilight.value=twilight;
   // Sun and moon share a continuous solar arc; camera yaw controls their screen azimuth.
   const az=TAU*phase-this.camera.yaw;
-  const x=.5+.43*Math.sin(az),y=.30+.54*alt-.20*this.camera.pitch;
-  u.sun.value.set([x,y,Math.cos(az)>0?.95:0]);u.moon.value.set([.5-.43*Math.sin(az),.30-.54*alt-.20*this.camera.pitch,Math.cos(az)<0?1:0]);this.submit(this.sky);}
- setCutUniforms(u){const f=this.cut.frame;u.cut.value.set([f.y,f.base,0,f.radius]);u.cutLine.value.set([f.cx,f.cz,f.sx,f.sz]);u.camA.value.set(arr(f.camera));u.camB.value.set(arr(f.target));}
- drawTerrain(lights){const u=this.terrainMaterial.uniforms;u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.ambient.value=this.ambient;u.fog.value.set(this.fog);u.lights.value.set(lights);u.textured.value=this.combatFx.options.textures?1:0;this.setCutUniforms(u);
+  // Screen height of a body at elevation asin(±alt) seen from the camera pitch (pitch > 0 looks down, raising it).
+  const span=2*Math.tan(this.fov*Math.PI/360),height=e=>.5+Math.tan(clamp(e+this.camera.pitch,-1.4,1.4))/span,x=.5+.43*Math.sin(az);
+  u.sun.value.set([x,height(Math.asin(alt)),Math.cos(az)>0?.95:0]);u.moon.value.set([.5-.43*Math.sin(az),height(Math.asin(-alt)),Math.cos(az)<0?1:0]);this.submit(this.sky);}
+ drawTerrain(lights){const u=this.terrainMaterial.uniforms;u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.ambient.value=this.ambient;u.fog.value.set(this.fog);u.lights.value.set(lights);u.textured.value=this.combatFx.options.textures?1:0;
   for(const [key,m]of this.meshes){if(!m.count)continue;const [x,y,z]=key.split(':').map(Number),dx=(x+.5)*16-this.eye.x,dz=(z+.5)*16-this.eye.z;if(dx*this.forward.x+dz*this.forward.z<-18||Math.hypot(dx,dz)>75)continue;this.submit(m.object);this.stats.vertices+=m.count;}}
- // The translucent first ceiling layer: the same chunk geometry again, only the band [cut y, cut y+1] inside the cut.
- drawCeiling(lights){const f=this.cut.frame;if(!f||f.radius<=0)return;const u=this.ceilingMaterial.uniforms,C=CFG.chunk,c=this.cutCenter(f.y+.5),cy=Math.floor(f.y/C);u.vp.value.set(this.vp);u.ambient.value=this.ambient;u.lights.value.set(lights);this.setCutUniforms(u);
-  for(const [key,m]of this.meshes){if(!m.count)continue;const [x,y,z]=key.split(':').map(Number);if(y!==cy&&y!==Math.floor((f.y+1)/C)||Math.max(Math.abs((x+.5)*C-c.x),Math.abs((z+.5)*C-c.z))>C/2+f.radius+1)continue;this.submit(m.ceiling);this.stats.vertices+=m.count;}}
- // Cross-section faces of the cut, one per voxel face: every meshed cell outside the cut that touches a meshed cell inside it
- // (the first layer or the hidden volume above it) from below or from the side gets that face back, with its own block id,
- // so the cut reads as sliced ground (cutFaceFragment textures and darkens it) and never shows the rock interior. Faces
- // within 1.5 m of the line of sight are left out, so the walls of a narrow tunnel never cover the player. Scans only the
- // cells inside the cut from the first layer up to the camera (about 700 cells at radius 4.5).
- cutawayFaces(sim){const f=this.cut.frame,out=[];if(!f||f.radius<=0)return out;const t=sim.terrain,C=CFG.chunk,r=Math.ceil(f.radius),r2=f.radius*f.radius,yTop=Math.max(f.y,Math.ceil(f.camera.y)+1);
-  // Hot path (every frame): chunk arrays looked up once per chunk, and the cut test inlined (same rule as cutCell).
-  const chunks=new Map(),get=(x,y,z)=>{if(y<CFG.bottom)return BID.bedrock;if(y>=CFG.top)return 0;const cx=Math.floor(x/C),cy=Math.floor(y/C),cz=Math.floor(z/C),key=(cx&1023)*1048576+(cy&1023)*1024+(cz&1023);let d=chunks.get(key);if(!d)chunks.set(key,d=t.data(cx,cy,cz));return d[(x-cx*C)+C*((y-cy*C)+C*(z-cz*C))];};
-  const meshed=id=>!!id&&BLOCKS[id]?.mesh!==false,inCut=(x,y,z)=>{if(y<f.y)return false;const h=y+.5-f.base,ex=x+.5-f.cx-f.sx*h,ez=z+.5-f.cz-f.sz*h;return ex*ex+ez*ez<r2;};
-  // Squared distance to the camera-to-target segment (lineOfSight without allocations).
-  const a=f.camera,bx=f.target.x-a.x,by=f.target.y-a.y,bz=f.target.z-a.z,bb=Math.max(bx*bx+by*by+bz*bz,1e-4),sightSq=(x,y,z)=>{const px=x-a.x,py=y-a.y,pz=z-a.z,s=clamp((px*bx+py*by+pz*bz)/bb,0,1),ex=px-bx*s,ey=py-by*s,ez=pz-bz*s;return ex*ex+ey*ey+ez*ez;};
-  const dirs=[[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
-  for(let y=f.y;y<=yTop;y++){const c=this.cutCenter(y+.5),x0=Math.floor(c.x),z0=Math.floor(c.z);
-   for(let z=z0-r;z<=z0+r;z++)for(let x=x0-r;x<=x0+r;x++){if(!inCut(x,y,z)||!meshed(get(x,y,z)))continue;
-    for(const [dx,dy,dz]of dirs){const nx=x+dx,ny=y+dy,nz=z+dz,id=get(nx,ny,nz);if(!meshed(id)||inCut(nx,ny,nz))continue;
-     // The shared face, seen from the cut cell: normal -d (out of the neighbour), on the plane between the two cells.
-     const px=dx>0?x+1:x,pz=dz>0?z+1:z;if(sightSq(dx?px:x+.5,dy?y:y+.5,dz?pz:z+.5)<2.25)continue;
-     // Quad corners as (u,v) steps across the face plane.
-     const ux=dy||dz?1:0,uz=dx?1:0,vy=dy?0:1,vz=dy?1:0,ox=dx?px:x,oz=dz?pz:z;
-     for(const [a,b]of QUAD_CORNERS)out.push(ox+ux*a,y+vy*b,oz+uz*a+vz*b,-dx,-dy,-dz,id);}}}
-  return out;}
- drawCutFaces(sim,lights){const vertices=this.cutawayFaces(sim);if(!vertices.length)return;
-  const item=this.pooled('cutFaces',()=>{const geometry=new DynamicGeometry(this.T,RENDER_LAYOUT.cut);return{geometry,object:new this.T.Mesh(geometry.geometry,this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.cutFaceFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:this.blockAtlas.texture},cut:{value:new Float32Array(4)},cutLine:{value:new Float32Array(4)},camA:{value:new Float32Array(3)},camB:{value:new Float32Array(3)},fade:{value:new Float32Array([CFG.cutaway.fadeRadius,CFG.cutaway.fadeKeep])}}))};}),u=item.object.material.uniforms;
-  u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.lights.value.set(lights);u.ambient.value=this.ambient;u.textured.value=this.combatFx.options.textures?1:0;this.setCutUniforms(u);this.submitDynamic(item,vertices,7);}
- // Whether an entity at pos stands in the hidden part of the cut (the ground under it is not drawn).
- cutHides(pos){return this.cutCell(Math.floor(pos.x),Math.floor(pos.y+.5),Math.floor(pos.z))==='hidden';}
  minePreview(sim,actor,cursor){if(!cursor?.block||!cursor.point)return cursor;const held=ITEMS[Inventory.selected(actor.inventory)?.id],b=BLOCKS[cursor.block.id];if(held?.block||b?.station||b?.gate)return cursor;
   const eye={x:actor.pos.x,y:actor.pos.y+CFG.player.eyeHeight,z:actor.pos.z},d=V.sub(cursor.point,eye),len=V.len(d);if(len<=.05)return cursor;
   const ray=sim.rayBlock({pos:actor.pos,facing:aimFacing(Math.atan2(-d.x,-d.z),Math.asin(clamp(-d.y/len,-1,1)))});return{...cursor,block:ray&&{...ray,point:cursor.point,distance:len}};}
@@ -322,22 +229,21 @@ class Renderer {
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
   this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.simRef=sim;this.localId=authority.id;this.lastActors=view.actors;this.updateCamera(actor,sim,viewPos,dt);this.stream(sim,authority);const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
   this.ambient=.20+.80*daylight;
-  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);const cutK=this.cut.amount,rock=CUTAWAY_ROCK.map(v=>v*clamp(this.ambient,.16,1.3));this.beginFrame(cutK>0?this.fog.map((v,i)=>lerp(v,rock[i],cutK)):this.fog);
-  // Inside the cutaway, unmeshed rock interiors behind the cut show the rock colour instead of the sky.
-  if(cutK<=0)this.drawSky(daylight,phase,alt,twilight);
-  const lights=this.lights(sim,actor);this.frameLights=lights;this.drawTerrain(lights);this.drawCutFaces(sim,lights);
+  this.fog=new Float32Array([lerp(.075,.69,daylight)+.11*twilight,lerp(.11,.85,daylight)+.025*twilight,lerp(.19,.86,daylight)-.17*twilight]);this.beginFrame(this.fog);
+  this.drawSky(daylight,phase,alt,twilight);
+  const lights=this.lights(sim,actor);this.frameLights=lights;this.drawTerrain(lights);
   const dyn=[],sprites=[];
   // Fluid volumes are submitted separately after solid terrain; no global sea plane.
   this.animationSamples={};
   for(const a of Object.values(view.actors)){
-   if(a.dead||a.id!==actor.id&&(!this.entityVisualReady(a)||this.cutHides(a.pos)))continue;
+   if(a.dead||a.id!==actor.id&&!this.entityVisualReady(a))continue;
    const visual=this.combatFx.pose(a),reaction=this.combatFx.reactions.get(a.id),scale=a.scale||1,c=visual.combat;
    const sample=actorSpritePose(visual,this.camera.yaw,reaction);this.animationSamples[a.id]=sample;
    // Players keep their authored colours; co-op players are told apart by the name tag in EnemyHealthHUD.
    let tint=[1,1,1,1];if(a.suspended)tint=[.55,.57,.55,1];
    const whiteFlash=!!(reaction&&reaction.age<CFG.combat.feedback.flash&&reaction.age<45);
    if(reaction&&reaction.age<CFG.combat.feedback.flash&&!whiteFlash)tint=[1.75,.65,.5,1];
-   const rp=a.pos;if(a.speciesId)this.units.actor(visual,sim,reaction,tint,whiteFlash);else this.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,actor:visual,reaction,pos:rp,scale,tint,alpha:1,whiteFlash});
+   const rp=a.pos;if(a.speciesId)this.units.actor(visual,sim,reaction,tint,whiteFlash);else this.queueCharacter({phase:'world',key:a.id,kind:sample.kind,sample,actor:visual,reaction,pos:rp,scale,tint,alpha:a.id===actor.id?this.selfAlpha():1,whiteFlash});
    const raw=sim.actors[a.id],hit=raw?sim.physics.ground(raw,rp,2.5):null;if(hit&&hit.normal.y>.7){const y=rp.y+a.offset-hit.timeOfImpact+.012,height=Math.max(0,rp.y-y),factor=1/(1+height*.3);this.box(dyn,{x:rp.x,y,z:rp.z},{x:.66*scale*factor,y:.01,z:.44*scale*factor},[.20,.30,.22]);}
   }
   const dropSprites=[];for(const d of Object.values(view.drops)){const dp=d.pos,frame=this.dropAtlas.frames[d.item];if(!frame||!this.worldVisualReady(dp,.16))continue;
@@ -391,7 +297,7 @@ class Renderer {
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
   this.units.prepare(view,sim,actor,dyn);this.drawFences(dyn,sim);
-  this.drawColored(dyn);this.drawCeiling(lights);
+  this.drawColored(dyn);
   this.playerRig.draw('world');this.unitRig.draw('world');
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
   this.drawSprites(dropSprites,this.dropAtlas.texture,{ambient:Math.max(.75,this.ambient),blend:true});this.drawWater();
@@ -465,14 +371,8 @@ class Renderer {
  }
  free(){this.meshBuilder.free();for(const m of this.meshes.values())this.deleteMesh(m);this.meshes.clear();this.clearWaterMeshes();this.playerRig.dispose();this.unitRig.dispose();
   for(const pool of this.pools.values())for(const item of pool.items){item.geometry?.dispose();item.object.material.dispose();}this.pools.clear();
-  for(const m of [this.terrainMaterial,this.ceilingMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
+  for(const m of [this.terrainMaterial,this.waterMaterial,this.sky.material])m.dispose();this.sky.geometry.dispose();for(const t of [this.atlas.texture,this.dropAtlas.texture,this.blockAtlas.texture])t.dispose();
   this.combatFx.reset();this.healthHud.reset();this.three.dispose();}
 }
-// Colour of the background seen through rock interiors inside the cutaway (cleared to it instead of the sky).
-const CUTAWAY_ROCK=Object.freeze([.3,.27,.24]);
-// Two triangles of a unit quad as (u,v) corners.
-const QUAD_CORNERS=Object.freeze([[0,0],[1,0],[1,1],[0,0],[1,1],[0,1]]);
-// Plant blocks over the head (a tree canopy, a giant mushroom) do not make a cave ceiling.
-const CUTAWAY_PLANTS=new Set(['log','leaves','cap','stem'].map(id=>BID[id]));
 // Ray against an axis-aligned box: the entry distance, or null.
 function rayBox(o,d,min,max){let t0=0,t1=Infinity;for(const k of ['x','y','z']){if(Math.abs(d[k])<1e-9){if(o[k]<min[k]||o[k]>max[k])return null;continue;}let a=(min[k]-o[k])/d[k],b=(max[k]-o[k])/d[k];if(a>b)[a,b]=[b,a];t0=Math.max(t0,a);t1=Math.min(t1,b);if(t0>t1)return null;}return t0;}

@@ -17,7 +17,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.37.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.38.0',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -41,26 +41,15 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   regen:{delayTicks:ticksForMs(5000),everyTicks:ticksForMs(1000)},
   creatures:{initialEncounterTicks:ticksForMs(6000),encounterCheckTicks:ticksForMs(2000),spawnTicks:ticksForMs(6000),maxWild:6,perPlayer:3,encounterRadius:32,nightAggro:10,despawnRadius:64,leash:26,dungeonPackSize:3,bossTrigger:22,bossAggro:14,bossLeash:24},
   worldgen:{caveSpacing:48,caveLength:34,mineSpacing:64,dungeonSpacing:112,resourceGuideRadius:128,rooms:6},rpg:{maxLevel:25,xp:{boss:250},mining:{coalOre:3,ironOre:5,goldOre:8,diamondOre:15,crystalBloom:12},dungeonClear:120,chest:18},
-  // D-114 fixed third-person camera: 8 yaw steps of 45° (Q/E, animated over stepMs), a fixed downward pitch and
-  // wheel/pinch zoom between minDistance and maxDistance (metres from the look target, `target` m above the feet).
-  // pitch 50°: steep enough to see over 2–3 block voxel walls (a 2-block wall hides only 1.7 m behind it) and down into
-  // a cutaway cave, shallow enough that the upright billboard characters still read; billboardStretch makes up part of
-  // their foreshortening (cos 50° ≈ 0.64 → 0.83 of the authored height on screen). In a cave the zoom is capped at
-  // caveDistance so the cutaway stays readable.
-  camera:{pitch:50*Math.PI/180,yawSteps:8,stepMs:250,target:1.0,initialDistance:{desktop:9.5,mobile:10},minDistance:6,maxDistance:20,zoomStep:1.12,caveDistance:10,billboardStretch:1.3},
+  // D-165 shoulder camera (Valheim/Enshrouded convention): mouse (pointer lock) or touch drag turns yaw and pitch; pitch
+  // > 0 looks down, clamped to minPitch..maxPitch. The view pivots `shoulder` m right of a point `target` m above the feet;
+  // the wheel or a pinch sets the distance behind it (minDistance..maxDistance), and a wall pulls the camera to wallGap m
+  // in front of it (never closer than `nearest`); closer than fadeFrom the local player fades toward selfMinAlpha. The crosshair at the screen centre is the aim. Upright billboards are
+  // seen nearly level now, so billboardStretch is 1.
+  camera:{pitch:12*Math.PI/180,minPitch:-60*Math.PI/180,maxPitch:75*Math.PI/180,target:1.55,shoulder:.8,wallGap:.25,aimSkipMargin:.3,nearest:.5,fadeFrom:1.8,selfMinAlpha:.18,fov:70,initialDistance:{desktop:5.5,mobile:6},minDistance:2,maxDistance:9,zoomStep:1.12,mouseSensitivity:.0025,touchSensitivity:.006,billboardStretch:1},
   // Left button (D-123/D-124): a press released within holdTicks is the basic attack; held that long it mines the first
   // block on the head ray toward the cursor, within `reach` (Simulation.rayBlock). A touch long press mines at once.
   mining:{holdTicks:ticksForMs(200)},
-  // Cave cutaway (render only). A solid non-plant block within `probe` blocks above the head enters the cutaway after
-  // enterMs; without one it leaves after exitMs (hysteresis). Inside the cut radius of the view line, blocks above the first
-  // ceiling layer are hidden and that layer is drawn translucent (tested per voxel at the cell centre). The radius adapts
-  // to the open space under the layer: openMargin m past the farthest open cell reachable from the player's column, kept
-  // within minRadius..radius (a 1x1 shaft opens 3 m, a tunnel or room 4.5 m, about half the screen at the ~10 m cave zoom).
-  // The solid cells the cut slices show their own texture times sectionTint as cross-section faces; terrain above the layer
-  // darkens to rimShade at the cut edge and recovers over `vignette` m outside it. Blocks within fadeRadius of the
-  // camera-to-player line (and farther than fadeKeep from the player) are dithered. Without a cutaway a line blocked by
-  // more than pullThickness solid cells pulls the camera in.
-  cutaway:{probe:12,radius:4.5,minRadius:3,openMargin:2,sectionTint:.55,rimShade:.55,vignette:1.2,enterMs:120,exitMs:350,fadeMs:300,ceilingPick:1.6,fadeRadius:1.1,fadeKeep:1.4,pullThickness:3},
   timing:{maxCatchUp:ticksForMs(100),maxBacklogTicks:ticksForMs(800)},worldSeed:190725,presentation:{maxBuffered:2048,retentionTicks:ticksForMs(4000)},net:{maxPlayers:4,inputSize:20,inputDelayTicks:Math.ceil(50*SIMULATION_TPS/1000),checksumTicks:ticksForMs(1000),historyTicks:ticksForMs(2000)}});
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),lerp=(a,b,t)=>a+(b-a)*t,TAU=Math.PI*2;
 const initialCameraDistance=()=>CFG.camera.initialDistance[matchMedia('(pointer:coarse)').matches?'mobile':'desktop'];
