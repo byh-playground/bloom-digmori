@@ -17,7 +17,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.38.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.38.1',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -46,7 +46,7 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   // the wheel or a pinch sets the distance behind it (minDistance..maxDistance), and a wall pulls the camera to wallGap m
   // in front of it (never closer than `nearest`); closer than fadeFrom the local player fades toward selfMinAlpha. The crosshair at the screen centre is the aim. Upright billboards are
   // seen nearly level now, so billboardStretch is 1.
-  camera:{pitch:12*Math.PI/180,minPitch:-60*Math.PI/180,maxPitch:75*Math.PI/180,target:1.55,shoulder:.8,wallGap:.25,aimSkipMargin:.3,nearest:.5,fadeFrom:1.8,selfMinAlpha:.18,fov:70,initialDistance:{desktop:5.5,mobile:6},minDistance:2,maxDistance:9,zoomStep:1.12,mouseSensitivity:.0025,touchSensitivity:.006,billboardStretch:1},
+  camera:{pitch:20*Math.PI/180,minPitch:-60*Math.PI/180,maxPitch:75*Math.PI/180,target:1.55,shoulder:1.1,wallGap:.25,aimSkipMargin:.3,nearest:.5,fadeFrom:1.8,selfMinAlpha:.18,fov:70,initialDistance:{desktop:4,mobile:4.5},minDistance:2,maxDistance:9,zoomStep:1.12,mouseSensitivity:.0025,touchSensitivity:.006,billboardStretch:1},
   // Left button (D-123/D-124): a press released within holdTicks is the basic attack; held that long it mines the first
   // block on the head ray toward the cursor, within `reach` (Simulation.rayBlock). A touch long press mines at once.
   mining:{holdTicks:ticksForMs(200)},
