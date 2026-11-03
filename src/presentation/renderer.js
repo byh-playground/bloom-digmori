@@ -313,6 +313,9 @@ class Renderer {
   u.vp.value.set(this.vp);u.eye.value.set(arr(this.eye));u.lights.value.set(lights);u.ambient.value=this.ambient;u.textured.value=this.combatFx.options.textures?1:0;this.setCutUniforms(u);this.submitDynamic(item,vertices,7);}
  // Whether an entity at pos stands in the hidden part of the cut (the ground under it is not drawn).
  cutHides(pos){return this.cutCell(Math.floor(pos.x),Math.floor(pos.y+.5),Math.floor(pos.z))==='hidden';}
+ minePreview(sim,actor,cursor){if(!cursor?.block||!cursor.point)return cursor;const held=ITEMS[Inventory.selected(actor.inventory)?.id],b=BLOCKS[cursor.block.id];if(held?.block||b?.station||b?.gate)return cursor;
+  const eye={x:actor.pos.x,y:actor.pos.y+CFG.player.eyeHeight,z:actor.pos.z},d=V.sub(cursor.point,eye),len=V.len(d);if(len<=.05)return cursor;
+  const ray=sim.rayBlock({pos:actor.pos,facing:aimFacing(Math.atan2(-d.x,-d.z),Math.asin(clamp(-d.y/len,-1,1)))});return{...cursor,block:ray&&{...ray,point:cursor.point,distance:len}};}
  render(sim,authority,dt,displayFrame){
   const view={actors:{},drops:{},projectiles:{},companions:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':model.displayKind==='companion'?'companions':'projectiles'][model.id]=value;});
   const actor=view.actors[authority.id];if(!actor)return;this.displayTimeMs=displayFrame.timeMs;
@@ -345,9 +348,11 @@ class Renderer {
    // A thrown item (the merge potion) spins as its item sprite; arrows and spit stay beams.
    if(s.item&&this.dropAtlas.frames[s.item]){this.sprite(dropSprites,{x:sp.x,y:sp.y-.2,z:sp.z},.42,.42,this.dropAtlas.frames[s.item],[1,1,1,1],false,(s.age||0)*.012);continue;}
    this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
-  // Cursor highlight (render-side pick of the pointer) and the block being mined (hold-to-mine, D-123) with its crack
-  // progress: the sim's mine target, which the head ray picks and may differ from the block under the cursor.
-  const cursor=this.pickAt(this.pointer.x,this.pointer.y),mt=authority.mine.target?authority.mine.target.split(',').map(Number):null,mid=mt&&sim.terrain.get(mt[0],mt[1],mt[2]),task=mid?{x:mt[0],y:mt[1],z:mt[2]}:null,taskHit=task?{...task,id:mid,normal:faceToward(task,this.eye)}:null;
+  // Cursor highlight and the block being mined (hold-to-mine, D-123) with its crack progress. The highlight shows what a
+  // press acts on: the cursor block when a placeable block is held or it is a station/gate (click uses the cursor target),
+  // otherwise the head-ray cell a hold would mine (Simulation.rayBlock from the cursor aim), which the camera's high angle
+  // often places on a nearer block than the one under the cursor.
+  const cursor=this.minePreview(sim,authority,this.pickAt(this.pointer.x,this.pointer.y)),mt=authority.mine.target?authority.mine.target.split(',').map(Number):null,mid=mt&&sim.terrain.get(mt[0],mt[1],mt[2]),task=mid?{x:mt[0],y:mt[1],z:mt[2]}:null,taskHit=task?{...task,id:mid,normal:faceToward(task,this.eye)}:null;
   if(this.pointer.shown!==false&&cursor?.block&&!(task&&cursor.block.x===task.x&&cursor.block.y===task.y&&cursor.block.z===task.z))this.blockFace(dyn,cursor.block,0);
   const hit=taskHit||(this.pointer.shown!==false?cursor?.block:null)||null;this.target=hit;
   if(taskHit){
