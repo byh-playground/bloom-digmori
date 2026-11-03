@@ -76,6 +76,9 @@ class Physics {
     if(!best||hit.timeOfImpact<best.timeOfImpact)best=hit;}}
   return best;
  }
+ // Launch speed whose *discrete* apex is `apex` metres: the 30 TPS semi-implicit integration loses v*dt/2 of the textbook
+ // v^2/2g, so sqrt(2*g*apex) alone peaks about 0.11 m low (the 1.12 m auto step topped out 3 cm above a 1 m ledge).
+ launchSpeed(apex){const g=CFG.player.gravity,dt=CFG.stepMs/1000;return Math.sqrt(2*g*apex)+g*dt/2;}
  autoJump(actor,move){const t=this.terrain,unit=V.norm({x:move.x,y:0,z:move.z}),r=CFG.player.radius*(actor.scale||1),p=actor.pos,look=CFG.movement.autoJumpLook,feet=Math.floor(p.y+.12),height=actor.offset*2;
   // A full footprint, not one central voxel: don't hop into diagonal corners or ceilings.
   const next={x:p.x+unit.x*look,y:p.y,z:p.z+unit.z*look},min={x:next.x-r+.01,y:feet+.01,z:next.z-r+.01},max={x:next.x+r-.01,y:feet+1-.01,z:next.z+r-.01};
@@ -83,7 +86,7 @@ class Physics {
   // A fence or closed gate is 1.5 blocks high (0.35.1): never an auto step.
   if(this.boxFence(min,max))return false;
   if(t.boxSolid({...min,y:feet+1+.01},{...max,y:feet+1+height+CFG.movement.ceilingGap}))return false;
-  const rise=CFG.player.jump*CFG.player.jump/(2*CFG.player.gravity)+.03;
+  const rise=1+CFG.movement.autoStepClear;
   for(const f of [0,.5,1]){const x=lerp(p.x,next.x,f),z=lerp(p.z,next.z,f);if(t.boxSolid({x:x-r+.01,y:p.y+height+.01,z:z-r+.01},{x:x+r-.01,y:p.y+height+rise,z:z+r-.01}))return false;}
   return true;
  }
@@ -146,7 +149,7 @@ class Physics {
   const max=(actor.knock>0?CFG.combat.knockback.drag:actor.combat.state==='roll'?70:CFG.player.acceleration)*dt,d={x:clamp(move.x*speed-vel.x,-max,max),y:0,z:clamp(move.z*speed-vel.z,-max,max)};
   b.applyImpulse({x:d.x*m,y:0,z:d.z*m},true);const ground=this.ground(actor,actor.pos,CFG.movement.groundGap,true);actor.grounded=!!ground&&vel.y<2;
   const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(requestedMove.x,requestedMove.z)>.35&&this.autoJump(actor,requestedMove);
-  if((jump||autoStep)&&actor.grounded){const vertical=autoStep?Math.sqrt(2*CFG.player.gravity*CFG.movement.autoStepRise):CFG.player.jump;
+  if((jump||autoStep)&&actor.grounded){const vertical=autoStep?this.launchSpeed(CFG.movement.autoStepRise):CFG.player.jump;
    b.applyImpulse({x:0,y:(vertical-vel.y)*m,z:0},true);actor.grounded=false;}
   this.fenceClamp(actor,b);
  }
