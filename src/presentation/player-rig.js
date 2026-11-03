@@ -10,6 +10,8 @@ const RIG_WEAPON_SCALE=Object.freeze({sword:.7,spear:.64,axe:.64,pick:.64});
 const RIG_SWINGS=Object.freeze([[-20,40,-95],[-20,-130,55],[-20,15,-160]]);
 // Attack timeline in rig progress: wind-up ends at strikeStart, the strike lands by strikeEnd, rest pose at rest.
 const RIG_ATTACK=Object.freeze({strikeStart:.16,strikeEnd:.24,rest:.8});
+// Hold-to-mine (D-123) swing cycle: one chop every cycleMs while a block is being mined; angles in degrees as above.
+const RIG_MINE=Object.freeze({cycleMs:420,rest:-20,wind:55,strike:-105,strikeAt:.55});
 // Equipment materials recolour their own part: helmet → cap, chestplate → jacket, boots → foot, held
 // weapon/tool → blade. Each entry is [hue°, saturation ×, value ×]; null keeps the authored colours.
 // base = parts no equipment touches. leather = authored, wood = 나무 blade, stone = 돌, iron = 철, diamond = 청수정.
@@ -66,6 +68,16 @@ class PlayerRig{
    p.rot=rigEase(q,[[0,0],[ts,.1],[te,-.14],[.5,-.08],[RIG_ATTACK.rest,0]]);p.squash=rigEase(q,[[0,1],[ts,1.03],[te,.9],[.32,1],[RIG_ATTACK.rest,1]]);
    p.head=rigEase(q,[[0,0],[ts,3],[te,-5],[.5,-2],[RIG_ATTACK.rest,0]]);p.face=q<.05||q>.7?null:(last&&q>=ts&&q<.4?'shout':'atk');
    p.swing={from:wind,q,ts,te,last};if(q>=te&&q<te+(last?.1:.05))p.shake=last?4:2;if(last)p.bob=rigEase(q,[[0,0],[ts,10],[te,0]])}
+  else if(look.anim==='mine'){const q=look.progress,D=Math.PI/180,M=RIG_MINE,hit=M.strikeAt;
+   p.weaponAngle=rigEase(q,[[0,M.rest*D],[.38,M.wind*D],[hit,M.strike*D],[.7,(M.strike+8)*D],[1,M.rest*D]]);p.arm=true;
+   p.rot=rigEase(q,[[0,0],[.38,.08],[hit,-.12],[1,0]]);p.squash=rigEase(q,[[0,1],[.38,1.03],[hit,.93],[.75,1],[1,1]]);
+   p.head=rigEase(q,[[0,0],[.38,2],[hit,-4],[1,0]]);p.face=q>.3&&q<.75?'atk':null;if(q>=hit&&q<hit+.06)p.shake=1.5}
+  else if(look.anim==='swim'){const w=Math.sin(seconds*6),c=Math.cos(seconds*6);p.bob=-16+w*2.5;p.head=c*1.5;
+   if(view==='side'){p.rot=-.22;p.handL=[w*14,8+c*6];p.handR=[-w*14,8-c*6];p.footL=[-w*9,4];p.footR=[w*9,4];p.weaponAngle=1.1}
+   else{p.handL=[-w*8,10+c*6];p.handR=[w*8,10-c*6];p.footL=[0,6+w*4];p.footR=[0,6-w*4];p.weaponAngle=.9}}
+  else if(look.anim==='jump'||look.anim==='fall'){const up=look.anim==='jump',k=up?1:.6;p.bob=up?3:0;p.head=up?-2:2;
+   p.footL=[view==='side'?-6:-3,up?12:4];p.footR=[view==='side'?6:3,up?6:2];
+   p.handL=[view==='side'?-8:-8*k,up?16:24];p.handR=[view==='side'?10:8*k,up?12:24];p.weaponAngle=up?.15:-.25}
   if(look.hurt)p.face='hurt';
   return p;
  }
@@ -82,7 +94,7 @@ class PlayerRig{
   const head=(pre,f)=>headKey=V.base[pre+'head_'+f]&&f?pre+'head_'+f:pre+'head';
   ctx.save();if(look.flip){ctx.translate(OX*2,0);ctx.scale(-1,1)}
   // Presentation-only impact jitter; deterministic in the attack progress so equal states draw equal frames.
-  if(p.shake)ctx.translate(Math.sin(p.swing.q*977)*p.shake,Math.cos(p.swing.q*613)*p.shake);
+  if(p.shake){const q=p.swing?p.swing.q:look.progress;ctx.translate(Math.sin(q*977)*p.shake,Math.cos(q*613)*p.shake)}
   // The tucked roll spins about the ball's own centre so the tumbling body stays above the ground plane.
   const cy=GY-(58+(look.anim==='roll'?p.tuck*37:0))*U;ctx.translate(OX,cy);ctx.rotate(p.rot);ctx.scale(p.zoom,p.squash*p.zoom*(p.pitch!==undefined?.78+.22*Math.abs(Math.cos(p.pitch)):1));ctx.translate(-OX,-cy);
   const tk=p.tuck,b=p.bob,L=(a,c,k)=>a+(c-a)*k;
@@ -100,7 +112,7 @@ class PlayerRig{
    P('side_foot',L(-4+p.footL[0],-12,tk),14+p.footL[1]+tk*18);
    const hk=head('side_',p.face);P(hk,p.headX-2-tk*12,hy,{r:-tk*.4,s:hk!=='side_head'?1.08:1});P('side_cap',p.headX-5-tk*12,hy+33-tk*5,{s:.78,r:-tk*.4});
    let sx=L(-10+p.handR[0]*.9,-14,tk),sy=L(54+b+p.handR[1],34,tk);
-   if(p.swing){const R0=24+(p.thrust||0);sx=-4+Math.sin(p.weaponAngle)*R0;sy=64+b+Math.cos(p.weaponAngle)*R0;P('side_hand',sx+7,sy-3,{dim:1})}
+   if(p.swing||p.arm){const R0=24+(p.thrust||0);sx=-4+Math.sin(p.weaponAngle)*R0;sy=64+b+Math.cos(p.weaponAngle)*R0;P('side_hand',sx+7,sy-3,{dim:1})}
    if(!tk)weapon(sx,sy,p.weaponAngle,false);P('side_hand',sx,sy);
    if(p.swing)this.smear(ctx,p,look,OX-4*U,GY-(64+b)*U,U);
   }
@@ -133,8 +145,11 @@ function playerRigLook(a,cameraYaw,reaction,lastFlip=false){
  const f=rolling||attacking?act.dir:a.facing,sx=f.x*Math.cos(cameraYaw)-f.z*Math.sin(cameraYaw),toward=f.x*Math.sin(cameraYaw)+f.z*Math.cos(cameraYaw);
  let view=Math.abs(sx)>=.5?'side':toward>0?'front':'back';if(attacking)view='side';
  const flip=Math.abs(sx)>=.2?sx>0:lastFlip,m=a.motion||motionState(),speed=Math.hypot(a.velocity.x,a.velocity.z);
- const anim=rolling?'roll':attacking?'attack':speed>.16&&a.knock<=0?'walk':'idle';
- const progress=rolling?clamp(c.elapsed/act.duration,0,1):attacking?rigAttackProgress(act,c.elapsed):0;
+ // Mining (a block held under the cursor), swimming and air time come before walking; roll and attack win over all.
+ const mining=!rolling&&!attacking&&!!a.mine?.target,swimming=!!a.swim?.inWater,airborne=!swimming&&a.grounded===false,vy=a.velocity.y||0;
+ const anim=rolling?'roll':attacking?'attack':mining?'mine':swimming?'swim':airborne&&Math.abs(vy)>1.2?(vy>0?'jump':'fall'):speed>.16&&a.knock<=0?'walk':'idle';
+ if(mining)view='side';
+ const progress=rolling?clamp(c.elapsed/act.duration,0,1):attacking?rigAttackProgress(act,c.elapsed):mining?((a.anim||0)%RIG_MINE.cycleMs)/RIG_MINE.cycleMs:0;
  // Walk cycle follows travelled distance (one rig cycle per legacy stride); idle breathes on the simulation clock.
  const seconds=anim==='walk'?m.distance/(a.sprinting?ANIMATION.runStride:ANIMATION.stride)*TAU/10:(a.anim||0)/1000;
  return{anim,view,flip:view==='side'&&flip,sideFlip:flip,progress,seconds,combo:attacking?act.combo||0:0,weapon,material:weapon?held.material:'base',helmet:worn('helmet'),chest:worn('chest'),boots:worn('boots')||'base',hurt:!!(reaction&&reaction.age<CFG.combat.feedback.flash)};
