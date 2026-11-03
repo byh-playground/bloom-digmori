@@ -43,26 +43,25 @@ try {
  await page.waitForTimeout(1200);const initial=await state();assert.equal(initial.seed,190725);
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z<z-1,initial.pos.z,{timeout:5000});await page.keyboard.up('KeyW');
  const moved=await state();assert(moved.pos.z<initial.pos.z-1);
- // 0.35.2 cursor model (D-114/D-115): no pointer lock and no mouse look. A browser touch tap on a block is a left click at
- // that point: the simulation walks the player there and mines it (CDP touch events; no camera or game state assigned).
+ // Cursor model (D-114, 0.36.0 D-124): no pointer lock and no mouse look. A browser touch long press on a block in reach
+ // mines it while held: the simulation casts the head ray toward the pressed point (CDP touch events; no state assigned).
  const touch=await page.context().newCDPSession(page);
  const groundFace=(near,far)=>page.evaluate(({near,far})=>{const app=window.Bloom.app,a=app.actor(),t=app.sim.terrain,eye={x:a.pos.x,y:a.pos.y+window.Bloom.CFG.player.eyeHeight,z:a.pos.z};
   for(let r=near;r<=far;r++)for(const [dx,dz]of [[0,-1],[1,-1],[-1,-1],[0,1],[1,0],[-1,0]]){const x=Math.floor(a.pos.x)+dx*r,z=Math.floor(a.pos.z)+dz*r,y=t.height(x,z);
    if(!t.get(x,y,z)||t.get(x,y+1,z)||t.get(x,y+2,z)||Math.abs(y+1-a.pos.y)>.6)continue;const s=window.__faceScreen({x,y,z},{x:0,y:1,z:0});if(s)return{target:{x,y,z,id:t.get(x,y,z)},screen:s,distance:Math.hypot(x+.5-eye.x,y+1-eye.y,z+.5-eye.z)};}return null;},{near,far});
- const tapped=await groundFace(3,5);assert(tapped,'no visible ground face 3-5 m away');const target=tapped.target;report.cameraInput={method:'browser touch tap (left click) at a block face',tapped};
- await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:tapped.screen.x,y:tapped.screen.y,id:1}]});await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
- await page.waitForFunction(t=>window.Bloom.app.actor().task?.x===t.x||window.Bloom.app.sim.terrain.get(t.x,t.y,t.z)===0,target,{timeout:3000});
- await page.waitForFunction(t=>window.Bloom.app.sim.terrain.get(t.x,t.y,t.z)===0,target,{timeout:10000});report.beforeMining={initial,moved,target};
+ await page.waitForTimeout(900);/* the camera follows the player: settle before reading a screen point */const tapped=await groundFace(2,3);assert(tapped,'no visible ground face 2-3 m away');const target=tapped.target;report.cameraInput={method:'browser touch long press (hold-to-mine) at a block face',tapped};
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:tapped.screen.x,y:tapped.screen.y,id:1}]});
+ const broke=await page.waitForFunction(t=>window.Bloom.app.sim.terrain.get(t.x,t.y,t.z)===0,target,{timeout:10000}).then(()=>true,()=>false);await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});assert(broke,'long press did not mine '+JSON.stringify(target));report.beforeMining={initial,moved,target};
  await page.waitForTimeout(400);
  const mined=await state();assert(mined.edits.some(([key,value])=>key===target.x+','+target.y+','+target.z&&value===0));
  await page.locator('#world').focus();await page.keyboard.down('KeyW');
  await page.waitForFunction(()=>window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:10000});await page.keyboard.up('KeyW');
  const collected=await state();
  await page.keyboard.down('KeyS');await page.waitForFunction(z=>window.Bloom.app.actor().pos.z>z+.5,collected.pos.z,{timeout:10000});await page.keyboard.up('KeyS');await page.waitForTimeout(300);
- // A long press is the right click: it places the held dirt on the pressed face.
+ // A tap with a placeable block held is the right click (D-124): it places the held dirt on the tapped face.
  const placeAim=await groundFace(2,3);assert(placeAim,'no ground face to place on');
  const placedKey=[placeAim.target.x,placeAim.target.y+1,placeAim.target.z].join(',');
- await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:placeAim.screen.x,y:placeAim.screen.y,id:1}]});await page.waitForTimeout(600);await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:placeAim.screen.x,y:placeAim.screen.y,id:1}]});await page.waitForTimeout(60);await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  await page.waitForFunction(()=>!window.Bloom.app.actor().inventory.slots.some(s=>s?.id==='dirt'),null,{timeout:5000});
  const placed=await state();report.placement={aim:placeAim,expected:placedKey,edits:placed.edits};assert(placed.edits.some(([key,value])=>key===placedKey&&value!==0));
  // Tab opens the actual inventory (E turns the camera since 0.35.2); synthetic Escape is browser-reserved.

@@ -22,7 +22,8 @@ function gearStatusParts(status,actor){const rule=REALMS[status.realm],need=stat
    parts.push({slot,kind:'below',text:def.icon+' '+what+' · '+label+' '+gearFactorText(s.factor)+(hazard?' · '+hazard.name+' −'+hazard.damage+'/'+gearSeconds(hazard.everyTicks)+'초':'')});}
   else if(s.grade==='bonus')parts.push({slot,kind:'bonus',text:def.icon+' '+def.label+' '+gearFactorText(s.factor)});}
  if(!need&&!parts.length)return null;
- return{title:(rule?.name||'')+' · 권장 '+(need?GEAR_TIER_NAMES[need]:'맨손'),ok:!parts.some(p=>p.kind==='below'),parts};}
+ // 0.36.0: outside the three realms (모래 구릉·서리 고원) the line had an empty name (" · 권장 맨손"); name it as no realm.
+ return{title:(rule?.name||'바이옴 밖')+' · 권장 '+(need?GEAR_TIER_NAMES[need]:'맨손'),ok:!parts.some(p=>p.kind==='below'),parts};}
 function updateGearHUD(sim,actor){const node=document.getElementById('gear-status');if(!node)return;const status=Gear.status(actor,sim.terrain),view=actor.dead?null:gearStatusParts(status,actor),key=JSON.stringify(view);
  document.body.classList.toggle('hazard-cold',status.hazard==='cold'&&!actor.dead);document.body.classList.toggle('hazard-spore',status.hazard==='spore'&&!actor.dead);
  if(node.dataset.key===key)return;node.dataset.key=key;node.hidden=!view;if(!view){node.innerHTML='';return;}
