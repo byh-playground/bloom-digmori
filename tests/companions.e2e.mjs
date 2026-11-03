@@ -44,8 +44,7 @@ async function walkTo(p,target,limit=24000,stopAt=3.5){
 }
 const clampMs=ms=>Math.max(40,Math.min(170,ms));
 // Turn the fixed camera with Q/E (45° steps) so it looks toward a world point.
-async function faceCamera(p,pos){const turns=await p.evaluate(pos=>{const a=Bloom.app.actor(),c=Bloom.app.renderer.camera,want=((Math.round(Math.atan2(-(pos.x-a.pos.x),-(pos.z-a.pos.z))/(Math.PI/4))%8)+8)%8,d=((want-c.yawStep)%8+8)%8;return d<=4?d:d-8;},pos);
- await p.locator('#world').focus();for(let i=0;i<Math.abs(turns);i++)await p.keyboard.press(turns>0?'KeyQ':'KeyE');await pause(p,320);}
+async function faceCamera(p,pos){await p.evaluate(pos=>window.__turnToward(pos),pos);await pause(p,320);}
 const approach=(p,id,limit,stopAt)=>walkTo(p,()=>observe(p,id),limit,stopAt);
 // Put the cursor on the target unit (the game's pick must report it) and left-click: the strike goes toward the cursor.
 async function clickAttack(p,id){let at=null;for(let i=0;i<15&&!at;i++){at=await p.evaluate(id=>window.__entityScreen(id),id);if(!at)await pause(p,80);}if(!at)throw Error('unit not under any cursor point: '+JSON.stringify(await observe(p,id)));
@@ -104,9 +103,9 @@ async function saveAndReload(p,expectedId,expectSlot){
 const shot=async(p,name)=>{if(SHOTS){fs.mkdirSync(SHOTS,{recursive:true});await p.screenshot({path:SHOTS+'/'+name+'.png'});}};
 // Put a bag item into hotbar slot 9 (inventory fixture, the same as dragging it there) and select it with the keyboard.
 async function hold(p,item){const ok=await p.evaluate(item=>{const s=Bloom.app.actor().inventory.slots,i=s.findIndex(s=>s?.id===item);if(i<0)return false;if(i!==8)[s[8],s[i]]=[s[i],s[8]];return true;},item);assert(ok,'no '+item+' in the bag');await p.locator('#world').focus();await p.keyboard.press('Digit9');await p.waitForFunction(item=>Bloom.app.actor().inventory.selected===8&&Bloom.app.actor().inventory.slots[8]?.id===item,item,{timeout:3000});}
-// Move the mouse onto face n of block b (the game's own pick confirms it) and wait until the simulation holds that target
+// Turn the camera toward block b (D-165: the HUD covers the screen edges), move the mouse onto face n (the game's own pick confirms it) and wait until the simulation holds that target
 // within reach. Returns the screen point, or null.
-async function aimAt(p,b,n){for(let i=0;i<15;i++){const at=await p.evaluate(({b,n})=>window.__faceScreen(b,n),{b,n});if(at){await p.mouse.move(at.x,at.y);
+async function aimAt(p,b,n){await p.evaluate(b=>window.__turnToward({x:b.x+.5,y:b.y+.5,z:b.z+.5}),b);await pause(p,120);for(let i=0;i<15;i++){const at=await p.evaluate(({b,n})=>window.__faceScreen(b,n),{b,n});if(at){await p.mouse.move(at.x,at.y);
   const ok=await p.waitForFunction(({b,n})=>{const t=Bloom.app.sim.aim(Bloom.app.actor());return t&&t.x===b.x&&t.y===b.y&&t.z===b.z&&t.normal.x===n.x&&t.normal.y===n.y&&t.normal.z===n.z;},{b,n},{timeout:1500}).then(()=>true,()=>false);if(ok)return at;}await pause(p,80);}
  return null;}
 async function rightClick(p,b,n,expect,arg){const at=await aimAt(p,b,n);assert(at,'cannot aim at '+JSON.stringify({b,n}));await p.mouse.click(at.x,at.y,{button:'right'});await p.waitForFunction(expect,arg,{timeout:3000});}

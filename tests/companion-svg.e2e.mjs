@@ -105,10 +105,10 @@ try{
  assert.equal(routed.wild.species,'rock-chick');assert.equal(routed.wild.stage,'adult');assert.equal(routed.wild.depthTest,true);assert.equal(routed.wild.depthWrite,false);assert.equal(routed.wild.view,'front');
  assert.equal(routed.boss.species,'root');assert.equal(routed.boss.stage,'boss');assert.equal(routed.egg.species,'mushroom-snail');assert.equal(routed.egg.anim,'egg');
  pass('a wild rock chick, a root boss (stage boss, ×3 with hat) and a placed egg block are drawn by the cut-out unit rig in the 3D depth-tested pass',routed);
- // Four Q steps turn the camera 180° around the player.
- await page.evaluate(()=>{for(let i=0;i<4;i++)Bloom.app.renderer.rotateCamera(1);});
+ // Turning the shoulder camera 180° around the player shows the rig's back.
+ await page.evaluate(()=>Bloom.app.renderer.look(Math.PI,0));
  await page.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.view==='back'),fixture.id,{timeout:5000});
- await page.evaluate(()=>{for(let i=0;i<4;i++)Bloom.app.renderer.rotateCamera(-1);});await page.waitForFunction(()=>!Bloom.app.renderer.camera.turn&&Bloom.app.renderer.camera.yawStep===0,null,{timeout:3000});
+ await page.evaluate(()=>Bloom.app.renderer.look(-Math.PI,0));
  await page.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.view==='front'),fixture.id,{timeout:5000});
  evidence.camera={front:'front',back:'back'};pass('camera reversal switches the rig between its front and back drawings, then returns to the front',evidence.camera);
  const animation=await page.evaluate(id=>{const sim=Bloom.app.sim,a=sim.actors[id];a.combat.state='attack';a.combat.elapsed=0;a.combat.action={name:'enemy',kind:'swing',weapon:'rock-chick',wind:700,active:125,recovery:1000,reach:1.8,arc:1.7,damage:0,dir:{...a.facing},hits:[],fired:false,sequence:999};const look=Bloom.speciesActorLook({...a,velocity:{x:0,y:0,z:0}},null,false).look;a.combat.state='idle';a.combat.action=null;return look;},fixture.id);

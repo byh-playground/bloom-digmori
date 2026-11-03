@@ -70,7 +70,7 @@ async function clickSel(sel,{shift=false}={}){for(let i=0;i<20;i++){const b=awai
 // is on b (the camera follows the player, so a screen point goes stale while walking). Returns the point or null.
 async function settleCamera(){await keys([]);
  // a hill behind the player pulls the camera in close (thick-obstacle rule); turn the view like a player would
- for(let k=0;k<4;k++){const vd=await page.evaluate(()=>Bloom.app.renderer.viewDistance);if(vd>=5)break;await focusWorld();await page.keyboard.press('KeyQ');await page.keyboard.press('KeyQ');await sleep(700);}
+ for(let k=0;k<4;k++){const vd=await page.evaluate(()=>Bloom.app.renderer.viewDistance);if(vd>=5)break;await turn(2);await sleep(370);}
  let last=null;for(let i=0;i<30;i++){const p=await page.evaluate(()=>{const r=Bloom.app.renderer;return r.eye?[r.eye.x,r.eye.y,r.eye.z]:null;});if(last&&p&&Math.hypot(p[0]-last[0],p[1]-last[1],p[2]-last[2])<.004)return;last=p;await sleep(40);}}
 async function aim(b,n=null){await settleCamera();for(let i=0;i<6;i++){const at=await page.evaluate(({b,n})=>n?window.__faceScreen(b,n):window.__PT.face(b),{b,n});if(!at){if(process.env.PT_VERBOSE)log('aim none',JSON.stringify(b),JSON.stringify(await page.evaluate(b=>{const r=Bloom.app.renderer,out=[];for(const n of [{x:0,y:0,z:1},{x:0,y:1,z:0},{x:0,y:-1,z:0}]){const q=r.projected({x:b.x+.5+n.x*.51,y:b.y+.5+n.y*.51,z:b.z+.5+n.z*.51});if(!q){out.push(null);continue;}const k=r.pickAt(q.x,q.y);out.push({n,q:[Math.round(q.x),Math.round(q.y)],blk:k?.block&&[k.block.x,k.block.y,k.block.z,k.block.normal],ent:k?.entity,cut:r.cutCell(b.x,b.y,b.z),fade:r.fadedCell(b.x,b.y,b.z),cutY:r.cut.y,rad:r.cut.frame?.radius});}return out;},b)));return null;}await page.mouse.move(at.x,at.y);
   const ok=await page.waitForFunction(({b,n})=>{const c=Bloom.app.renderer.cursor?.block;return c&&c.x===b.x&&c.y===b.y&&c.z===b.z&&(!n||c.normal.x===n.x&&c.normal.y===n.y&&c.normal.z===n.z);},{b,n},{timeout:400,polling:'raf'}).then(()=>true,()=>false);if(ok)return at;if(process.env.PT_VERBOSE)log('aim miss',JSON.stringify({b,at,cur:await page.evaluate(()=>Bloom.app.renderer.cursor?.block)}));await sleep(60);}return null;}
@@ -106,9 +106,10 @@ async function placeOn(ground,blockId){await selectId(blockId);const cell={x:gro
 async function collect(radius=7){for(let k=0;k<6;k++){await sleep(450/scale+100);const d=await page.evaluate(r=>{const a=Bloom.app.actor();return Object.values(Bloom.app.sim.drops).filter(d=>Math.hypot(d.pos.x-a.pos.x,d.pos.z-a.pos.z)<r&&Math.abs(d.pos.y-a.pos.y)<4).sort((x,y)=>Math.hypot(x.pos.x-a.pos.x,x.pos.z-a.pos.z)-Math.hypot(y.pos.x-a.pos.x,y.pos.z-a.pos.z)).map(d=>({x:d.pos.x,y:d.pos.y,z:d.pos.z}))[0]||null;},radius);
   if(!d)return;await goTo({x:d.x,z:d.z,r:.9,y:Math.floor(d.y),dy:2},{dig:0,tries:1}).catch(()=>{});}}
 
-// Q turns the camera 45° (yaw step +1). A block hidden by the line-of-sight fade (between camera and player) is picked
-// after turning the camera, like a player would.
-async function turn(steps){await focusWorld();for(let i=0;i<steps;i++)await page.keyboard.press('KeyQ');await sleep(330);}
+// Turn the shoulder camera by 45° steps (D-165 mouse look, here through Renderer.look). A block the camera cannot see is
+// picked after turning, like a player would.
+const setYaw=yaw=>page.evaluate(y=>{const r=Bloom.app.renderer;r.look(r.camera.yaw-y,0);},yaw);
+async function turn(steps){await page.evaluate(s=>Bloom.app.renderer.look(-s*Math.PI/4,0),steps);await sleep(330);}
 // WASD keys toward world direction (dx,dz) for the current camera yaw: W = forward (-sin, -cos), D = right (cos, -sin).
 async function steer(dx,dz,dead=.1){const yaw=await page.evaluate(()=>Bloom.app.renderer.camera.yaw),f=dx*-Math.sin(yaw)+dz*-Math.cos(yaw),r=dx*Math.cos(yaw)+dz*-Math.sin(yaw),k=[];
  if(f>dead)k.push('KeyW');if(f<-dead)k.push('KeyS');if(r>dead)k.push('KeyD');if(r<-dead)k.push('KeyA');await keys(k);}
@@ -219,9 +220,9 @@ async function fight(id,{maxS=120}={}){await select(it=>!!it.weapon);const end=D
 // hides the rock over the head). Each step digs the 4 cells of the next column (head+1, head, feet, floor-to-be) and walks
 // one cell forward and down; a hole under the new floor is filled with a placed block. Ores whose faces come into view
 // within reach are mined on the way (hold-to-mine). Returns the cell reached.
-async function resetYaw(){const step=await page.evaluate(()=>Bloom.app.renderer.camera.yawStep);if(step){await focusWorld();for(let i=0;i<(8-step)%8;i++)await page.keyboard.press('KeyQ');await sleep(330);}}
+async function resetYaw(){await setYaw(0);await sleep(330);}
 const pickTier=()=>page.evaluate(()=>{const s=Bloom.app.actor().inventory.slots;let t=0;for(const x of s){const it=x&&Bloom.ITEMS[x.id];if(it?.tool==='pick')t=Math.max(t,it.tier);}return t;});
-async function digColumn(cells){const tier=await pickTier();for(const c of cells){if(await blockAt(c)==='air'||await blockAt(c)==='water')continue;if(!(await page.evaluate(({c,tier})=>window.__PT.diggable(c.x,c.y,c.z,tier),{c,tier}))){log('dig: pick tier',tier,'cannot break',JSON.stringify(c),await blockAt(c));return false;}/* an ore the pick cannot break */if(!(await mine(c))){const y0=await page.evaluate(()=>Bloom.app.renderer.camera.yawStep),back=async()=>{const k=await page.evaluate(()=>Bloom.app.renderer.camera.yawStep);if(k!==y0)await turn(((y0-k)%8+8)%8);};/* other camera angles, then the one the dig started with */await resetYaw();const ok=await mine(c)||(await stepTo(await feet()),await turn(2),await mine(c))||(await turn(4),await mine(c));await back();if(!ok){log('dig failed',JSON.stringify(c),await blockAt(c),JSON.stringify(await feet()));return false;}}}return true;}
+async function digColumn(cells){const tier=await pickTier();for(const c of cells){if(await blockAt(c)==='air'||await blockAt(c)==='water')continue;if(!(await page.evaluate(({c,tier})=>window.__PT.diggable(c.x,c.y,c.z,tier),{c,tier}))){log('dig: pick tier',tier,'cannot break',JSON.stringify(c),await blockAt(c));return false;}/* an ore the pick cannot break */if(!(await mine(c))){const y0=await page.evaluate(()=>Bloom.app.renderer.camera.yaw),back=async()=>{await setYaw(y0);await sleep(330);};/* other camera angles, then the one the dig started with */await resetYaw();const ok=await mine(c)||(await stepTo(await feet()),await turn(2),await mine(c))||(await turn(4),await mine(c));await back();if(!ok){log('dig failed',JSON.stringify(c),await blockAt(c),JSON.stringify(await feet()));return false;}}}return true;}
 async function stepTo(c,tol=.22){const end=Date.now()+3000;await focusWorld();while(Date.now()<end){const s=await st();const dx=c.x+.5-s.pos.x,dz=c.z+.5-s.pos.z;if(Math.abs(dx)<tol&&Math.abs(dz)<tol&&Math.abs(s.pos.y-c.y)<.3&&s.grounded)break;
   // close in with short taps: the read-back latency is longer than crossing a 1-wide shaft (0.3 m of play) at walking speed
   if(Math.hypot(dx,dz)<.45){await steer(dx,dz,Math.min(.06,tol*.6));await sleep(10);await keys([]);await sleep(90);}else{await steer(dx,dz,.06);await sleep(20);}}await keys([]);await sleep(80);}
@@ -244,7 +245,7 @@ async function mineVisible(ids,radius=5,cap=8,enough=null){let n=0;const s=await
 const TRAIL=[];
 // Dig direction → camera yaw step whose forward (screen up) is that direction: 0 → -z, 2 → -x, 4 → +z, 6 → +x.
 const YAW_FOR={'0,-1':0,'-1,0':2,'0,1':4,'1,0':6};
-async function faceDir(dx,dz){const want=YAW_FOR[dx+','+dz],step=await page.evaluate(()=>Bloom.app.renderer.camera.yawStep);if(step!==want){await focusWorld();for(let i=0;i<((want-step)%8+8)%8;i++)await page.keyboard.press('KeyQ');await sleep(330);}}
+async function faceDir(dx,dz){await setYaw(YAW_FOR[dx+','+dz]*Math.PI/4);await sleep(330);}
 async function staircase(toY,{ores=[],dx=0,dz=-1,maxSteps=60}={}){await faceDir(dx,dz);let mined=0;if(!TRAIL.length)TRAIL.push(await feet());
  for(let i=0;i<maxSteps;i++){const f=await feet();if(f.y<=toY)break;const n={x:f.x+dx,y:f.y-1,z:f.z+dz};
   if(!(await digColumn([{x:n.x,y:f.y+1,z:n.z},{x:n.x,y:f.y+2,z:n.z},{x:n.x,y:f.y,z:n.z},{x:n.x,y:f.y-1,z:n.z}])))throw Error('staircase dig failed at '+JSON.stringify(n));
