@@ -5,9 +5,10 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {CURSOR_HELPERS} from './cursor-helpers.mjs';
 
-// 0.35.2 fixed third-person camera and cursor controls (D-113…D-115), driven by real browser input on seed 190725:
-// Q/E 45° steps and wheel zoom limits, no first-person code or keys, a left click on a block 4 m away walks there and
-// mines it, a right click places on the cursor face, the cave cutaway (hidden above the first ceiling layer, the
+// 0.35.2 fixed third-person camera and cursor controls (D-113/D-114; 0.36.0 hold-to-mine D-123), driven by real browser
+// input on seed 190725: Q/E 45° steps and wheel zoom limits, no first-person code or keys, a short left click on a block
+// attacks and leaves it, holding the left button mines the block on the head ray (re-aimed while held, nothing out of
+// reach), a right click places on the cursor face, the cave cutaway (hidden above the first ceiling layer, the
 // translucent first layer is clickable, hysteresis), and pillar-up from a cave floor to the surface using only digging
 // the ceiling, jumping and under-feet placement. Fixtures (direct state writes): the debug kit button (iron pick, logs),
 // and teleporting the player into the two seed-190725 caves. SHOTS=<dir> saves the review screenshots.
@@ -20,7 +21,7 @@ const boot=p=>p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySe
 const settle=p=>p.waitForFunction(()=>{const r=Bloom.app.renderer;return r.streamComplete&&r.readyChunks.size===r.visibleChunks.size;},null,{timeout:30000});
 const shot=async(p,name)=>{if(!SHOTS)return;fs.mkdirSync(SHOTS,{recursive:true});await settle(p).catch(()=>{});await p.waitForTimeout(150);await p.screenshot({path:SHOTS+'/'+name+'.png'});};
 const camera=p=>p.evaluate(()=>{const c=Bloom.app.renderer.camera;return{yawStep:c.yawStep,yaw:c.yaw,pitch:c.pitch,distance:c.distance};});
-const actorState=p=>p.evaluate(()=>{const a=Bloom.app.actor();return{pos:{...a.pos},task:a.task&&{...a.task},mine:{...a.mine},grounded:a.grounded,selected:a.inventory.selected};});
+const actorState=p=>p.evaluate(()=>{const a=Bloom.app.actor();return{pos:{...a.pos},mine:{...a.mine},grounded:a.grounded,selected:a.inventory.selected};});
 const blockId=(p,b)=>p.evaluate(b=>Bloom.app.sim.terrain.get(b.x,b.y,b.z),b);
 const teleport=(p,pos)=>p.evaluate(pos=>{const a=Bloom.app.actor();Bloom.app.sim.physics.teleport(a,pos);},pos);
 async function faceScreen(p,b,n){for(let i=0;i<20;i++){const s=await p.evaluate(({b,n})=>window.__faceScreen(b,n),{b,n});if(s)return s;await p.waitForTimeout(100);}throw Error('face not on screen: '+JSON.stringify({b,n}));}
@@ -66,26 +67,33 @@ try{
  for(let i=0;i<7;i++){await page.mouse.wheel(0,120);await page.waitForTimeout(15);}const back=await camera(page);assert(back.distance>12&&back.distance<14);await page.waitForTimeout(500);
  pass('the wheel zooms between the minimum and maximum distance and stops there',{far:far.distance,near:near.distance,limits,back:back.distance});
 
- // 4. A left click on a block about 4 m away: the player walks there (a sim task, no keyboard) and mines it with bare
- // hands (grass, 0.65 s).
- const goal=await page.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain;for(const [dx,dz]of [[0,-4],[1,-4],[-1,-4],[4,0],[-4,0],[0,4]]){const x=Math.floor(a.pos.x)+dx,z=Math.floor(a.pos.z)+dz,y=t.height(x,z);if(t.get(x,y,z)&&!t.get(x,y+1,z)&&!t.get(x,y+2,z)&&Math.abs(y+1-a.pos.y)<.6&&window.__faceScreen({x,y,z},{x:0,y:1,z:0}))return{x,y,z,id:t.get(x,y,z),distance:Math.hypot(x+.5-a.pos.x,z+.5-a.pos.z)};}return null;});
- assert(goal,'no ground block 4 m away');const goalScreen=await faceScreen(page,goal,{x:0,y:1,z:0});await page.mouse.move(goalScreen.x,goalScreen.y);await page.waitForTimeout(250);
+ // 4. Hold-to-mine (D-123): a short left click on a ground block 2 m away is the basic attack and leaves it; holding the
+ // left button on it mines it with bare hands (grass, 0.65 s) from where the player stands; moving the mouse while held
+ // moves the target; a block out of hand reach (6 m) is not mined and the player does not walk.
+ await page.waitForTimeout(600);// the camera follows the player: let it settle before reading screen points
+ const goal=await page.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain;for(const [dx,dz]of [[0,-2],[1,-2],[-1,-2],[2,0],[-2,0],[0,2]]){const x=Math.floor(a.pos.x)+dx,z=Math.floor(a.pos.z)+dz,y=t.height(x,z);if(t.get(x,y,z)&&!t.get(x,y+1,z)&&!t.get(x,y+2,z)&&Math.abs(y+1-a.pos.y)<.6&&window.__faceScreen({x,y,z},{x:0,y:1,z:0}))return{x,y,z,id:t.get(x,y,z),distance:Math.hypot(x+.5-a.pos.x,z+.5-a.pos.z)};}return null;});
+ assert(goal,'no ground block 2 m away');const goalScreen=await faceScreen(page,goal,{x:0,y:1,z:0});await page.mouse.move(goalScreen.x,goalScreen.y);await page.waitForTimeout(250);
  const hover=await page.evaluate(()=>({cursor:Bloom.app.renderer.cursor?.block,target:Bloom.app.renderer.target}));assert.deepEqual([hover.cursor.x,hover.cursor.y,hover.cursor.z],[goal.x,goal.y,goal.z]);await shot(page,'cursor-highlight');
- // A page-side sampler records every frame whether the task walked (not yet mining) and then mined.
- await page.evaluate(()=>{const seen=window.__taskSeen={walk:0,mine:0};const loop=()=>{const a=Bloom.app.actor(),t=a.task;if(t&&!t.mining)seen.walk++;if(t?.mining&&a.mine.elapsed>0)seen.mine++;if(!seen.done)requestAnimationFrame(loop);};requestAnimationFrame(loop);});
- const start=await actorState(page);await page.mouse.down();await page.mouse.up();
- await page.waitForFunction(g=>{const t=Bloom.app.actor().task;return t&&t.x===g.x&&t.y===g.y&&t.z===g.z;},goal,{timeout:3000});
- await page.waitForFunction(s=>{const a=Bloom.app.actor();return Math.hypot(a.pos.x-s.x,a.pos.z-s.z)>.6;},start.pos,{timeout:4000});const walking=await actorState(page);await shot(page,'walk-to-block');
- await page.waitForFunction(g=>{const a=Bloom.app.actor();return a.task?.mining&&a.mine.elapsed>0||Bloom.app.sim.terrain.get(g.x,g.y,g.z)===0;},goal,{timeout:6000});const mining=await actorState(page);if(mining.task)await shot(page,'mining');
- await page.waitForFunction(g=>Bloom.app.sim.terrain.get(g.x,g.y,g.z)===0,goal,{timeout:8000});await page.waitForFunction(()=>!Bloom.app.actor().task,null,{timeout:2000});const done=await actorState(page);
+ const start=await actorState(page),edits0=await page.evaluate(()=>Bloom.app.sim.terrain.edits.size);
+ await page.mouse.down();await page.waitForTimeout(60);await page.mouse.up();await page.waitForTimeout(500);
+ assert.notEqual(await blockId(page,goal),0,'a short click does not mine');assert.equal(await page.evaluate(()=>Bloom.app.sim.terrain.edits.size),edits0,'a short click changes no block');
+ await page.mouse.down();await page.waitForFunction(g=>{const a=Bloom.app.actor();return a.mine.target===g.x+','+g.y+','+g.z&&a.mine.elapsed>0;},goal,{timeout:3000});await shot(page,'mining');
+ await page.waitForFunction(g=>Bloom.app.sim.terrain.get(g.x,g.y,g.z)===0,goal,{timeout:6000});await page.mouse.up();const done=await actorState(page);
  const walked=Math.hypot(done.pos.x-start.pos.x,done.pos.z-start.pos.z),pointerLock=await page.evaluate(()=>document.pointerLockElement);
- const seen=await page.evaluate(()=>{window.__taskSeen.done=true;return window.__taskSeen;});
- assert(walked>1,'the player should walk toward the block: '+walked);assert(seen.walk>0&&seen.mine>0,'walk then mine: '+JSON.stringify(seen));assert.equal(pointerLock,null);
- pass('a left click on a block 4 m away starts a sim task: the player walks there, mines it barehanded until it breaks, then stops (no pointer lock)',{goal,start:start.pos,walking:walking.pos,end:done.pos,walked,framesWalking:seen.walk,framesMining:seen.mine});
- // Movement input cancels a task.
- const second=await page.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain;for(const [dx,dz]of [[3,-3],[-3,-3],[3,3],[-3,3],[0,4]]){const x=Math.floor(a.pos.x)+dx,z=Math.floor(a.pos.z)+dz,y=t.height(x,z);if(t.get(x,y,z)&&!t.get(x,y+1,z)&&window.__faceScreen({x,y,z},{x:0,y:1,z:0}))return{x,y,z};}return null;});
- if(second){const s=await faceScreen(page,second,{x:0,y:1,z:0});await page.mouse.click(s.x,s.y);await page.waitForFunction(()=>!!Bloom.app.actor().task,null,{timeout:3000});await page.keyboard.down('KeyS');await page.waitForFunction(()=>!Bloom.app.actor().task,null,{timeout:3000});await page.keyboard.up('KeyS');
-  assert.notEqual(await blockId(page,second),0);pass('movement input cancels the walk-and-mine task before the block breaks',{second});}
+ assert(walked<.3,'the player does not walk: '+walked);assert.equal(pointerLock,null);
+ pass('a short left click on a block is an attack and changes no block; holding the left button mines it barehanded from where the player stands (no walk, no pointer lock)',{goal,start:start.pos,end:done.pos,walked});
+ // While held the target follows the mouse: hold on one block, then move the cursor to another one.
+ await page.waitForTimeout(400);const pair=await page.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain,out=[];for(const [dx,dz]of [[2,-2],[-2,-2],[2,2],[-2,2],[3,0],[-3,0]]){const x=Math.floor(a.pos.x)+dx,z=Math.floor(a.pos.z)+dz,y=t.height(x,z);if(t.get(x,y,z)&&!t.get(x,y+1,z)&&Math.abs(y+1-a.pos.y)<.6&&window.__faceScreen({x,y,z},{x:0,y:1,z:0}))out.push({x,y,z});}return out.slice(0,2);});
+ assert(pair.length===2,'two ground blocks in reach: '+JSON.stringify(pair));const [a1,a2]=pair,s1=await faceScreen(page,a1,{x:0,y:1,z:0}),s2=await faceScreen(page,a2,{x:0,y:1,z:0});
+ await page.mouse.move(s1.x,s1.y);await page.waitForTimeout(150);await page.mouse.down();await page.waitForFunction(g=>Bloom.app.actor().mine.target===g.x+','+g.y+','+g.z,a1,{timeout:3000});
+ await page.mouse.move(s2.x,s2.y,{steps:4});await page.waitForFunction(g=>Bloom.app.actor().mine.target===g.x+','+g.y+','+g.z,a2,{timeout:3000});await page.mouse.up();
+ await page.waitForFunction(()=>!Bloom.app.actor().mine.target,null,{timeout:2000});assert.notEqual(await blockId(page,a1),0);assert.notEqual(await blockId(page,a2),0);
+ pass('while the left button is held the mine target follows the cursor, and releasing stops mining',{from:a1,to:a2});
+ // Out of reach: holding on a block 6+ m away mines nothing and the player stays put.
+ const far6=await page.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain;for(const [dx,dz]of [[0,-6],[1,-6],[-1,-6],[0,-7],[6,0],[-6,0]]){const x=Math.floor(a.pos.x)+dx,z=Math.floor(a.pos.z)+dz,y=t.height(x,z);if(t.get(x,y,z)&&!t.get(x,y+1,z)&&window.__faceScreen({x,y,z},{x:0,y:1,z:0}))return{x,y,z};}return null;});
+ if(far6){const s=await faceScreen(page,far6,{x:0,y:1,z:0}),p0=await actorState(page);await page.mouse.move(s.x,s.y);await page.mouse.down();await page.waitForTimeout(1500);const held=await actorState(page);await page.mouse.up();
+  assert.notEqual(await blockId(page,far6),0);assert(Math.hypot(held.pos.x-p0.pos.x,held.pos.z-p0.pos.z)<.3,'no walk');assert(!held.mine.target||held.mine.target!==far6.x+','+far6.y+','+far6.z,'out of reach is not mined');
+  pass('holding the button on a block out of hand reach (6 m) mines nothing and the player does not walk',{far6,mineTarget:held.mine.target});}
 
  // 5. A right click places the held block on the face under the cursor (debug kit: iron pick and logs from here on).
  await page.locator('#debug-kit').dispatchEvent('click');const pick=await page.evaluate(()=>Bloom.app.actor().inventory.slots.findIndex(s=>s?.id==='iron_pick'));
@@ -97,23 +105,39 @@ try{
  assert.equal(await page.evaluate(()=>Bloom.Inventory.count(Bloom.app.actor().inventory,'log')),logs-1);
  pass('a right click places the held log on the cursor face (the cell above the clicked top face)',{face,placed});
 
+ // 5b. Fighting (D-123): with the pick held, short left clicks on the ground right next to a wild creature are attacks
+ // and change no terrain block (before 0.36.0 a missed click on a block started walk-and-mine and dug the ground).
+ await hotbar(page,pick);await page.locator('#debug-enemy').dispatchEvent('click');
+ const foe=await page.waitForFunction(()=>{const a=Bloom.app.actor(),c=Object.values(Bloom.app.sim.actors).filter(x=>x.speciesId&&!x.dead&&!x.boss&&!x.structureKey).sort((x,y)=>Math.hypot(x.pos.x-a.pos.x,x.pos.z-a.pos.z)-Math.hypot(y.pos.x-a.pos.x,y.pos.z-a.pos.z))[0];return c&&Math.hypot(c.pos.x-a.pos.x,c.pos.z-a.pos.z)<6?c.id:null;},null,{timeout:4000}).then(h=>h.jsonValue());
+ await page.evaluate(()=>{const s=window.__fightSeen={attack:0};const loop=()=>{if(Bloom.app.actor().combat?.state==='attack')s.attack++;if(!s.done)requestAnimationFrame(loop);};requestAnimationFrame(loop);});
+ const fightEdits0=await page.evaluate(()=>Bloom.app.sim.terrain.edits.size),clicks=[];
+ for(let i=0;i<8;i++){const g=await page.evaluate(id=>{const c=Bloom.app.sim.actors[id],t=Bloom.app.sim.terrain;if(!c||c.dead)return null;for(const [dx,dz]of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1]]){const x=Math.floor(c.pos.x)+dx,z=Math.floor(c.pos.z)+dz,y=t.height(x,z);if(t.get(x,y,z)&&!t.get(x,y+1,z)){const s=window.__faceScreen({x,y,z},{x:0,y:1,z:0});if(s)return{x,y,z,s};}}return null;},foe);
+  if(!g)break;clicks.push({x:g.x,y:g.y,z:g.z});await page.mouse.move(g.s.x,g.s.y);await page.mouse.down();await page.waitForTimeout(40);await page.mouse.up();await page.waitForTimeout(260);}
+ await page.waitForTimeout(400);const seen=await page.evaluate(()=>{window.__fightSeen.done=true;return window.__fightSeen;}),edits1=await page.evaluate(()=>Bloom.app.sim.terrain.edits.size);await shot(page,'fight-clicks');
+ assert(clicks.length>=3,'clicked the ground next to the creature: '+clicks.length);assert(seen.attack>0,'the clicks attacked');assert.equal(edits1,fightEdits0,'fight clicks changed terrain');
+ for(const b of clicks)assert.notEqual(await blockId(page,b),0);
+ pass('during a fight, short left clicks on the ground next to a creature (pick held) attack and change no terrain block',{clicks:clicks.length,attackFrames:seen.attack,edits:edits1-fightEdits0});
+
  // 6. Cave cutaway: in a 2-high tunnel the blocks above the first ceiling layer are hidden, the first layer is drawn
  // translucent and clickable, and the cutaway opens and closes smoothly with hysteresis.
  await teleport(page,TUNNEL);await page.waitForFunction(()=>Bloom.app.renderer.cut.amount===1,null,{timeout:6000});await page.mouse.move(1150,600);await settle(page);await shot(page,'desktop-cave-tunnel');
  const cut=await page.evaluate(()=>{const r=Bloom.app.renderer,k=r.cut,f=k.frame,a=Bloom.app.actor(),x=Math.floor(a.pos.x),z=Math.floor(a.pos.z),t=Bloom.app.sim.terrain;
   const ceilings=[...r.meshes.values()].filter(m=>m.ceiling.visible).length;let picked=0,above=0;
   for(let sy=60;sy<720;sy+=40)for(let sx=80;sx<1300;sx+=60){const p=r.pickAt(sx,sy),b=p?.block;if(!b)continue;picked++;const inCut=r.cutCell(b.x,b.y,b.z);if(inCut==='hidden'||inCut==='layer'&&Math.hypot(b.x+.5-a.pos.x,b.z+.5-a.pos.z)>Bloom.CFG.cutaway.ceilingPick)above++;}
-  return{active:k.active,amount:k.amount,y:k.y,feet:a.pos.y,radius:f.radius,layer:r.cutCell(x,k.y,z),aboveLayer:r.cutCell(x,k.y+1,z),aboveSolid:t.isSolid(t.get(x,k.y+1,z)),ceilingDraws:ceilings,picked,pickedHidden:above};});
+  const faces=r.cutawayFaces(Bloom.app.sim),ids=new Set();for(let i=6;i<faces.length;i+=7)ids.add(faces[i]);
+  return{active:k.active,amount:k.amount,y:k.y,feet:a.pos.y,radius:f.radius,sectionFaces:faces.length/42,sectionIds:[...ids].map(id=>Bloom.BLOCKS[id].id),layer:r.cutCell(x,k.y,z),aboveLayer:r.cutCell(x,k.y+1,z),aboveSolid:t.isSolid(t.get(x,k.y+1,z)),ceilingDraws:ceilings,picked,pickedHidden:above};});
  assert(cut.active&&cut.amount===1&&cut.y===Math.round(cut.feet)+2,'cutaway state: '+JSON.stringify(cut));assert.equal(cut.layer,'layer');assert.equal(cut.aboveLayer,'hidden');assert(cut.ceilingDraws>0,'the translucent layer is drawn');
+ // The cut slices the rock into textured voxel cross-sections (each face keeps its block id); a tunnel opens the full radius.
+ assert(cut.sectionFaces>20&&cut.sectionIds.length>0,'cross-section faces: '+JSON.stringify(cut));assert.equal(cut.radius,await page.evaluate(()=>Bloom.CFG.cutaway.radius));
  assert(cut.picked>20&&cut.pickedHidden===0,'the cursor never picks a hidden cell: '+JSON.stringify(cut));
  const ceilingBlock={x:Math.floor(TUNNEL.x),y:cut.y,z:Math.floor(TUNNEL.z)},under=await faceScreen(page,ceilingBlock,{x:0,y:-1,z:0});
  pass('in a tunnel the cutaway hides the rock above the first ceiling layer, draws that layer translucent, and the cursor picks the layer underside but never a hidden block',{...cut,underside:under});
  // Dig the ceiling through the translucent layer (iron pick).
- await hotbar(page,pick);await page.mouse.move(under.x,under.y);await page.waitForTimeout(120);await page.mouse.down();await page.mouse.up();
- await page.waitForFunction(b=>Bloom.app.actor().task?.mining&&Bloom.app.actor().mine.elapsed>0||Bloom.app.sim.terrain.get(b.x,b.y,b.z)===0,ceilingBlock,{timeout:4000});if(await blockId(page,ceilingBlock))await shot(page,'dig-ceiling');
- await page.waitForFunction(b=>Bloom.app.sim.terrain.get(b.x,b.y,b.z)===0,ceilingBlock,{timeout:6000});
+ await hotbar(page,pick);await page.mouse.move(under.x,under.y);await page.waitForTimeout(120);await page.mouse.down();
+ await page.waitForFunction(b=>Bloom.app.actor().mine.target===b.x+','+b.y+','+b.z&&Bloom.app.actor().mine.elapsed>0||Bloom.app.sim.terrain.get(b.x,b.y,b.z)===0,ceilingBlock,{timeout:4000});if(await blockId(page,ceilingBlock))await shot(page,'dig-ceiling');
+ await page.waitForFunction(b=>Bloom.app.sim.terrain.get(b.x,b.y,b.z)===0,ceilingBlock,{timeout:6000});await page.mouse.up();
  await page.waitForFunction(y=>Bloom.app.renderer.cut.y>y,cut.y,{timeout:4000});const dug=await page.evaluate(()=>Bloom.app.renderer.cut.y);
- pass('clicking the translucent layer above the player digs it, and the cutaway moves up to the next ceiling layer',{block:ceilingBlock,nextLayer:dug});
+ pass('holding the button on the translucent layer above the player digs it, and the cutaway moves up to the next ceiling layer',{block:ceilingBlock,nextLayer:dug});
  // Hysteresis: back on the surface the cutaway closes once, over about 0.3 s, without flicker.
  await page.evaluate(()=>{window.__cutTrace=[];const r=Bloom.app.renderer,loop=()=>{window.__cutTrace.push([performance.now(),r.cut.active,r.cut.amount]);if(window.__cutTrace.length<120)requestAnimationFrame(loop);};requestAnimationFrame(loop);});
  await teleport(page,{x:.5,y:5.1,z:.5});await page.waitForFunction(()=>window.__cutTrace.length>=120,null,{timeout:8000});
@@ -131,8 +155,10 @@ try{
   const s=await actorState(page),feet=Math.round(s.pos.y);if(feet>column.surface&&!(await page.evaluate(()=>Bloom.app.renderer.cut.active)))break;
   // Clear two cells above the head (feet+2, feet+3), each through the clickable first layer.
   let dugAny=false;for(const y of [feet+2,feet+3]){if(!(await solidAt(y)))continue;dugAny=true;await hotbar(page,pick);await page.waitForFunction(y=>Bloom.app.renderer.cut.y===y,y,{timeout:4000});
-   const at=await faceScreen(page,{x:column.x,y,z:column.z},{x:0,y:-1,z:0});await page.mouse.move(at.x,at.y);await page.mouse.down();await page.mouse.up();
-   await page.waitForFunction(b=>Bloom.app.sim.terrain.get(b.x,b.y,b.z)===0,{x:column.x,y,z:column.z},{timeout:8000});steps.push({dig:y});}
+   // keep the cursor on the layer cell while holding (a player re-aims when the camera settles)
+   const cell={x:column.x,y,z:column.z};let at=await faceScreen(page,cell,{x:0,y:-1,z:0});await page.mouse.move(at.x,at.y);await page.mouse.down();
+   for(let k=0;k<40&&await page.evaluate(b=>Bloom.app.sim.terrain.get(b.x,b.y,b.z)!==0,cell);k++){await page.waitForTimeout(200);const again=await page.evaluate(({b,n})=>window.__faceScreen(b,n),{b:cell,n:{x:0,y:-1,z:0}});if(again&&(Math.abs(again.x-at.x)>1||Math.abs(again.y-at.y)>1)){at=again;await page.mouse.move(at.x,at.y);}}
+   await page.mouse.up();assert.equal(await page.evaluate(b=>Bloom.app.sim.terrain.get(b.x,b.y,b.z),cell),0,'ceiling cell dug: '+JSON.stringify(cell));steps.push({dig:y});}
   if(dugAny)await page.waitForTimeout(250);
   // Jump, and once the feet are above the cell, right-click the player: the block goes under the feet.
   await hotbar(page,log);await page.waitForFunction(()=>Bloom.app.actor().grounded,null,{timeout:4000});await page.keyboard.press('Space');

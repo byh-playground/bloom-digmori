@@ -112,7 +112,7 @@ class Companions {
    if(++u.stepTick>=this.stepTicks(u)){u.cell=u.next;u.next=null;u.stepTick=0;}this.placeRanch(u);if(u.next)return;}
   if(u.phase==='eat'){this.eat(u,a);return;}
   if(u.phase==='gather'){this.gather(u,a);return;}
-  const r=P.region(u.cell.x,u.cell.y,u.cell.z),key=c=>blockKey(c.x,c.y,c.z);
+  const r=P.region(u.cell.x,u.cell.y,u.cell.z),key=c=>blockKey(c.x,c.y,c.z);if(!r.open)sim.progress.pen=true;
   // 1. eat: the nearest thrown food of its species in reach (straight distance, then drop id).
   if(u.stage!=='adult'){const food=SPECIES[u.kind].food,drops=Object.values(sim.drops).filter(d=>d.item===food&&V.len(V.sub(d.pos,u.pos))<=RANCH_RULES.eatRadius).sort((x,y)=>V.len(V.sub(x.pos,u.pos))-V.len(V.sub(y.pos,u.pos))||cmp(x.id,y.id));
    for(const d of drops){const cell={x:Math.floor(d.pos.x),y:Math.floor(d.pos.y),z:Math.floor(d.pos.z)};if(!r.cells.has(key(cell)))continue;

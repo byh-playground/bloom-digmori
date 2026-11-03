@@ -160,16 +160,25 @@ function recipePriorIngredients(r){const realm=MATERIAL_REALMS[ITEMS[r.out]?.mat
 const FUELS={coal:48000,charcoal:48000,log:9000,planks:9000,stick:3000};
 const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:'charcoal',ms:6000},cobble:{out:'stone',ms:6000}};
 const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'})});
+// The G2 tutorial chain (0.36.0): the HUD guide shows the first quest whose progress flag is not set, the journal lists all.
+// Every id is a Simulation.progress flag set by the sim (crafting/pickup markItem, tickHazards for realms and gear tiers,
+// tickBossStructures/completeBoss for bosses, Companions.ranch for a closed pen). `toward`: the HUD adds the direction and
+// distance of the nearest structure of that type. Hints stay one short line (the HUD has no scrolling).
 const QUESTS=Object.freeze([
- Object.freeze({id:'log',title:'첫 원목',hint:'나무 줄기를 채집해 시작하세요.'}),
- Object.freeze({id:'stone_pick',title:'석기 도구',hint:'돌 곡괭이를 제작하세요.'}),
- Object.freeze({id:'crystalShard',title:'동굴 속 푸른빛',hint:'Y -10 아래 공명 수정을 채광하세요.'}),
- Object.freeze({id:'chests',title:'고대의 보물',hint:'폐광 또는 유적의 보물함을 F로 여세요.'}),
- Object.freeze({id:'clearedDungeons',title:'유적 정화',hint:'고대 유적의 적대 생물을 모두 쓰러뜨리세요.'}),
- Object.freeze({id:'boss',title:'보스 구조물',hint:'초원의 꽃 고리, 균류 숲의 버섯 고리, 동굴 유적 최심부에서 보스를 쓰러뜨리세요.'}),
- Object.freeze({id:'hatched',title:'첫 부화',hint:'보스가 남긴 알을 땅에 놓고 부화를 기다리세요.'}),
- Object.freeze({id:'grown',title:'목장의 성체',hint:'울타리 안에 먹이를 던져(G) 아기에게 세 번 먹이세요.'}),
- Object.freeze({id:'merged',title:'첫 합성',hint:'같은 종·같은 등급 성체 둘에게 합성 물약을 던지세요.'}),
- Object.freeze({id:'labor',title:'상자 노동',hint:'울타리 안에 보관 상자와 적성 블록을 두면 성체가 캐서 상자에 넣습니다.'})
+ Object.freeze({id:'log',title:'첫 원목',hint:'나무 줄기 가까이 가서 꾹 눌러 캐세요.'}),
+ Object.freeze({id:'workbench',title:'제작대',hint:'가방(Tab)에서 판자 → 제작대를 만드세요.'}),
+ Object.freeze({id:'wood_pick',title:'나무 곡괭이',hint:'제작대를 놓고 우클릭 · 판자 3 + 나뭇가지 2'}),
+ Object.freeze({id:'stone_pick',title:'석기 도구',hint:'돌을 캐서 돌 곡괭이·돌 검을 만드세요.'}),
+ Object.freeze({id:'bossFound',title:'보스 구조물 찾기',hint:'초원의 꽃 고리로 가세요.',toward:'grove'}),
+ Object.freeze({id:'boss',title:'보스 처치',hint:'뿌리 거인을 쓰러뜨리면 알을 남깁니다.',toward:'grove'}),
+ Object.freeze({id:'hatched',title:'알 부화',hint:'알을 들고 땅에 우클릭 · 30초 뒤 부화'}),
+ Object.freeze({id:'pen',title:'울타리 목장',hint:'울타리로 아기를 빙 둘러 가두세요.'}),
+ Object.freeze({id:'grown',title:'아기 키우기',hint:'목장 안에 먹이를 던지세요(G) · 3번 먹으면 성체'}),
+ Object.freeze({id:'ironGear',title:'철 장비',hint:'철 곡괭이·무기·투구·흉갑·장화 · 섬유는 잎으로'}),
+ Object.freeze({id:'realm:cave',title:'동굴 탐험',hint:'지하 동굴로 내려가세요 · 철 장비면 추위 없음'}),
+ Object.freeze({id:'diamondGear',title:'다이아몬드 장비',hint:'투구에 광맥 병아리 대왕의 왕관이 들어갑니다.',toward:'dungeon'}),
+ Object.freeze({id:'bossKill:mushroom-snail',title:'균류 숲 보스',hint:'버섯 고리의 포자 군주를 쓰러뜨리세요.',toward:'ring'}),
+ Object.freeze({id:'merged',title:'합성 물약',hint:'같은 종·등급 성체 둘에게 물약을 던지세요.'}),
+ Object.freeze({id:'labor',title:'상자 노동',hint:'목장 안에 보관 상자와 적성 블록을 두세요.'})
 ]);
 

@@ -51,7 +51,8 @@ const approach=(p,id,limit,stopAt)=>walkTo(p,()=>observe(p,id),limit,stopAt);
 async function clickAttack(p,id){let at=null;for(let i=0;i<15&&!at;i++){at=await p.evaluate(id=>window.__entityScreen(id),id);if(!at)await pause(p,80);}if(!at)throw Error('unit not under any cursor point: '+JSON.stringify(await observe(p,id)));
  await p.mouse.move(at.x,at.y);await pause(p,60);await p.mouse.down();await pause(p,90);await p.mouse.up();}
 // A long touch press (the right click on touch screens) at a screen point.
-async function longPress(p,x,y){const cdp=await p.context().newCDPSession(p);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:7}]});await pause(p,600);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();}
+// A touch tap with the egg held places it (D-124: a tap with a placeable item held is the right click).
+async function touchTap(p,x,y){const cdp=await p.context().newCDPSession(p);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:7}]});await pause(p,60);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();}
 // A grass top face 2–3 m from the player that the cursor can reach (for setting an egg down).
 const groundAhead=p=>p.evaluate(()=>{const a=Bloom.app.actor(),t=Bloom.app.sim.terrain;for(const r of [2,3])for(const [dx,dz]of [[0,-1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1]]){const x=Math.floor(a.pos.x)+dx*r,z=Math.floor(a.pos.z)+dz*r,y=t.height(x,z);if(!t.isSolid(t.get(x,y,z))||t.get(x,y+1,z)||t.get(x,y+2,z)||Math.abs(y+1-a.pos.y)>.6)continue;const s=window.__faceScreen({x,y,z},{x:0,y:1,z:0});if(s)return{x,y,z,screen:s};}return null;});
 // from: the first angle tried (radians, 0 = +x), so a fixture can put the wild unit on a chosen side.
@@ -78,7 +79,7 @@ async function placeAndHatch(p,item,mobile=false){
  // A full hotbar puts the egg in the backpack; swap it into hotbar slot 9 (inventory fixture, same as dragging it there).
  const before=await p.evaluate(()=>Bloom.app.sim.companions.all().length),slot=await p.evaluate(item=>{const s=Bloom.app.actor().inventory.slots,i=s.findIndex(s=>s?.id===item);if(i<9)return i;[s[8],s[i]]=[s[i],s[8]];return 8;},item);
  await p.locator('#world').focus();await p.keyboard.press('Digit'+(slot+1));await pause(p,250);const ground=await groundAhead(p);assert(ground,'no ground face for the egg');
- if(mobile)await longPress(p,ground.screen.x,ground.screen.y);else{await p.locator('#world').focus();await p.mouse.click(ground.screen.x,ground.screen.y,{button:'right'});}
+ if(mobile)await touchTap(p,ground.screen.x,ground.screen.y);else{await p.locator('#world').focus();await p.mouse.click(ground.screen.x,ground.screen.y,{button:'right'});}
  await p.waitForFunction(()=>Object.keys(Bloom.app.sim.eggs).length>0,null,{timeout:4000});
  const egg=await p.evaluate(()=>{const sim=Bloom.app.sim,e=Object.values(sim.eggs)[0];return{...e,block:Bloom.BLOCKS[sim.terrain.get(e.x,e.y,e.z)].id,below:Bloom.BLOCKS[sim.terrain.get(e.x,e.y-1,e.z)].id,hatchMs:(e.hatchTick-e.placedTick)*Bloom.CFG.stepMs,sample:Bloom.app.renderer.unitRig.samples.find(s=>s.role==='egg')};});
  await p.waitForFunction(()=>Bloom.app.renderer.unitRig.samples.some(s=>s.role==='egg'&&s.egg),null,{timeout:4000});
