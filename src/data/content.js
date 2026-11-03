@@ -117,8 +117,8 @@ recipe('fiber','fiber',4,['LL'],{L:'leaves'});
 // realm before it (REALM_ORDER, ITEM_REALMS). 철(동굴 단계): tools and weapons keep the 초원 wood stick, armor gets a 초원
 // fibre lining. 다이아몬드(균류 숲 단계): the handle is a 동굴 iron ingot instead of a stick, the chestplate and boots take
 // one iron ingot, the helmet takes the 동굴 boss's 금광석 왕관 (so the boss must fall before the fungal tier). 0.37.0 (D-157):
-// the chestplate adds the 뿌리 거인's 금빛 꽃 왕관. The 포자 군주's 금빛 버섯 왕관 is held back from the boots: the fungal boss
-// lives in the realm the diamond set is for, so needing its crown first would be circular (open question after D-157).
+// the chestplate adds the 뿌리 거인's 금빛 꽃 왕관. The 포자 군주's 금빛 버섯 왕관 has no recipe yet on purpose (D-163): the
+// fungal boss lives in the realm the diamond set is for, and the crown is kept for the next realm's gear.
 for(const [mat,ingredient,handle]of [['wood','planks','stick'],['stone','cobble','stick'],['iron','iron','stick'],['diamond','diamond','iron']]){
  const keys={M:ingredient,S:handle};
  recipe(mat+'_pick',mat+'_pick',1,['MMM',' S ',' S '],keys,3);
