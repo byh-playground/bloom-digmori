@@ -44,7 +44,7 @@ try{
  const sources=['src/input/controls.js','src/presentation/renderer.js','src/runtime/app.js','index.html'].map(f=>fs.readFileSync(new URL('../'+f,import.meta.url),'utf8')).join('\n');
  const banned=['renderViewArms','camera.first','toggleView','view-btn',"'KeyV'",'1인칭','rotateCamera','cutaway','data-turn'].filter(t=>sources.includes(t));
  assert.deepEqual(banned,[],'first-person / fixed-camera code left: '+banned);
- const c0=await camera(page);assert(Math.abs(c0.pitch-12*Math.PI/180)<1e-9&&c0.distance===5.5,JSON.stringify(c0));
+ const c0=await camera(page);assert(Math.abs(c0.pitch-20*Math.PI/180)<1e-9&&c0.distance===4,JSON.stringify(c0));
  await page.evaluate(()=>{window.__allowLock=true;});await page.mouse.move(683,384);await page.mouse.click(683,384);
  const locked=await page.evaluate(()=>({lock:document.pointerLockElement===Bloom.app.renderer.canvas,crosshair:getComputedStyle(document.querySelector('#crosshair')).display}));
  assert.deepEqual(locked,{lock:true,crosshair:'block'});
@@ -71,7 +71,7 @@ try{
  for(let i=0;i<14;i++){await page.mouse.wheel(0,120);await page.waitForTimeout(15);}const far=await camera(page);await page.waitForTimeout(500);await shot(page,'zoom-max');
  for(let i=0;i<20;i++){await page.mouse.wheel(0,-120);await page.waitForTimeout(15);}const near=await camera(page);await page.waitForTimeout(500);await shot(page,'zoom-min');
  const limits=await page.evaluate(()=>({min:Bloom.CFG.camera.minDistance,max:Bloom.CFG.camera.maxDistance}));assert.equal(far.distance,limits.max);assert.equal(near.distance,limits.min);
- for(let i=0;i<9;i++){await page.mouse.wheel(0,120);await page.waitForTimeout(15);}const back=await camera(page);assert(back.distance>5&&back.distance<6,'back: '+back.distance);await page.waitForTimeout(500);
+ for(let i=0;i<6;i++){await page.mouse.wheel(0,120);await page.waitForTimeout(15);}const back=await camera(page);assert(back.distance>3.5&&back.distance<4.5,'back: '+back.distance);await page.waitForTimeout(500);
  pass('the wheel zooms between the minimum and maximum distance and stops there',{far:far.distance,near:near.distance,limits,back:back.distance});
 
  // 4. Hold-to-mine (D-123): a short left click on a ground block 2 m away is the basic attack and leaves it; holding the
