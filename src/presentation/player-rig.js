@@ -5,6 +5,10 @@
  * writes the simulation. Rig units: ground at y=0, head centre at y=133. */
 const RIG_PARTS=Object.freeze(['front','side','back'].flatMap(v=>['head','torso','hand','foot','cap','jacket','pack'].map(p=>v+'_'+p))
  .concat(['front','side'].flatMap(v=>['n','atk','shout','hurt'].map(f=>v+'_head_'+f))));
+// Front/back rolls are drawn frames, not cut-out parts (0.39.0): src/assets/player/roll-sheet.png is a 6x2 sheet of 256 px
+// cells (row 0 = seen from behind, row 1 = from the front; crouch, ball, ball upside down, opening, landing). The cells keep
+// the AI drawing's own placement: feet on row ROLL_SHEET.feet in the standing frames, `scale` rig units per cell pixel.
+const ROLL_SHEET=Object.freeze({cell:256,frames:6,feet:234,scale:.965,hold:[.1,.27,.5,.72,.9]});
 const RIG_WEAPON_SCALE=Object.freeze({sword:.7,spear:.64,axe:.64,pick:.64});
 // Attack angles in degrees from straight up, clockwise, for a rig facing screen-left: rest, wind-up, strike end.
 const RIG_SWINGS=Object.freeze([[-20,40,-95],[-20,-130,55],[-20,15,-160]]);
@@ -48,9 +52,14 @@ class PlayerRig{
   for(const w of RIG_WEAPONS)if(!Array.isArray(rig.grip?.[w]))throw Error('플레이어 무기 손잡이 정보 누락: '+w);
   const jobs=RIG_PARTS.map(k=>loadRigImage(base+k+'.png').then(img=>rig.add(k,img,RIG_PART_KIND(k))))
    .concat(RIG_WEAPONS.map(w=>loadRigImage(base+'weapon_'+w+'.png').then(img=>rig.add('weapon_'+w,img,'blade'))));
+  jobs.push(loadRigImage(base+'roll-sheet.png').then(img=>{rig.rollSheet=img}));
   await Promise.all(jobs);return rig;
  }
- constructor(){this.variants=Object.fromEntries(Object.keys(RIG_MATERIAL_COLOR).map(m=>[m,{}]));this.grip={}}
+ constructor(){this.variants=Object.fromEntries(Object.keys(RIG_MATERIAL_COLOR).map(m=>[m,{}]));this.grip={};this.rollSheet=null;this.rollSheets=new Map()}
+ // The roll sheet in the wearer's helmet/chest colours (same HSV recolour as the cap and jacket parts), cached per pair.
+ rollSheetFor(helmet,chest){const key=(helmet||'base')+'|'+(chest||'base');let sheet=this.rollSheets.get(key);if(sheet)return sheet;
+  sheet=this.rollSheet;const C=RIG_MATERIAL_COLOR;if(helmet&&C[helmet]?.cap)sheet=recolorPart(sheet,'cap',C[helmet].cap);if(chest&&C[chest]?.jacket)sheet=recolorPart(sheet,'jacket',C[chest].jacket);
+  this.rollSheets.set(key,sheet);return sheet}
  add(key,image,kind){for(const [m,map]of Object.entries(RIG_MATERIAL_COLOR))this.variants[m][key]=kind?recolorPart(image,kind,map[kind]):image}
  // Pose from display state. `seconds` drives the idle/walk cycles; look.progress (0..1) drives roll and attack.
  pose(look,seconds){
@@ -61,7 +70,7 @@ class PlayerRig{
    if(view==='side'){p.footL=[w*14,Math.max(0,-c)*9];p.footR=[-w*14,Math.max(0,c)*9];p.handL=[-w*10,c*2];p.handR=[w*10,-c*2];p.weaponAngle=.5+w*.15}
    else{const sg=view==='back'?-1:1;p.footL=[0,-sg*w*9+Math.max(0,c)*13];p.footR=[0,sg*w*9+Math.max(0,-c)*13];p.footScaleL=1+sg*w*.14;p.footScaleR=1-sg*w*.14;p.handL=[0,sg*w*7];p.handR=[0,-sg*w*7];p.headX=w*2;p.weaponAngle=.5}}
   else if(look.anim==='roll'){const q=look.progress,T=Math.PI*2,ang=rigEase(q,[[0,0],[.12,0],[.88,T],[1,T]]);p.tuck=rigEase(q,[[0,0],[.2,1],[.82,1],[1,0]]);p.weaponAngle=1.2;p.bob=9*Math.sin(Math.PI*q)-p.tuck*3;
-   if(view==='side')p.rot=-ang;else p.tumble=ang}
+   if(view==='side')p.rot=-ang;else p.sprite=true}
   else if(look.anim==='attack'){const q=look.progress,D=Math.PI/180,sw=RIG_SWINGS[look.combo%RIG_SWINGS.length],rest=sw[0]*D,wind=sw[1]*D,end=sw[2]*D,ts=RIG_ATTACK.strikeStart,te=RIG_ATTACK.strikeEnd,last=look.combo===2;
    p.weaponAngle=rigEase(q,[[0,rest],[ts,wind],[te,end],[.5,end+(end>wind?-6:6)*D],[RIG_ATTACK.rest,rest]]);
    if(look.weapon==='spear'){p.weaponAngle=rigEase(q,[[0,-80*D],[.5,-90*D],[RIG_ATTACK.rest,-80*D]]);p.thrust=rigEase(q,[[0,0],[ts,-14],[te,30],[.5,26],[RIG_ATTACK.rest,0]])}
@@ -87,31 +96,21 @@ class PlayerRig{
   const p=this.pose(look,seconds),V=this.variants,U=origin.scale,OX=origin.x,GY=origin.y;let view=look.view,headKey=null;
   // Part key → material variant: equipment slots pick their material, everything else is authored.
   const variantOf=key=>{const kind=RIG_PART_KIND(key);return kind==='cap'?look.helmet:kind==='jacket'?look.chest:kind==='foot'?look.boots:key.startsWith('weapon_')?look.material:'base'};
-  // A front/back roll is a somersault about the screen's horizontal axis (0.38.3): every part has a depth offset z (toward the
-  // character's facing), is rotated about the ball centre, drawn with the side that now faces the camera (front/back sprite,
-  // upside down past 90°) and sorted far to near. Without this the tucked head covers the torso and only a face floats.
-  const tumble=p.tumble!==undefined,faceZ=view==='back'?-1:1,cosT=tumble?Math.cos(p.tumble):1,sinT=tumble?Math.sin(p.tumble):0,pivotY=58+p.tuck*37,queue=[];
-  const PART_Z={foot:8+p.tuck*22,torso:0,jacket:2,pack:-14-p.tuck*16,head:2+p.tuck*24,cap:4+p.tuck*24,hand:8+p.tuck*22,weapon:10};
-  const drawPart=(key,x,y,o)=>{const m=variantOf(key);if(!m)return;const im=V[m][key];if(!im)return;const s=(o.s||1)*U;ctx.save();ctx.translate(OX+x*U,GY-y*U);ctx.rotate(o.r||0);ctx.scale((o.flip?-1:1)*(o.sx||1),o.sy||1);
+  const P=(key,x,y,o={})=>{const m=variantOf(key);if(!m)return;const im=V[m][key];if(!im)return;const s=(o.s||1)*U;ctx.save();ctx.translate(OX+x*U,GY-y*U);ctx.rotate(o.r||0);ctx.scale((o.flip?-1:1)*(o.sx||1),o.sy||1);
    if(o.dim)ctx.filter='brightness(.8)';ctx.drawImage(im,(-im.width/2-(o.px||0))*s,(-im.height/2-(o.py||0))*s,im.width*s,im.height*s);ctx.restore()};
-  const P=(key,x,y,o={})=>{if(tumble)queue.push({key,x,y,o});else drawPart(key,x,y,o)};
-  const flushTumble=()=>{
-   const placed=queue.map(q=>{const kind=q.key.startsWith('weapon_')?'weapon':q.key.replace(/^(front|back|side)_/,'').split('_')[0],z=PART_Z[kind]??0,rel=q.y-pivotY;
-    return{...q,sy:pivotY+rel*cosT-faceZ*z*sinT,depth:faceZ*rel*sinT+z*cosT}}).sort((a,b)=>a.depth-b.depth);
-   for(const q of placed){const toward=faceZ*cosT>0;let key=q.key;
-    if(toward!==(view==='front')){const flipped=key.replace(/^(front|back)_/,m=>m==='front_'?'back_':'front_');key=V.base[flipped]||V[q.key.startsWith('weapon_')?look.material:'base'][flipped]?flipped:key.replace(/_(n|atk|hurt|shout)$/,'')}
-    drawPart(key,q.x,q.sy,{...q.o,sy:(q.o.sy||1)*(cosT<0?-1:1)*(.55+.45*Math.abs(cosT))})}
-  };
   const weapon=(x,y,r,flip)=>{if(!look.weapon)return;const k='weapon_'+look.weapon,im=V[look.material][k],g=this.grip[look.weapon];P(k,x,y,{s:RIG_WEAPON_SCALE[look.weapon],r,px:g[0]-im.width/2,py:g[1]-im.height/2,flip})};
   const head=(pre,f)=>headKey=V.base[pre+'head_'+f]&&f?pre+'head_'+f:pre+'head';
   ctx.save();if(look.flip){ctx.translate(OX*2,0);ctx.scale(-1,1)}
   // Presentation-only impact jitter; deterministic in the attack progress so equal states draw equal frames.
   if(p.shake){const q=p.swing?p.swing.q:look.progress;ctx.translate(Math.sin(q*977)*p.shake,Math.cos(q*613)*p.shake)}
+  if(p.sprite&&this.rollSheet){const R=ROLL_SHEET,q=look.progress,f=R.hold.findIndex(t=>q<t),frame=f<0?R.frames-1:f,k=R.scale*U,lift=10*Math.sin(Math.PI*q)*U;
+   ctx.drawImage(this.rollSheetFor(look.helmet,look.chest),frame*R.cell,(look.view==='back'?0:1)*R.cell,R.cell,R.cell,OX-R.cell/2*k,GY-R.feet*k-lift,R.cell*k,R.cell*k);
+   ctx.restore();return{view,head:null,weapon:null,face:null};}
   // The tucked roll spins about the ball's own centre so the tumbling body stays above the ground plane.
   const cy=GY-(58+(look.anim==='roll'?p.tuck*37:0))*U;ctx.translate(OX,cy);ctx.rotate(p.rot);ctx.scale(p.zoom,p.squash*p.zoom);ctx.translate(-OX,-cy);
   const tk=p.tuck,b=p.bob,L=(a,c,k)=>a+(c-a)*k;
   if(view==='front'||view==='back'){
-   const back=view==='back',pre=back?'back_':'front_',hy=133+b+p.head-tk*(tumble?36:28),ty=50+b*.6-tk*4;
+   const back=view==='back',pre=back?'back_':'front_',hy=133+b+p.head-tk*28,ty=50+b*.6-tk*4;
    P(pre+'foot',L(-17,-10,tk)+p.footL[0],14+p.footL[1]+tk*18,{s:p.footScaleL});P(pre+'foot',L(17,10,tk)+p.footR[0],14+p.footR[1]+tk*18,{flip:1,s:p.footScaleR});
    P(pre+'torso',0,ty,{sy:1-.1*tk});P(pre+'jacket',0,ty+(back?-1:2),{s:.69});P(pre+'pack',0,ty+(back?4:8),{s:back?.8:.7});
    const lx=L(-52+p.handL[0],-24,tk),ly=L(52+b+p.handL[1],30,tk),rx=L(52+p.handR[0],24,tk),ry=L(52+b+p.handR[1],30,tk);
@@ -128,7 +127,6 @@ class PlayerRig{
    if(!tk)weapon(sx,sy,p.weaponAngle,false);P('side_hand',sx,sy);
    if(p.swing)this.smear(ctx,p,look,OX-4*U,GY-(64+b)*U,U);
   }
-  if(tumble)flushTumble();
   ctx.restore();
   return{view,head:headKey,weapon:look.weapon&&!tk?look.weapon:null,face:p.face};
  }
