@@ -164,7 +164,7 @@ class Combat {
   const isPlayer=a=>a&&!a.enemy&&!a.speciesId&&!a.boss;
   if(isPlayer(source)&&!payload.companionId)damage=Gear.scale(damage,Gear.status(source,sim.terrain).attack);
   if(isPlayer(target))damage=Gear.scale(damage,Gear.status(target,sim.terrain).taken);
-  target.hp=Math.max(0,target.hp-damage);
+  target.hp=Math.max(0,target.hp-damage);if(isPlayer(target))target.hurtTick=sim.tick;
   const heavy=!!payload.heavy,lethal=target.hp<=0;
   if(target.speciesId&&source){target.wildState='retaliating';target.enemy=true;target.targetId=source.id;}
   if(!target.enemy)c.invul=200;

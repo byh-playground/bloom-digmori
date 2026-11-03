@@ -17,6 +17,7 @@ function projectWorldToScreen(m,pos,width,height){
 const gearFactorText=m=>'×'+String(m/1000),gearSeconds=ticks=>{const s=Math.round(ticks*CFG.stepMs)/1000;return s===1?'':String(s);};
 function gearStatusParts(status,actor){const rule=REALMS[status.realm],need=status.need,parts=[];
  for(const [slot,def]of Object.entries(GEAR_RULES.slots)){const s=status.slots[slot],label=slot==='armor'?'피해':def.label;
+  if(s.idle)continue;// D-160: holding a pick, the weapon slot is not what the player is using (and the other way round)
   if(s.grade==='below'){let what;if(slot==='armor'){const have=ARMOR_SLOTS.filter(k=>actor.inventory.armor[k]&&Gear.itemTier(actor.inventory.armor[k].id)>=need).length;what=GEAR_TIER_NAMES[need]+' '+def.name+' '+have+'/'+ARMOR_SLOTS.length;}else what=s.tier?GEAR_TIER_NAMES[s.tier]+' '+def.name:def.name+' 없음';
    const hazard=slot==='armor'&&status.hazard?GEAR_RULES.hazards[status.hazard]:null;
    parts.push({slot,kind:'below',text:def.icon+' '+what+' · '+label+' '+gearFactorText(s.factor)+(hazard?' · '+hazard.name+' −'+hazard.damage+'/'+gearSeconds(hazard.everyTicks)+'초':'')});}

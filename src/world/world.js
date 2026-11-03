@@ -394,7 +394,6 @@ class VoxelWorld {
     write(tx+dx,y,tz+dz,canopy==='cap'?BID.cap:BID.leaves);
    }
   }
-  write(24,5,-14,BID.altar);
   const edited=this.editBuckets.get(chunkKey(cx,cy,cz));if(edited)for(const [index,id] of edited)out[index]=id;
   return out;
  }
@@ -409,7 +408,7 @@ class VoxelWorld {
  lightEntries(pos,radius=15){const out=[],C=CFG.chunk;for(let z=Math.floor((pos.z-radius)/C);z<=Math.floor((pos.z+radius)/C);z++)for(let y=Math.floor((pos.y-radius)/C);y<=Math.floor((pos.y+radius)/C);y++)for(let x=Math.floor((pos.x-radius)/C);x<=Math.floor((pos.x+radius)/C);x++){const bucket=this.lightBuckets.get(chunkKey(x,y,z));if(bucket)for(const light of bucket.values()){const d=sq(light.x-pos.x)+sq(light.y-pos.y)+sq(light.z-pos.z);if(d<radius*radius)out.push({...light,d});}}return out.sort((a,b)=>a.d-b.d||cmp(a.key,b.key));}
  get(x,y,z){x=Math.floor(x);y=Math.floor(y);z=Math.floor(z);if(y<CFG.bottom)return BID.bedrock;if(y>=CFG.top)return 0;const C=CFG.chunk,cx=Math.floor(x/C),cy=Math.floor(y/C),cz=Math.floor(z/C);return this.data(cx,cy,cz)[(x-cx*C)+C*((y-cy*C)+C*(z-cz*C))];}
  set(x,y,z,id){if(![x,y,z,id].every(Number.isInteger)||!BLOCKS[id]||y<=CFG.bottom||y>=CFG.top||Math.abs(x)>8191||Math.abs(z)>8191)return false;
-  const old=this.get(x,y,z);if(old===id||old===BID.bedrock||old===BID.altar)return false;
+  const old=this.get(x,y,z);if(old===id||old===BID.bedrock)return false;
    if(this.isSolid(id)&&this.water.isSource(x,y,z))this.water.source(x,y,z,false);
   const key=blockKey(x,y,z),C=CFG.chunk,cx=Math.floor(x/C),cy=Math.floor(y/C),cz=Math.floor(z/C);this.indexEdit(key,x,y,z,id);this.editSerial++;
   this.data(cx,cy,cz)[x-cx*C+C*(y-cy*C+C*(z-cz*C))]=id;

@@ -180,7 +180,7 @@ if(e.type==='pickup')this.toast(ITEMS[e.item].name+' +'+e.count);if(e.type==='op
  debugAdult(){if(!this.debug||this.net.session)return;for(const u of this.sim.companions.owned(this.localId))u.stage='adult';this.refreshUI(true);}
  // Debug-only ranch materials (raw, so fences, gates, chests and potions are still crafted): every species food, labor
  // blocks for each aptitude (leaves, stone, mushroom caps) and potion crystals.
- debugRanch(){if(!this.debug||this.net.session)return;const i=this.actor().inventory;for(const [id,n]of [['food',16],['seed',16],['leaves',16],['stone',16],['cap',8],['crystalShard',4]])Inventory.addTo(i.slots,id,n);this.refreshUI(true);}
+ debugRanch(){if(!this.debug||this.net.session)return;const i=this.actor().inventory;for(const [id,n]of [['food',16],['seed',16],['leaves',16],['stone',16],['cap',8],['crystalShard',4],['gold',4]])Inventory.addTo(i.slots,id,n);this.refreshUI(true);}
  debugRealmSpecies(){const a=this.actor();return REALMS[this.sim.terrain.realm(a.pos.x,a.pos.y,a.pos.z)]?.species||'root';}
  debugEnemy(){if(!this.debug||this.net.session)return;const a=this.actor(),wild=Object.values(this.sim.actors).filter(x=>x.speciesId&&!x.boss&&!x.dead&&!x.structureKey);while(wild.length>=CFG.creatures.maxWild){wild.sort((x,y)=>V.len(V.sub(y.pos,a.pos))-V.len(V.sub(x.pos,a.pos)));const removed=wild.shift();this.sim.physics.removeBody(removed);delete this.sim.actors[removed.id];}this.sim.addCreature(this.debugRealmSpecies(),V.add(a.pos,V.scale(a.facing,3)));}
  debugBoss(){if(!this.debug||this.net.session)return;this.sim.addBoss(this.debugRealmSpecies(),{x:this.actor().pos.x+4,y:this.actor().pos.y+1,z:this.actor().pos.z-5});}

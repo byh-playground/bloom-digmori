@@ -162,6 +162,7 @@ export const PHASES=[
  ['merge',async d=>{
   const pen=d.ctx.pen??await penFromWorld(d);
   if(!(await d.count('food')))await gatherFood(d,1);
+  if(!(await d.count('gold'))){assert(await d.count('rawGold'),'raw gold for the merge potion (dungeon chest)');await d.smelt('rawGold','coal',1);}// D-156
   assert(await d.craft('mergePotion',1),'merge potion');
   await enterPen(d,pen);
   const u=await d.units(),mid={x:(u[0].pos.x+u[1].pos.x)/2,y:u[0].pos.y+.3,z:(u[0].pos.z+u[1].pos.z)/2};

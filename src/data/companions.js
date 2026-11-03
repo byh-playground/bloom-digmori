@@ -8,7 +8,7 @@ const SPECIES=Object.freeze({
 // `food` (D-105) is the item a baby eats from the ground and the item that leads the species when held:
 // 뿌리 열매(food), 바위 병아리 씨앗(seed, like Minecraft chickens), 버섯 달팽이 잎(leaves).
  root:Object.freeze({name:'뿌리',icon:'❦',realm:'grassland',egg:'rootEgg',signature:'slam',food:'food',
-  wild:Object.freeze({hp:100,speed:2.6,damage:15,reach:1.9,wind:700,active:125,recovery:900,size:.65,loot:Object.freeze([['seed',2],['food',1]])}),
+  wild:Object.freeze({hp:100,speed:2.6,damage:15,reach:1.9,wind:700,active:125,recovery:900,size:.65,loot:Object.freeze([['seed',2],['food',1],['bark',1]])}),
   boss:Object.freeze({name:'뿌리 거인',hp:900,speed:2.6,damage:30,heavy:true,reach:4,wind:1000,active:200,recovery:1400,size:1.9,structure:'grove',crown:'rootCrown'}),
   capabilities:Object.freeze({gather:Object.freeze({blocks:Object.freeze(['grass','dirt','log','leaves']),tier:0,speed:2.5}),carry:Object.freeze({stacks:4}),
    attack:Object.freeze({mode:'melee',damage:25,reach:2.6,cooldown:1100})})}),
