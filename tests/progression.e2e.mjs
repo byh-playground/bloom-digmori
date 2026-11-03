@@ -50,7 +50,7 @@ try{
  const S=(s,as)=>({as,s});
  assert.deepEqual(data.regrow,{cap:S(20,'cap'),coalOre:S(120,'coalOre'),cobble:S(30,'cobble'),diamondOre:S(30,'stone'),dirt:S(20,'dirt'),goldOre:S(30,'stone'),grass:S(20,'grass'),ironOre:S(120,'ironOre'),leaves:S(20,'leaves'),log:S(20,'log'),mycelium:S(20,'mycelium'),stem:S(20,'stem'),stone:S(30,'stone')});
  pass('labor regrowth table: plants 20 s, stone/cobble 30 s, coal/iron ore 120 s as the same ore, gold/diamond ore grow back as stone',data.regrow);
- for(const r of data.gear){if(['wood','stone','leather'].includes(r.material))assert.deepEqual(r.prior,[],r.id);else if(r.material==='iron')assert(r.prior.length&&r.prior.every(p=>p.endsWith('@grassland')),r.id+' '+r.prior);else assert(r.prior.length&&r.prior.every(p=>p.endsWith('@cave')),r.id+' '+r.prior);}
+ for(const r of data.gear){if(['wood','stone','bark'].includes(r.material))assert.deepEqual(r.prior,[],r.id);else if(r.material==='iron')assert(r.prior.length&&r.prior.every(p=>p.endsWith('@grassland')),r.id+' '+r.prior);else assert(r.prior.length&&r.prior.every(p=>p.endsWith('@cave')),r.id+' '+r.prior);}
  assert.equal(data.crown.C,'rockChickCrown');assert.equal(data.stem.out,'planks');
  pass('every iron gear recipe takes a 초원 resource (stick/fibre), every diamond gear recipe a 동굴 resource (iron ingot, the diamond helmet the cave boss crown)',data.gear.filter(r=>r.prior.length));
 
@@ -58,7 +58,9 @@ try{
   const P=sim.addPlayer('probe'),run=n=>{for(let i=0;i<n;i++)sim.step({tick:sim.tick,inputs:[]});},set=(x,y,z,id)=>sim.terrain.set(x,y,z,B.BID[id]),out={};
   const outside={x:8.5,y:sim.terrain.height(8,8)+1.1,z:8.5};sim.physics.teleport(P,outside);
   // Gear factors and hazard by place and inventory.
-  const at=(pos,setup)=>{const a={...P,pos,inventory:B.Inventory.empty()};setup(a.inventory);const s=B.Gear.status(a,sim.terrain);return[s.realm,s.gather,s.attack,s.taken,s.hazard];};
+  const at=(pos,setup)=>{const a={...P,pos,inventory:B.Inventory.empty()};setup(a.inventory);a.inventory.selected=0;const s=B.Gear.status(a,sim.terrain);a.inventory.selected=1;const w=B.Gear.status(a,sim.terrain);return[s.realm,s.gather,w.attack,s.taken,s.hazard];};
+  // D-160 held-item tiers: with the iron pick in hand an iron sword in the hotbar does not count for strikes.
+  {const a={...P,pos:{x:0,y:-1,z:-56},inventory:B.Inventory.empty()};a.inventory.slots[0]={id:'iron_pick',count:1};a.inventory.slots[1]={id:'iron_sword',count:1};a.inventory.selected=0;const s=B.Gear.status(a,sim.terrain);out.heldPick=[s.gather,s.attack,s.slots.weapon.idle,s.slots.pick.idle];}
   const ring=sim.terrain.bossAnchor('ring'),fungal={x:ring.x+.5,y:ring.y+1,z:ring.z+.5},cave={x:0,y:-1,z:-56},grass={x:.5,y:5,z:.5};
   const kit=(mat,armor)=>i=>{i.slots[0]={id:mat+'_pick',count:1};i.slots[1]={id:mat+'_sword',count:1};for(const k of B.ARMOR_SLOTS??['helmet','chest','boots'])i.armor[k]={id:armor+'_'+k,count:1};};
   out.gear={caveBare:at(cave,()=>{}),caveIron:at(cave,kit('iron','iron')),caveDiamond:at(cave,kit('diamond','diamond')),caveIronNoHelmet:at(cave,i=>{kit('iron','iron')(i);i.armor.helmet=null;}),
@@ -88,6 +90,14 @@ try{
   // Grade multiplier: gather ticks of one log for grades 1 and 4 (hardness 1500, root speed 2.5).
   const ticks=grade=>{u.grade=grade;set(1,5,-2,'log');for(const g of Object.values(sim.regrow))delete sim.regrow[g.key];for(let k=0;k<9;k++)chest.slots[k]=null;let n=0;for(let i=0;i<600;i++){run(1);if(u.phase==='gather')n++;else if(n)break;}return n;};
   out.gatherTicks={1:ticks(1),4:ticks(4)};out.expectTicks=Object.fromEntries([1,4].map(g=>{let p=0,n=0;while(p<1500){p+=B.CFG.stepMs*2.5*B.RANCH_RULES.laborGrade[g-1]/1000;n++;}return[g,n];}));
+  // 0.37.0 system gaps: natural healing (after 5 s unhurt, 1 HP/s), night 초원 wildlife hunting (D-158), the cold killing
+  // (D-159, no floor) and the recipe/loot changes (D-154 bark, D-156 gold potion, D-157 crowns, the relic retired).
+  sim.physics.teleport(P,outside);run(2);P.hp=50;P.hurtTick=sim.tick;run(ticksForMs(4000));const h4=P.hp;run(ticksForMs(3000));out.regen=[h4,P.hp];
+  const root=sim.addCreature('root',{x:outside.x+3,y:outside.y,z:outside.z});run(2);const day=[sim.night(),root.wildState];
+  sim.tick=Math.round(B.CFG.dayMs/2/B.CFG.stepMs);run(2);out.night={day,night:[sim.night(),root.wildState,root.targetId===P.id]};
+  sim.physics.removeBody(root);delete sim.actors[root.id];sim.physics.teleport(P,{x:0,y:-1,z:-56});P.hp=3;run(ticksForMs(4500));out.coldDeath=[P.dead,P.hp];
+  const keys=id=>B.RECIPES.find(r=>r.id===id).keys;
+  out.recipes={potion:keys('mergePotion'),chest:keys('diamond_chest').C,boots:keys('diamond_boots').C,rootLoot:B.SPECIES.root.wild.loot.map(([id])=>id),bark:B.ITEMS.bark_chest?.material,retired:['relic','leather','leather_chest'].map(id=>!!B.ITEMS[id])};
   return out;}finally{sim.free();}});
  assert.deepEqual(data.grade,[1000,1500,2250,3375]);
  assert.deepEqual(sim.gatherTicks,sim.expectTicks);assert(sim.gatherTicks[1]>=3*sim.gatherTicks[4]);
@@ -96,7 +106,10 @@ try{
  assert.deepEqual(G.caveBare,['cave',350,400,2000,'cold']);assert.deepEqual(G.caveIron,['cave',1000,1000,1000,null]);assert.deepEqual(G.caveDiamond,['cave',1500,1600,600,null]);
  assert.deepEqual(G.caveIronNoHelmet,['cave',1000,1000,2000,'cold']);assert.deepEqual(G.fungalIron,['fungal',350,400,2000,'spore']);assert.deepEqual(G.fungalDiamond,['fungal',1000,1000,1000,null]);
  assert.deepEqual(G.grassBare,['grassland',1000,1000,1000,null]);assert.deepEqual(G.grassDiamond,['grassland',1500,1600,600,null]);
- assert.deepEqual(sim.combat,{dealt:20,taken:20});assert.equal(sim.cold,3);assert.equal(sim.coldIron,0);
+ assert.deepEqual(sim.heldPick,[1000,400,true,false]);
+ assert(sim.regen[0]===50&&sim.regen[1]>=51&&sim.regen[1]<=53,'regen '+sim.regen);assert.deepEqual(sim.night,{day:[false,'neutral'],night:[true,'retaliating',true]});assert.deepEqual(sim.coldDeath,[true,0]);
+ assert.deepEqual(sim.recipes,{potion:{C:'crystalShard',G:'gold',F:'food'},chest:'rootCrown',boots:undefined,rootLoot:['seed','food','bark'],bark:'bark',retired:[false,false,false]});
+ pass('0.37.0: 5 s unhurt then 1 HP/s healing ('+sim.regen.join(' → ')+'), a 초원 root turns on the player at night only, the cold kills (3 HP → dead), bark armor from root loot, gold in the merge potion, the 꽃 crown in the diamond chestplate',{regen:sim.regen,night:sim.night,recipes:sim.recipes});assert.deepEqual(sim.combat,{dealt:20,taken:20});assert.equal(sim.cold,3);assert.equal(sim.coldIron,0);
  pass('gear factors by realm: cave bare ×0.35/×0.4/×2 + cold, iron normal, diamond ×1.5/×1.6/×0.6; fungal needs diamond (spore); a bare strike in the cave deals 50→20 and takes 10→20; cold drains 1 HP/s, iron armor stops it',{gear:G,combat:sim.combat,cold:sim.cold});
  assert.equal(sim.caps.cap,30);assert.equal(sim.caps.stem,30);assert(sim.caps.food>=5&&sim.caps.food<=15,'cap fruit '+sim.caps.food);assert.deepEqual(sim.caps.other,[]);
  pass('breaking a mushroom cap drops the cap block (fruit 1 in 3: '+sim.caps.food+'/30) and a stem drops the stem block',sim.caps);
@@ -146,19 +159,19 @@ try{
   await pc.locator((k<9?'#inventory-hotbar':'#inventory-grid')+' [data-area="bag"][data-index="'+k+'"]').click();await pc.locator('#armor-slots [data-area="armor"][data-index="'+part+'"]').click();
   await pc.waitForFunction(part=>Bloom.app.actor().inventory.armor[part]?.id==='iron_'+part,part,{timeout:3000});}
  await pc.keyboard.press('Tab');await pause(pc,700);const iron=await gearHUD(pc);await shot(pc,'02-cave-with-iron');
- assert.deepEqual(iron.chips,[]);assert(iron.title.includes('✓'));assert(!iron.body.includes('hazard'));assert.deepEqual([iron.status.gather,iron.status.attack,iron.status.taken,iron.status.hazard],[1000,1000,1000,null]);
+ assert.deepEqual(iron.chips,[]);assert(iron.title.includes('✓'));assert(!iron.body.includes('hazard'));assert.deepEqual([iron.status.gather,iron.status.attack,iron.status.taken,iron.status.hazard],[1000,400,1000,null]);// iron pick in hand: the sword in the hotbar does not count (D-160), and its slot is idle on the HUD
  await pause(pc,1500);assert.equal((await gearHUD(pc)).hp,iron.hp);
  // Taking the helmet off brings the armor penalty and the cold back.
  await pc.keyboard.press('Tab');await pc.locator('#armor-slots [data-area="armor"][data-index="helmet"]').click();await pc.locator('#inventory-grid [data-area="bag"]:not([data-item])').first().click();await pc.keyboard.press('Tab');
  await pc.waitForFunction(()=>!Bloom.app.actor().inventory.armor.helmet);await pause(pc,400);const noHelmet=await gearHUD(pc);
  assert.deepEqual(noHelmet.chips.map(c=>c.slot),['armor']);assert(noHelmet.chips[0].text.includes('2/3')&&noHelmet.body.includes('hazard-cold'));
- pass('equipping iron (pick and sword in the hotbar, three armor pieces through the inventory UI) clears every penalty and the drain; taking the helmet off brings back 방어구 2/3 ×2 + 추위',{iron:iron.title,noHelmet:noHelmet.chips.map(c=>c.text)});
+ pass('equipping iron (iron pick in hand, three armor pieces through the inventory UI) clears every HUD penalty and the drain; taking the helmet off brings back 방어구 2/3 ×2 + 추위',{iron:iron.title,noHelmet:noHelmet.chips.map(c=>c.text)});
 
  // 2c. The fungal forest with iron gear (no diamond): every slot is short, spore poison drains.
  const fungal=await pc.evaluate(()=>{const sim=Bloom.app.sim,ring=sim.terrain.bossAnchor('ring');for(let r=6;r<=30;r+=2)for(let k=0;k<16;k++){const a=k*Math.PI/8,x=Math.floor(ring.x+Math.cos(a)*r),z=Math.floor(ring.z+Math.sin(a)*r),h=sim.terrain.height(x,z);if(sim.terrain.realm(x+.5,h+1,z+.5)!=='fungal'||[1,2,3].some(dy=>sim.terrain.get(x,h+dy,z)))continue;return{x:x+.5,y:h+1.05,z:z+.5,yaw:Math.atan2(-(ring.x-x),-(ring.z-z))};}return null;});
  assert(fungal,'no fungal surface spot');await pc.keyboard.press('Tab');await pc.locator('#inventory-grid [data-area="bag"][data-item="iron_helmet"]').click();await pc.locator('#armor-slots [data-area="armor"][data-index="helmet"]').click();await pc.keyboard.press('Tab');
  await teleport(pc,fungal);await pause(pc,1800);const spore=await gearHUD(pc);await shot(pc,'03-fungal-without-diamond');
- assert.deepEqual(spore.chips.map(c=>[c.slot,c.kind]),[['pick','below'],['weapon','below'],['armor','below']]);assert(spore.title.includes('균류 숲')&&spore.title.includes('다이아몬드'));assert(spore.chips[2].text.includes('포자 독')&&spore.body.includes('hazard-spore'));
+ assert.deepEqual(spore.chips.map(c=>[c.slot,c.kind]),[['pick','below'],['armor','below']]);assert(spore.title.includes('균류 숲')&&spore.title.includes('다이아몬드'));assert(spore.chips[1].text.includes('포자 독')&&spore.body.includes('hazard-spore'));
  assert(spore.chips[0].text.includes('철 곡괭이'));
  pass('the fungal forest with iron gear: 곡괭이/무기/방어구 below 다이아몬드 with 포자 독 and a yellow-green edge',{title:spore.title,chips:spore.chips.map(c=>c.text)});
 

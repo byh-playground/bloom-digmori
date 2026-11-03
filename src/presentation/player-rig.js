@@ -14,11 +14,11 @@ const RIG_ATTACK=Object.freeze({strikeStart:.16,strikeEnd:.24,rest:.8});
 const RIG_MINE=Object.freeze({cycleMs:420,rest:-20,wind:55,strike:-105,strikeAt:.55});
 // Equipment materials recolour their own part: helmet → cap, chestplate → jacket, boots → foot, held
 // weapon/tool → blade. Each entry is [hue°, saturation ×, value ×]; null keeps the authored colours.
-// base = parts no equipment touches. leather = authored, wood = 나무 blade, stone = 돌, iron = 철, diamond = 청수정.
+// base = parts no equipment touches. bark = authored, wood = 나무 blade, stone = 돌, iron = 철, diamond = 청수정.
 const RIG_MATERIAL_COLOR=Object.freeze({
  base:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
  wood:Object.freeze({cap:null,jacket:null,foot:null,blade:[30,.48,.86]}),
- leather:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
+ bark:Object.freeze({cap:null,jacket:null,foot:null,blade:null}),
  stone:Object.freeze({cap:null,jacket:null,foot:null,blade:[30,.16,.74]}),
  iron:Object.freeze({cap:[222,.25,1.02],jacket:[214,.3,.86],foot:[222,.25,1.35],blade:null}),
  diamond:Object.freeze({cap:[214,1.2,1.05],jacket:[190,.8,1.05],foot:[192,1.2,1.65],blade:[195,.38,1.04]})

@@ -71,7 +71,7 @@ class Simulation {
    if(this.progress[opened]||this.terrain.get(hit.x,hit.y,hit.z)!==BID.lootChest)return false;
    const structure=this.terrain.structuresNear({x:hit.x,y:hit.y,z:hit.z},50).find(s=>s.type==='dungeon'||s.type==='mine');
    const dungeon=structure?.type==='dungeon',deep=hit.y< -15,loot=dungeon?
-     [['crystalShard',1+(hash3(hit.x,1,hit.z,this.terrain.seed)%3)],['rawGold',2],['iron',2],['relic',deep?1:0],['food',2]]:
+     [['crystalShard',1+(hash3(hit.x,1,hit.z,this.terrain.seed)%3)],['rawGold',2],['iron',2],['food',2]]:
      [['coal',4],['rawIron',3],['food',2]];
    const changed=this.terrain.set(hit.x,hit.y,hit.z,BID.planks);if(changed===false)return false;
    this.progress[opened]=true;this.progress.chests=(this.progress.chests||0)+1;if(dungeon&&!this.progress['cleared:'+structure.key]){this.progress['cleared:'+structure.key]=true;this.progress.clearedDungeons=(this.progress.clearedDungeons||0)+1;}
@@ -169,6 +169,8 @@ class Simulation {
  ai(actor){const players=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss&&!a.dead&&!a.suspended).sort((a,b)=>V.len(V.sub(a.pos,actor.pos))-V.len(V.sub(b.pos,actor.pos))||cmp(a.id,b.id)),def=actor.boss?SPECIES[actor.speciesId].boss:SPECIES[actor.speciesId]?.wild;
   // A structure boss guards its home: it engages the nearest player inside the aggro radius and lets go past the leash.
   if(actor.boss&&actor.wildState!=='retaliating'){const home=actor.homePos||actor.pos,next=players.find(p=>V.len(V.sub(p.pos,home))<=CFG.creatures.bossAggro&&Math.abs(p.pos.y-home.y)<8);if(next){actor.wildState='retaliating';actor.enemy=true;actor.targetId=next.id;}}
+  // D-158 night: neutral 초원 wildlife engages the nearest player within nightAggro (it lets go past the leash as usual).
+  if(!actor.boss&&actor.wildState==='neutral'&&!actor.structureKey&&SPECIES[actor.speciesId]?.realm==='grassland'&&this.night()){const next=players.find(p=>V.len(V.sub(p.pos,actor.pos))<=CFG.creatures.nightAggro);if(next){actor.wildState='retaliating';actor.enemy=true;actor.targetId=next.id;}}
   let target=actor.wildState==='retaliating'?this.actors[actor.targetId]:null;
   if(actor.wildState==='retaliating'&&(!target||target.dead||target.suspended||V.len(V.sub(target.pos,actor.boss?actor.homePos||actor.pos:actor.pos))>(actor.boss?CFG.creatures.bossLeash:CFG.creatures.leash))){actor.targetId=null;actor.wildState='neutral';actor.enemy=false;target=null;const c=actor.combat;if(c.state==='attack'){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}}
   if(!target){if(actor.speciesId){const delta=V.sub(actor.homePos||actor.pos,actor.pos),dist=V.len(delta),flat=V.norm({x:delta.x,y:0,z:delta.z}),speed=dist>1.4?Math.min(def.speed*.45,dist):0;return{move:flat,speed,jump:false};}return{move:{x:0,y:0,z:0},speed:0,jump:false};}
@@ -238,15 +240,17 @@ class Simulation {
   if(this.physics.overlapActors({x:g.x+.5,y:g.y+.5,z:g.z+.5},.49).length||this.companions.all().some(u=>u.location==='ranch'&&[u.cell,u.next].some(c=>c&&c.x===g.x&&c.y===g.y&&c.z===g.z)))continue;
   if(this.terrain.set(g.x,g.y,g.z,g.id)===false)continue;delete this.regrow[key];this.emit('regrow',{id:'regrow:'+key,pos:{x:g.x+.5,y:g.y,z:g.z+.5},enemy:false},{blockId:g.id,color:BLOCKS[g.id].color});}}
  // 0.35.1 realm hazard (doc §3.3): armor below the realm's tier in 동굴(추위) or 균류 숲(포자 독) drains `damage` HP every
- // `everyTicks` ticks of exposure, never below `floor`. Leaving the hazard (or wearing the tier) resets the count.
+ // `everyTicks` ticks of exposure, down to death (D-159, a time limit like drowning). Leaving the hazard (or wearing the
+ // tier) resets the count. Out of a hazard, a player unhurt for CFG.regen.delayTicks heals 1 HP every CFG.regen.everyTicks.
  tickHazards(players){for(const p of players){const s=Gear.status(p,this.terrain),h=s.hazard?GEAR_RULES.hazards[s.hazard]:null,low=Math.min(s.slots.pick.tier,s.slots.weapon.tier,s.slots.armor.tier);
   // Tutorial flags (QUESTS): the realms visited and the first full iron / diamond kit.
-  if(s.realm&&!this.progress['realm:'+s.realm])this.progress['realm:'+s.realm]=true;if(low>=GEAR_TIERS.iron)this.progress.ironGear=true;if(low>=GEAR_TIERS.diamond)this.progress.diamondGear=true;if(!h){p.hazardTicks=0;continue;}
+  if(s.realm&&!this.progress['realm:'+s.realm])this.progress['realm:'+s.realm]=true;if(low>=GEAR_TIERS.iron)this.progress.ironGear=true;if(low>=GEAR_TIERS.diamond)this.progress.diamondGear=true;if(!h){p.hazardTicks=0;if(!p.dead&&p.hp<p.maxHp&&this.tick-(p.hurtTick??-Infinity)>=CFG.regen.delayTicks&&this.tick%CFG.regen.everyTicks===0)p.hp++;continue;}
   p.hazardTicks=(p.hazardTicks||0)+1;if(p.hazardTicks<h.everyTicks)continue;p.hazardTicks=0;
-  if(p.hp>h.floor){const before=p.hp;p.hp=Math.max(h.floor,p.hp-h.damage);this.emit('hazard',p,{hazard:s.hazard,damage:before-p.hp});}}}
+  if(p.dead)continue;const before=p.hp;p.hp=Math.max(0,p.hp-h.damage);p.hurtTick=this.tick;this.emit('hazard',p,{hazard:s.hazard,damage:before-p.hp});if(p.hp<=0)this.kill(p,null);}}
  tickCreatureEncounters(players){
   if(this.tick<this.nextSpawn)return;this.nextSpawn=this.tick+CFG.creatures.encounterCheckTicks;
-  if(!this.night()&&this.tick>0&&this.tick%CFG.creatures.spawnTicks===0)this.spawnCreature(players);
+  // D-158: night doubles the wild spawn rate (and 초원 wildlife hunts, see ai), so night is the time to go underground.
+  if(this.tick>0&&this.tick%(this.night()?CFG.creatures.spawnTicks/2:CFG.creatures.spawnTicks)===0)this.spawnCreature(players);
   this.tickDungeonEncounters(players);this.tickBossStructures(players);
  }
 
