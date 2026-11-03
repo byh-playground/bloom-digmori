@@ -79,7 +79,10 @@ class Physics {
  // Launch speed whose *discrete* apex is `apex` metres: the 30 TPS semi-implicit integration loses v*dt/2 of the textbook
  // v^2/2g, so sqrt(2*g*apex) alone peaks about 0.11 m low (the 1.12 m auto step topped out 3 cm above a 1 m ledge).
  launchSpeed(apex){const g=CFG.player.gravity,dt=CFG.stepMs/1000;return Math.sqrt(2*g*apex)+g*dt/2;}
- autoJump(actor,move){const t=this.terrain,unit=V.norm({x:move.x,y:0,z:move.z}),r=CFG.player.radius*(actor.scale||1),p=actor.pos,look=CFG.movement.autoJumpLook,feet=Math.floor(p.y+.12),height=actor.offset*2;
+ // The hop must start early enough that the feet are over the ledge top when the body arrives at the wall: while the feet are
+ // below the top the wall stops the body dead (a 120-140 ms standstill on every 1 m step when it started at a fixed 0.8 m).
+ // Look ahead for the distance covered while the launch climbs the step (`autoStepClearTime`), never less than autoJumpLook.
+ autoJump(actor,move,speed=0){const t=this.terrain,unit=V.norm({x:move.x,y:0,z:move.z}),r=CFG.player.radius*(actor.scale||1),p=actor.pos,look=Math.max(CFG.movement.autoJumpLook,speed*CFG.movement.autoStepClearTime),feet=Math.floor(p.y+.12),height=actor.offset*2;
   // A full footprint, not one central voxel: don't hop into diagonal corners or ceilings.
   const next={x:p.x+unit.x*look,y:p.y,z:p.z+unit.z*look},min={x:next.x-r+.01,y:feet+.01,z:next.z-r+.01},max={x:next.x+r-.01,y:feet+1-.01,z:next.z+r-.01};
   if(!t.boxSolid(min,max))return false;
@@ -148,7 +151,7 @@ class Physics {
   const requestedMove=move;move=this.wallSlide(actor,move,speed);
   const max=(actor.knock>0?CFG.combat.knockback.drag:actor.combat.state==='roll'?70:CFG.player.acceleration)*dt,d={x:clamp(move.x*speed-vel.x,-max,max),y:0,z:clamp(move.z*speed-vel.z,-max,max)};
   b.applyImpulse({x:d.x*m,y:0,z:d.z*m},true);const ground=this.ground(actor,actor.pos,CFG.movement.groundGap,true);actor.grounded=!!ground&&vel.y<2;
-  const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(requestedMove.x,requestedMove.z)>.35&&this.autoJump(actor,requestedMove);
+  const autoStep=allowAutoJump&&!jump&&!actor.enemy&&!actor.speciesId&&!actor.boss&&actor.combat.state!=='roll'&&actor.grounded&&actor.knock<=0&&Math.hypot(requestedMove.x,requestedMove.z)>.35&&this.autoJump(actor,requestedMove,Math.hypot(vel.x,vel.z));
   if((jump||autoStep)&&actor.grounded){const vertical=autoStep?this.launchSpeed(CFG.movement.autoStepRise):CFG.player.jump;
    b.applyImpulse({x:0,y:(vertical-vel.y)*m,z:0},true);actor.grounded=false;}
   this.fenceClamp(actor,b);
