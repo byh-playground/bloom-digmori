@@ -33,7 +33,7 @@ function updateGearHUD(sim,actor){const node=document.getElementById('gear-statu
 function recipeDetailText(r){const prior=recipePriorIngredients(r);
  return ITEMS[r.out].name+'\n'+Object.entries(r.keys).map(([char,val])=>{const n=r.pattern.join('').split(char).length-1,ids=Array.isArray(val)?val:[val],tag=prior.find(p=>p.key===char);return ids.map(i=>ITEMS[i].name).join(' / ')+' ×'+n+(tag?' ('+REALMS[tag.realm].name+' 자원)':'');}).join(' · ');}
 // Wild units are plain wildlife since 0.33.0 (no recruitment): name plus state; structure bosses show their own name.
-function enemyLabelName(a){if(a.boss)return SPECIES[a.speciesId].boss.name+' · 보스';if(a.ownerId)return SPECIES[a.speciesId].name+(a.petStage==='baby'?' (새끼)':'')+(a.sit?' · 앉아 있음':' · 펫');if(a.speciesId)return SPECIES[a.speciesId].name+(a.wildState==='retaliating'?' · 반격 중':' · 야생');return a.enemy?'적대 생물':'플레이어 · '+String(a.id).slice(0,6);}
+function enemyLabelName(a){if(a.boss)return SPECIES[a.speciesId].boss.name+' · 보스';if(a.ownerId)return SPECIES[a.speciesId].name+(a.petStage==='baby'?' (새끼)':'')+(a.sit?' · 기다리는 중':' · 펫');if(a.speciesId)return SPECIES[a.speciesId].name+(a.wildState==='retaliating'?' · 반격 중':' · 야생');return a.enemy?'적대 생물':'플레이어 · '+String(a.id).slice(0,6);}
 class EnemyHealthHUD {
  constructor(renderer){this.r=renderer;this.root=document.getElementById('enemy-labels');this.nodes=new Map();this.world=null;this.samples=[];this.clock=0;this.mobile=matchMedia('(pointer:coarse)').matches;}
  reset(){for(const v of this.nodes.values())v.node.remove();this.nodes.clear();this.world=null;this.clock=0;this.samples=[];}
