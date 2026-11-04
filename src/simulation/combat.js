@@ -167,6 +167,8 @@ class Combat {
   target.hp=Math.max(0,target.hp-damage);if(isPlayer(target))target.hurtTick=sim.tick;
   const heavy=!!payload.heavy,lethal=target.hp<=0;
   if(target.speciesId&&source&&!target.ownerId){target.wildState='retaliating';target.enemy=true;target.targetId=source.id;}
+  // The shepherd's staff: whatever it strikes becomes the target of the owner's following pets.
+  if(source&&!source.ownerId&&!source.speciesId&&!source.boss&&target.enemy&&!target.ownerId&&Inventory.stats(source).item?.weapon==='staff')for(const pet of sim.petsOf(source.id))if(!pet.sit)pet.petTargetId=target.id;
   if(!target.enemy)c.invul=200;
   let push=projectile?V.norm({x:(payload.flightVelocity||payload.velocity||payload.dir).x,y:0,z:(payload.flightVelocity||payload.velocity||payload.dir).z}):source?V.norm({x:target.pos.x-source.pos.x,y:0,z:target.pos.z-source.pos.z}):V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   if(V.len(push)<.001)push=V.norm({x:payload.dir.x,y:0,z:payload.dir.z});

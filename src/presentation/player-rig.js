@@ -30,7 +30,7 @@ const RIG_MATERIAL_COLOR=Object.freeze({
 const RIG_PART_KIND=key=>/_cap$/.test(key)?'cap':/_jacket$/.test(key)?'jacket':/_foot$/.test(key)?'foot':null;
 // Held item → rig art. Items without a drawing (blocks, food…) show an empty hand.
 const RIG_WEAPONS=Object.freeze(['sword','spear','axe','pick']);
-const rigWeaponOf=item=>item?.weapon||(item?.tool==='pick'?'pick':null);
+const rigWeaponOf=item=>item?.weapon==='staff'?'spear':item?.weapon||(item?.tool==='pick'?'pick':null);
 // World placement: a 512 px canvas whose ground row (420) sits on the actor's feet; 200 rig units ≈ the old sprout height.
 const RIG_VIEW=Object.freeze({canvas:512,ground:420,metersPerUnit:.0092});
 function rigEase(t,keys){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){if(t<=keys[i][0]){const a=keys[i-1],b=keys[i];let u=(t-a[0])/(b[0]-a[0]);u=u*u*(3-2*u);return a[1]+(b[1]-a[1])*u}}return keys[keys.length-1][1]}

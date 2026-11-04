@@ -137,6 +137,8 @@ class App {
   if(e.type==='pet-feed')this.toast(e.heal?e.name+' 체력 회복':e.name+' 먹는 중 ('+e.fed+'/'+e.of+')');
   if(e.type==='pet-grow')this.toast(e.name+'이(가) 다 자랐어요!');
   if(e.type==='pet-sit')this.toast(e.name+(e.sit?' · 여기서 기다려요 (싸우지 않아요)':' · 따라와요'));
+  if(e.type==='pet-muster')this.toast(e.count?'펫 '+e.count+'마리 모여! (이 지팡이는 '+e.range+'m 안 가까운 '+e.n+'마리까지)':'가까이에 길들인 펫이 없어요 ('+e.range+'m 안)');
+  if(e.type==='pet-dismiss')this.toast('펫 '+e.count+'마리 · 여기서 기다려요');
   if(e.type==='pet-full')this.toast('펫은 최대 '+e.max+'마리까지 데려갈 수 있어요.');
   if(e.type==='pet-died')this.toast(e.name+'이(가) 쓰러졌어요. 먹이를 주고 지켜 주세요.');
   if(e.type==='mine'&&!e.by){this.showCombatFeedback('⛏ 채굴 완료',540);this.blockActionUI('break');this.playSound('mine',.8);}
