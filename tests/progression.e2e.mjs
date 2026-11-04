@@ -5,7 +5,7 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import {CURSOR_HELPERS} from './cursor-helpers.mjs';
 
-// G2 step 4b (0.35.1): equipment progression and ranch follow-ups.
+// G2 step 4b (0.35.1): equipment progression follow-ups.
 //  1. Deterministic checks in a separate Simulation of seed 190725: the labor regrowth table, the grade multiplier (actual
 //     gather ticks), recipes that need the previous realm's resource, gear factors and the realm hazard by inventory and
 //     place, mushroom blocks dropping themselves, one labor harvest's every item going into the chest (and waiting when it
@@ -43,13 +43,9 @@ try{
  await pc.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(pc);
 
  // ---- 1. Deterministic checks ----
- const data=await pc.evaluate(()=>{const B=Bloom,blocks=[...new Set(Object.values(B.SPECIES).flatMap(s=>s.capabilities.gather.blocks))].sort();
-  const regrow=Object.fromEntries(blocks.map(id=>{const g=B.laborRegrow(B.BID[id]);return[id,g&&{as:B.BLOCKS[g.id].id,s:Math.round(g.ticks*B.CFG.stepMs)/1000}];}));
+ const data=await pc.evaluate(()=>{const B=Bloom;
   const gear=B.RECIPES.filter(r=>B.ITEMS[r.out].material&&(B.ITEMS[r.out].tool||B.ITEMS[r.out].weapon||B.ITEMS[r.out].armor)).map(r=>({id:r.id,material:B.ITEMS[r.out].material,prior:B.recipePriorIngredients(r).map(p=>p.item+'@'+p.realm)}));
-  return{regrow,grade:[1,2,3,4].map(grade=>B.Companions.laborFactor({grade})),gear,crown:B.RECIPES.find(r=>r.id==='diamond_helmet').keys,stem:B.RECIPES.find(r=>r.id==='stemPlanks')};});
- const S=(s,as)=>({as,s});
- assert.deepEqual(data.regrow,{cap:S(20,'cap'),coalOre:S(120,'coalOre'),cobble:S(30,'cobble'),diamondOre:S(30,'stone'),dirt:S(20,'dirt'),goldOre:S(30,'stone'),grass:S(20,'grass'),ironOre:S(120,'ironOre'),leaves:S(20,'leaves'),log:S(20,'log'),mycelium:S(20,'mycelium'),stem:S(20,'stem'),stone:S(30,'stone')});
- pass('labor regrowth table: plants 20 s, stone/cobble 30 s, coal/iron ore 120 s as the same ore, gold/diamond ore grow back as stone',data.regrow);
+  return{gear,crown:B.RECIPES.find(r=>r.id==='diamond_helmet').keys,stem:B.RECIPES.find(r=>r.id==='stemPlanks')};});
  for(const r of data.gear){if(['wood','stone','bark'].includes(r.material))assert.deepEqual(r.prior,[],r.id);else if(r.material==='iron')assert(r.prior.length&&r.prior.every(p=>p.endsWith('@grassland')),r.id+' '+r.prior);else assert(r.prior.length&&r.prior.every(p=>p.endsWith('@cave')),r.id+' '+r.prior);}
  assert.equal(data.crown.C,'rockChickCrown');assert.equal(data.stem.out,'planks');
  pass('every iron gear recipe takes a 초원 resource (stick/fibre), every diamond gear recipe a 동굴 resource (iron ingot, the diamond helmet the cave boss crown)',data.gear.filter(r=>r.prior.length));
@@ -77,19 +73,6 @@ try{
   const caps={cap:0,food:0,stem:0,other:[]};for(let n=0;n<30;n++){for(const id of ['cap','stem']){set(20,12,20+n,id);sim.harvest(P,{x:20,y:12,z:20+n,id:B.BID[id],normal:{x:0,y:1,z:0}});}
    for(const d of Object.values(sim.drops)){if(d.item in caps)caps[d.item]+=d.count;else caps.other.push(d.item);sim.physics.removeBody(d);delete sim.drops[d.id];}sim.tick++;}
   out.caps=caps;
-  // Labor pen on the flat spawn grass: fence ring, a chest, leaves; one adult root.
-  for(let x=-4;x<=2;x++){set(x,5,-3,'fence');set(x,5,2,'fence');}for(let z=-3;z<=2;z++){set(-4,5,z,'fence');set(2,5,z,'fence');}
-  set(-3,5,1,'storageChest');const chest=sim.chests['-3,5,1']={slots:Array(9).fill(null)};set(1,5,-2,'leaves');
-  const u=sim.companions.hatch(P,{x:-1,y:5,z:0,species:'root'});u.stage='adult';
-  for(let i=0;i<600&&!chest.slots.some(Boolean);i++)run(1);run(3);
-  out.labor={chest:chest.slots.filter(Boolean),floor:Object.values(sim.drops).map(d=>d.item),regrow:Object.values(sim.regrow).map(g=>({key:g.key,id:B.BLOCKS[g.id].id,s:Math.round((g.tick-sim.tick)*B.CFG.stepMs/1000)}))};
-  // A full chest: the unit harvests nothing more (or waits holding the yield) and nothing lands on the floor.
-  for(let k=0;k<9;k++)chest.slots[k]={id:'dirt',count:64};for(const g of Object.values(sim.regrow))g.tick=sim.tick+1;run(ticksForMs(4000));
-  out.full={task:u.task,cargo:u.cargo,activity:sim.companions.activity(u),floor:Object.values(sim.drops).map(d=>d.item),leaves:B.BLOCKS[sim.terrain.get(1,5,-2)].id};
-  chest.slots[0]=null;for(let i=0;i<600&&!chest.slots.some(s=>s&&s.id!=='dirt');i++)run(1);run(3);out.resumed=chest.slots.filter(s=>s&&s.id!=='dirt');
-  // Grade multiplier: gather ticks of one log for grades 1 and 4 (hardness 1500, root speed 2.5).
-  const ticks=grade=>{u.grade=grade;set(1,5,-2,'log');for(const g of Object.values(sim.regrow))delete sim.regrow[g.key];for(let k=0;k<9;k++)chest.slots[k]=null;let n=0;for(let i=0;i<600;i++){run(1);if(u.phase==='gather')n++;else if(n)break;}return n;};
-  out.gatherTicks={1:ticks(1),4:ticks(4)};out.expectTicks=Object.fromEntries([1,4].map(g=>{let p=0,n=0;while(p<1500){p+=B.CFG.stepMs*2.5*B.RANCH_RULES.laborGrade[g-1]/1000;n++;}return[g,n];}));
   // 0.37.0 system gaps: natural healing (after 5 s unhurt, 1 HP/s), night 초원 wildlife hunting (D-158), the cold killing
   // (D-159, no floor) and the recipe/loot changes (D-154 bark, D-156 gold potion, D-157 crowns, the relic retired).
   sim.physics.teleport(P,outside);run(2);P.hp=50;P.hurtTick=sim.tick;run(ticksForMs(4000));const h4=P.hp;run(ticksForMs(3000));out.regen=[h4,P.hp];
@@ -97,25 +80,19 @@ try{
   sim.tick=Math.round(B.CFG.dayMs/2/B.CFG.stepMs);run(2);out.night={day,night:[sim.night(),root.wildState,root.targetId===P.id]};
   sim.physics.removeBody(root);delete sim.actors[root.id];sim.physics.teleport(P,{x:0,y:-1,z:-56});P.hp=3;run(ticksForMs(4500));out.coldDeath=[P.dead,P.hp];
   const keys=id=>B.RECIPES.find(r=>r.id===id).keys;
-  out.recipes={potion:keys('mergePotion'),chest:keys('diamond_chest').C,boots:keys('diamond_boots').C,rootLoot:B.SPECIES.root.wild.loot.map(([id])=>id),bark:B.ITEMS.bark_chest?.material,retired:['relic','leather','leather_chest'].map(id=>!!B.ITEMS[id])};
+  out.recipes={chest:keys('diamond_chest').C,boots:keys('diamond_boots').C,rootLoot:B.SPECIES.root.wild.loot.map(([id])=>id),bark:B.ITEMS.bark_chest?.material,retired:['relic','leather','leather_chest'].map(id=>!!B.ITEMS[id])};
   return out;}finally{sim.free();}});
- assert.deepEqual(data.grade,[1000,1500,2250,3375]);
- assert.deepEqual(sim.gatherTicks,sim.expectTicks);assert(sim.gatherTicks[1]>=3*sim.gatherTicks[4]);
- pass('labor efficiency ×1.5 per grade above 1 (grade 4 ×3.375): one log takes '+sim.gatherTicks[1]+' gather ticks at grade 1 and '+sim.gatherTicks[4]+' at grade 4',{factors:data.grade,ticks:sim.gatherTicks});
  const G=sim.gear;
  assert.deepEqual(G.caveBare,['cave',350,400,2000,'cold']);assert.deepEqual(G.caveIron,['cave',1000,1000,1000,null]);assert.deepEqual(G.caveDiamond,['cave',1500,1600,600,null]);
  assert.deepEqual(G.caveIronNoHelmet,['cave',1000,1000,2000,'cold']);assert.deepEqual(G.fungalIron,['fungal',350,400,2000,'spore']);assert.deepEqual(G.fungalDiamond,['fungal',1000,1000,1000,null]);
  assert.deepEqual(G.grassBare,['grassland',1000,1000,1000,null]);assert.deepEqual(G.grassDiamond,['grassland',1500,1600,600,null]);
  assert.deepEqual(sim.heldPick,[1000,400,true,false]);
  assert(sim.regen[0]===50&&sim.regen[1]>=51&&sim.regen[1]<=53,'regen '+sim.regen);assert.deepEqual(sim.night,{day:[false,'neutral'],night:[true,'retaliating',true]});assert.deepEqual(sim.coldDeath,[true,0]);
- assert.deepEqual(sim.recipes,{potion:{C:'crystalShard',G:'gold',F:'food'},chest:'rootCrown',boots:undefined,rootLoot:['seed','food','bark'],bark:'bark',retired:[false,false,false]});
+ assert.deepEqual(sim.recipes,{chest:'rootCrown',boots:undefined,rootLoot:['seed','food','bark'],bark:'bark',retired:[false,false,false]});
  pass('0.37.0: 5 s unhurt then 1 HP/s healing ('+sim.regen.join(' → ')+'), a 초원 root turns on the player at night only, the cold kills (3 HP → dead), bark armor from root loot, gold in the merge potion, the 꽃 crown in the diamond chestplate',{regen:sim.regen,night:sim.night,recipes:sim.recipes});assert.deepEqual(sim.combat,{dealt:20,taken:20});assert.equal(sim.cold,3);assert.equal(sim.coldIron,0);
  pass('gear factors by realm: cave bare ×0.35/×0.4/×2 + cold, iron normal, diamond ×1.5/×1.6/×0.6; fungal needs diamond (spore); a bare strike in the cave deals 50→20 and takes 10→20; cold drains 1 HP/s, iron armor stops it',{gear:G,combat:sim.combat,cold:sim.cold});
  assert.equal(sim.caps.cap,30);assert.equal(sim.caps.stem,30);assert(sim.caps.food>=5&&sim.caps.food<=15,'cap fruit '+sim.caps.food);assert.deepEqual(sim.caps.other,[]);
  pass('breaking a mushroom cap drops the cap block (fruit 1 in 3: '+sim.caps.food+'/30) and a stem drops the stem block',sim.caps);
- const items=sim.labor.chest.map(s=>s.id).sort();assert(items.includes('seed')&&items.includes('leaves'),JSON.stringify(sim.labor));assert.deepEqual(sim.labor.floor,[]);assert(sim.labor.regrow.length===1&&sim.labor.regrow[0].id==='leaves'&&sim.labor.regrow[0].s<=20&&sim.labor.regrow[0].s>=12,JSON.stringify(sim.labor.regrow));
- assert.deepEqual(sim.full.floor,[]);assert(sim.full.task==='full'&&sim.full.activity.includes('가득'),JSON.stringify(sim.full));assert(sim.resumed.length>0);
- pass('one labor harvest puts every drop into the chest (leaves → '+items.join(' + ')+'), nothing on the floor; with the chest full the unit stops and waits, and resumes when a slot frees',{labor:sim.labor,full:sim.full,resumed:sim.resumed});
 
  // Reachability of the whole progression on seed 190725, without debug: count the blocks it needs around spawn and the
  // three boss structures (ore bands are deterministic from the seed). Needs: 27 iron ore (iron tier + diamond handles),
@@ -186,25 +163,6 @@ try{
  await pc.locator('[data-recipe="iron_sword"]').click();const ironCard=await pc.evaluate(()=>document.querySelector('#recipe-detail').textContent);assert(ironCard.includes('나뭇가지 ×1 (초원 자원)'),ironCard);
  await pc.keyboard.press('Tab');
  pass('the diamond helmet recipe card shows "금광석 왕관 ×1 (동굴 자원)" and crafts from 5 diamonds + the cave boss crown; the iron sword card tags the stick as a 초원 resource',{card,ironCard});
-
- // 2e. A snail farm built from placed mushroom caps: a fence ring (terrain edits), a chest and three caps placed by
- // right-click, a snail egg hatched in it and grown (debug), which then harvests the caps into the chest.
- await teleport(pc,{x:-.5,y:5.05,z:-.5});await pause(pc,400);
- await pc.evaluate(()=>{const sim=Bloom.app.sim,s=(x,z,id)=>sim.terrain.set(x,5,z,Bloom.BID[id]);for(let x=-5;x<=3;x++){s(x,-4,'fence');s(x,3,'fence');}for(let z=-4;z<=3;z++){s(-5,z,'fence');s(3,z,'fence');}sim.terrain.set(0,5,-2,0);});
- await pc.locator('#debug-kit').dispatchEvent('click');await pc.locator('#debug-ranch').dispatchEvent('click');await give(pc,[['storageChest',1]]);
- await hold(pc,'storageChest');await placeOn(pc,-3,5,-2,'storageChest');await hold(pc,'cap');for(const [x,z]of [[1,-2],[1,1],[-3,1]])await placeOn(pc,x,5,z,'cap');
- await hold(pc,'mushroomSnailEgg');await placeOn(pc,-1,5,1,'mushroomSnailEgg');await pc.evaluate(()=>{const sim=Bloom.app.sim;for(const e of Object.values(sim.eggs))e.hatchTick=sim.tick+20;});
- await pc.waitForFunction(()=>Bloom.app.sim.companions.all().some(u=>u.kind==='mushroom-snail'),null,{timeout:6000});await pc.locator('#debug-adult').dispatchEvent('click');
- const pen=await pc.evaluate(()=>{const u=Bloom.app.sim.companions.all().find(u=>u.kind==='mushroom-snail'),r=Bloom.app.sim.ranch.region(u.cell.x,u.cell.y,u.cell.z);return{open:r.open,cells:r.cells.size,unit:u.id};});assert(!pen.open,'farm pen open: '+JSON.stringify(pen));
- await pc.waitForFunction(id=>Bloom.app.sim.companions.data.units[id]?.phase==='gather',pen.unit,{timeout:20000});
- await pc.waitForFunction(()=>Bloom.app.sim.chests['-3,5,-2']?.slots.some(s=>s?.id==='cap'),null,{timeout:20000});
- // Review shot: stand south of the pen, outside the fence, looking at the snail.
- await teleport(pc,{x:-.5,y:5.05,z:4.6});await pc.waitForFunction(()=>!document.querySelector('#toast').classList.contains('show'),null,{timeout:6000});
- await pc.evaluate(()=>Bloom.app.renderer.setZoom(6));await pause(pc,500);await shot(pc,'05-snail-cap-farm');
- report.farmShot=await pc.evaluate(id=>{const u=Bloom.app.sim.companions.data.units[id];return{pos:u.pos,task:u.task,phase:u.phase,sample:Bloom.app.renderer.unitRig.samples.find(s=>s.key===id)||null};},pen.unit);
- const farm=await pc.evaluate(()=>({chest:Bloom.app.sim.chests['-3,5,-2'].slots.filter(Boolean),regrow:Object.values(Bloom.app.sim.regrow).map(g=>[g.key,Bloom.BLOCKS[g.id].id]),floor:Object.values(Bloom.app.sim.drops).map(d=>d.item)}));
- assert(farm.regrow.some(([,id])=>id==='cap'));assert(!farm.floor.includes('cap'));
- pass('a snail farm from placed mushroom caps: the adult snail harvests a placed cap into the chest and the cap regrows',{pen,farm});
 
  assert.deepEqual(errors,[]);
  Object.assign(report,{result:'PASS',elapsedMs:Date.now()-began,errors});console.log(JSON.stringify({result:'PASS',checks:report.checks.length,elapsedMs:report.elapsedMs,reachability:{spawn:report.reachability.spawn,dungeon:report.reachability.dungeon.diamondOre}}));

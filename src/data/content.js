@@ -48,14 +48,13 @@ const BLOCKS=[
  {id:'snow',name:'눈덮인 흙',color:'#dae9ed',hardness:650,drop:'dirt',tool:'pick',tier:0},
  {id:'mycelium',name:'균사 흙',color:'#b79bc4',hardness:650,drop:'dirt',tool:'pick',tier:0},
  {id:'lootChest',name:'봉인된 보물함',color:'#bf935d',hardness:Infinity,tier:99,station:'loot'},
- // Companion eggs (D-103): an item that places as a non-solid block, drawn with the species' egg PNG instead of a cube.
+ // Retired companion egg blocks (0.41.0): the slots stay because block ids are saved terrain edits; they are no longer items.
  // Appended only: block ids are saved terrain edits, so existing indices never move.
- {id:'rootEgg',name:'뿌리 알',color:'#d8c79a',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'root'},
- {id:'rockChickEgg',name:'바위 병아리 알',color:'#c8c2b4',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'rock-chick'},
- {id:'mushroomSnailEgg',name:'버섯 달팽이 알',color:'#e0c4cf',hardness:300,tool:'none',tier:0,solid:false,mesh:false,egg:'mushroom-snail'},
- // Ranching (D-103/D-106, 0.34.0). A fence and a closed gate are one solid voxel in the collider, but count as 1.5 blocks
- // high: owned units never cross, climb or stand on them (Ranch.passable/standable) and, since 0.35.1, a body (player or
- // creature) whose feet are below its top (1.5, lifted just over the 1.52 jump apex) cannot move into one or auto-step it
+ {id:'rootEgg',name:'뿌리 알',color:'#d8c79a',hardness:300,tool:'none',tier:0,solid:false,mesh:false,retired:true},
+ {id:'rockChickEgg',name:'바위 병아리 알',color:'#c8c2b4',hardness:300,tool:'none',tier:0,solid:false,mesh:false,retired:true},
+ {id:'mushroomSnailEgg',name:'버섯 달팽이 알',color:'#e0c4cf',hardness:300,tool:'none',tier:0,solid:false,mesh:false,retired:true},
+ // A fence and a closed gate are one solid voxel in the collider, but count as 1.5 blocks
+ // high (Minecraft rule): a body (player or creature) whose feet are below its top (1.5, lifted just over the 1.52 jump apex) cannot move into one or auto-step it
  // (Physics.fenceClamp). Both are drawn as posts
  // and rails (Renderer.drawFences), not as cubes. The open gate is its own non-solid block so the voxel collider opens.
  {id:'fence',name:'나무 울타리',color:'#b48552',hardness:1000,tool:'axe',tier:0,mesh:false,fence:true},
@@ -83,10 +82,9 @@ const WEAPONS={
 };
 const ITEMS={};
 function defineItem(id,name,icon,opts={}){ITEMS[id]={id,name,icon,stack:64,...opts};}
-for(const b of BLOCKS)if(!['air','grass','bedrock','altar','coalOre','ironOre','goldOre','diamondOre','lootChest','fenceGateOpen'].includes(b.id))defineItem(b.id,b.name,({log:'▥',leaves:'✿',stone:'◆',dirt:'■',planks:'▤',workbench:'▦',furnace:'▣',torch:'♨',cap:'🍄',stem:'▥',trophy:'✧',fence:'#',fenceGate:'⊓',storageChest:'▤'})[b.id]||'◆',{block:BID[b.id]});
+for(const b of BLOCKS)if(!b.retired&&!['air','grass','bedrock','altar','coalOre','ironOre','goldOre','diamondOre','lootChest','fenceGateOpen'].includes(b.id))defineItem(b.id,b.name,({log:'▥',leaves:'✿',stone:'◆',dirt:'■',planks:'▤',workbench:'▦',furnace:'▣',torch:'♨',cap:'🍄',stem:'▥',trophy:'✧',fence:'#',fenceGate:'⊓',storageChest:'▤'})[b.id]||'◆',{block:BID[b.id]});
 for(const [id,name,icon]of [['stick','나뭇가지','╱'],['coal','석탄','●'],['charcoal','목탄','●'],['rawIron','철 원석','◆'],['iron','철 주괴','▰'],['rawGold','금 원석','◆'],['gold','금 주괴','▰'],['diamond','다이아몬드','💎'],['seed','씨앗','🌰'],['food','열매','🍓'],['fiber','질긴 섬유','〰'],['bark','질긴 껍질','▱'],['heart','화원의 심장','✺'],['bucket','빈 물통','▣'],['waterBucket','물통','▣'],['crystalShard','공명 수정 조각','◇'],['healingSalve','치유 연고','✚']])defineItem(id,name,icon,{...(['bucket','waterBucket'].includes(id)?{stack:1}:{})});
 // D-104 merge potion: thrown like a splash potion (right-click), merges owned adults hit by the splash (Simulation.splashPotion).
-defineItem('mergePotion','합성 물약','⚗',{stack:16,throwable:true});
 // 0.35.1 boss crowns (doc §3.0 "보스는 재료와 왕관을 떨군다"): every structure boss drops its own crown (SPECIES.boss.crown).
 // The cave boss's crown goes into the diamond helmet, so the fungal tier needs the cave boss killed (doc §3.3).
 for(const [id,name]of [['rootCrown','금빛 꽃 왕관'],['rockChickCrown','금광석 왕관'],['mushroomSnailCrown','금빛 버섯 왕관']])defineItem(id,name,'♛',{stack:16,crown:true});
@@ -104,7 +102,7 @@ for(const [mat,name,defense,weight]of [['bark','껍질',5,2],['iron','철',10,5]
   defineItem(mat+'_'+part,name+' '+pn,'♜',{stack:1,armor:part,defense:defense*k,weight:weight*k,material:mat});
 // Item ids removed in 0.31.0, 0.33.0 and 0.37.0 (leather armor → bark, the unused 고대의 유물); Simulation.retireEquipment drops them from older saves.
 // 0.33.0 retired the warden summoning sigil together with the altar summon (bosses now live in structures).
-const RETIRED_ITEM_IDS=new Set(['arrow','sigil','relic','leather',...['helmet','chest','boots'].map(t=>'leather_'+t),
+const RETIRED_ITEM_IDS=new Set(['arrow','sigil','relic','leather','rootEgg','rockChickEgg','mushroomSnailEgg','mergePotion',...['helmet','chest','boots'].map(t=>'leather_'+t),
  ...['wood','stone','iron','diamond','gold'].flatMap(m=>['shovel','greatsword','dagger','bow','shield'].map(t=>m+'_'+t)),
  ...['pick','sword','spear','axe','helmet','chest','boots'].map(t=>'gold_'+t),
  ...['leather','iron','gold','diamond'].map(m=>m+'_legs')]);
@@ -131,10 +129,9 @@ recipe('diamond_helmet','diamond_helmet',1,['MMM','MCM'],{M:'diamond',C:'rockChi
 recipe('stemPlanks','planks',4,['S'],{S:'stem'});
 recipe('healingSalve','healingSalve',1,['FF','CS'],{F:'food',C:'crystalShard',S:'fiber'},2);
 recipe('trophy','trophy',1,[' D ','IHI','PPP'],{D:'diamond',I:'iron',H:'heart',P:'planks'},3,'boss');
-// Ranch (0.34.0), Minecraft-shaped: fence = planks/stick/planks ×2 rows → 3, gate = stick/planks/stick ×2 rows, chest = planks ring.
-// Merge potion = 공명 수정 조각 / 금 주괴 / 열매 in a column (D-156: unit merging, the few-elite growth, is what gold is for).
+// Building blocks, Minecraft-shaped: fence = planks/stick/planks ×2 rows → 3, gate = stick/planks/stick ×2 rows, chest = planks ring.
 recipe('fence','fence',3,['PSP','PSP'],{P:'planks',S:'stick'},3);recipe('fenceGate','fenceGate',1,['SPS','SPS'],{P:'planks',S:'stick'},3);
-recipe('storageChest','storageChest',1,['PPP','P P','PPP'],{P:'planks'},3);recipe('mergePotion','mergePotion',1,['C','G','F'],{C:'crystalShard',G:'gold',F:'food'},3);
+recipe('storageChest','storageChest',1,['PPP','P P','PPP'],{P:'planks'},3);
 // Equipment progression (0.35.1, doc §3.3 draft numbers). A slot's tier is a material step (GEAR_TIERS); a realm asks for
 // REALMS[realm].gear. Factors are integer per-mille (1000 = ×1):
 //  below the realm's tier  곡괭이 → gathering ×0.35, 무기 → attack ×0.4, 방어구 → damage taken ×2 and the realm hazard
@@ -166,13 +163,14 @@ const SMELT={rawIron:{out:'iron',ms:6000},rawGold:{out:'gold',ms:6000},log:{out:
 const RPG_SKILLS=Object.freeze({vitality:Object.freeze({name:'생명력',description:'최대 생명력 +25'}),might:Object.freeze({name:'공격력',description:'모든 공격 피해 +5'})});
 // The G2 tutorial chain (0.36.0): the HUD guide shows the first quest whose progress flag is not set, the journal lists all.
 // Every id is a Simulation.progress flag set by the sim (crafting/pickup markItem, tickHazards for realms and gear tiers,
-// tickBossStructures/completeBoss for bosses, Companions.command for the first pet selection). `toward`: the HUD adds the direction and
+// tickBossStructures/completeBoss for bosses, Combat.hit for the first pet strike, Simulation.tame for the first tamed creature). `toward`: the HUD adds the direction and
 // distance of the nearest structure of that type. Hints stay one short line (the HUD has no scrolling).
 const QUESTS=Object.freeze([
  Object.freeze({id:'log',title:'첫 원목',hint:'나무 줄기 가까이 가서 꾹 눌러 캐세요.'}),
  Object.freeze({id:'workbench',title:'제작대',hint:'가방(Tab)에서 판자 → 제작대를 만드세요.'}),
  Object.freeze({id:'wood_pick',title:'나무 곡괭이',hint:'제작대를 놓고 우클릭 · 판자 3 + 나뭇가지 2'}),
- Object.freeze({id:'pet',title:'펫과 싸우기',hint:'곁의 뿌리가 첫 펫이에요 · Z 키로 꺼내 공격해 보세요.'}),
+ Object.freeze({id:'pet',title:'펫과 싸우기',hint:'곁의 뿌리가 첫 펫이에요 · 적이 오면 알아서 같이 싸워요.'}),
+ Object.freeze({id:'tamed',title:'새 펫 길들이기',hint:'먹이를 들고 야생 생물에 우클릭 3번 · 뿌리 열매 · 병아리 씨앗 · 달팽이 잎'}),
  Object.freeze({id:'stone_pick',title:'석기 도구',hint:'돌을 캐서 돌 곡괭이·돌 검을 만드세요.'}),
  Object.freeze({id:'bossFound',title:'보스 구조물 찾기',hint:'초원의 꽃 고리로 가세요.',toward:'grove'}),
  Object.freeze({id:'boss',title:'보스 처치',hint:'뿌리 거인을 쓰러뜨리세요 · Shift로 구르면 공격을 피해요.',toward:'grove'}),
