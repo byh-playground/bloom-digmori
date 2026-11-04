@@ -9,7 +9,7 @@ const RIG_PARTS=Object.freeze(['front','side','back'].flatMap(v=>['head','torso'
 // cells (row 0 = seen from behind, row 1 = from the front; crouch, ball, ball upside down, opening, landing). The cells keep
 // the AI drawing's own placement: feet on row ROLL_SHEET.feet in the standing frames, `scale` rig units per cell pixel.
 const ROLL_SHEET=Object.freeze({cell:256,frames:6,feet:234,scale:.965,hold:[.1,.27,.5,.72,.9]});
-const RIG_WEAPON_SCALE=Object.freeze({sword:.7,spear:.64,axe:.64,pick:.64});
+const RIG_WEAPON_SCALE=Object.freeze({sword:.7,spear:.64,axe:.64,pick:.64,staff:.64});
 // Attack angles in degrees from straight up, clockwise, for a rig facing screen-left: rest, wind-up, strike end.
 const RIG_SWINGS=Object.freeze([[-20,40,-95],[-20,-130,55],[-20,15,-160]]);
 // Attack timeline in rig progress: wind-up ends at strikeStart, the strike lands by strikeEnd, rest pose at rest.
@@ -29,8 +29,8 @@ const RIG_MATERIAL_COLOR=Object.freeze({
 });
 const RIG_PART_KIND=key=>/_cap$/.test(key)?'cap':/_jacket$/.test(key)?'jacket':/_foot$/.test(key)?'foot':null;
 // Held item → rig art. Items without a drawing (blocks, food…) show an empty hand.
-const RIG_WEAPONS=Object.freeze(['sword','spear','axe','pick']);
-const rigWeaponOf=item=>item?.weapon==='staff'?'spear':item?.weapon||(item?.tool==='pick'?'pick':null);
+const RIG_WEAPONS=Object.freeze(['sword','spear','axe','pick','staff']);
+const rigWeaponOf=item=>item?.weapon||(item?.tool==='pick'?'pick':null);
 // World placement: a 512 px canvas whose ground row (420) sits on the actor's feet; 200 rig units ≈ the old sprout height.
 const RIG_VIEW=Object.freeze({canvas:512,ground:420,metersPerUnit:.0092});
 function rigEase(t,keys){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){if(t<=keys[i][0]){const a=keys[i-1],b=keys[i];let u=(t-a[0])/(b[0]-a[0]);u=u*u*(3-2*u);return a[1]+(b[1]-a[1])*u}}return keys[keys.length-1][1]}
@@ -90,7 +90,7 @@ class PlayerRig{
   if(look.hurt)p.face='hurt';
   return p;
  }
- // look: {anim, view:'front'|'side'|'back', flip, progress, combo, weapon:null|'sword'|'spear'|'axe'|'pick',
+ // look: {anim, view:'front'|'side'|'back', flip, progress, combo, weapon:null|'sword'|'spear'|'axe'|'pick'|'staff',
  //  material (held weapon/tool), helmet/chest: material|null (null = part not drawn), boots: material|'base', hurt}
  draw(ctx,look,seconds,origin){
   const p=this.pose(look,seconds),V=this.variants,U=origin.scale,OX=origin.x,GY=origin.y;let view=look.view,headKey=null;
@@ -133,7 +133,7 @@ class PlayerRig{
  // Swipe band along the weapon arc, drawn only around the strike frames.
  smear(ctx,p,look,cx,cy,U){
   const S=p.swing,q=S.q;if(q<S.ts||q>S.te+.14)return;
-  const armed=!!look.weapon,len=armed?this.grip[look.weapon][1]*RIG_WEAPON_SCALE[look.weapon]:30,head=p.weaponAngle,fade=q<=S.te?1:1-(q-S.te)/.14;
+  const armed=!!look.weapon,len=armed?this.grip[look.weapon][1]*RIG_WEAPON_SCALE[look.weapon]*(look.weapon==='staff'?.5:1):30,head=p.weaponAngle,fade=q<=S.te?1:1-(q-S.te)/.14;
   let r0=(armed?24:14)+6,r1=24+len*.98,tail;const span=armed?2.6:.9;
   tail=head<S.from?Math.min(S.from,head+span):Math.max(S.from,head-span);
   ctx.beginPath();

@@ -64,6 +64,7 @@ try{
  await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor(),p=s.petsOf(a.id)[0];p.sit=true;s.physics.teleport(p,{x:a.pos.x+8,y:a.pos.y+.3,z:a.pos.z+8});});
  await pause(page,500);
  const wild=await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor(),w=s.addCreature('root',{x:a.pos.x-2.2*Math.sin(Bloom.app.renderer.camera.yaw),y:a.pos.y+.6,z:a.pos.z-2.2*Math.cos(Bloom.app.renderer.camera.yaw)});w.ai.cooldown=1e9;w.homePos={...w.pos};return w.id;});
+ await page.evaluate(()=>{const s=Bloom.app.sim;for(const d of Object.values(s.drops)){s.physics.removeBody(d);delete s.drops[d.id];}});// the fight's loot must not be picked up mid-count
  await page.locator('#debug-kit').dispatchEvent('click');await hold(page,'food');const foodBefore=await count(page,'food');
  for(let i=1;i<=3;i++){const at=await aimAt(page,wild);assert(at,'cannot aim at the wild creature');await page.mouse.click(at.x,at.y,{button:'right'});
   await page.waitForFunction(({id,i})=>{const w=Bloom.app.sim.actors[id];return w.ownerId?i===3:(w.fed||0)===i;},{id:wild,i},{timeout:3000});await pause(page,250);}
