@@ -10,7 +10,7 @@ class Simulation {
  // creatures near its owner on its own, sits when told, and stands up again after a while when it falls. Wild creatures are
  // tamed by feeding their favourite food (SPECIES[kind].food); a tamed baby grows up by being fed too.
  petDef(actor){const sp=SPECIES[actor.speciesId],adult=actor.petStage!=='baby',k=adult?1:CFG.pets.babyFactor;return{...sp.wild,damage:Math.round(sp.petDamage*k),hp:Math.round(sp.wild.hp*(adult?CFG.pets.adultHp:CFG.pets.babyHp)),speed:CFG.pets.speed};}
- petsOf(ownerId){return Object.values(this.actors).filter(a=>a.ownerId===ownerId).sort((a,b)=>cmp(a.id,b.id));}
+ petsOf(ownerId){return Object.values(this.actors).filter(a=>a.ownerId===ownerId&&!a.dead).sort((a,b)=>cmp(a.id,b.id));}
  setPetStage(pet,stage){const ratio=pet.maxHp>0?pet.hp/pet.maxHp:1;pet.petStage=stage;pet.maxHp=this.petDef(pet).hp;pet.hp=Math.max(1,Math.round(pet.maxHp*ratio));}
  addPet(owner,speciesId,stage='adult',pos=null){if(!SPECIES[speciesId]||this.petsOf(owner.id).length>=CFG.pets.max)return null;
   const slot=this.petsOf(owner.id).length,id='pet:'+ ++this.sequence,at=pos||this.petSlot({id,ownerId:owner.id},owner,slot),a=this.createActor(id,at,speciesId);
@@ -18,8 +18,6 @@ class Simulation {
  // Where a trailing pet stands: beside the owner (the shoulder camera is behind the owner, so a pet on that line hides it).
  petSlot(pet,owner,index=null){const mine=this.petsOf(owner.id),i=index??Math.max(0,mine.findIndex(p=>p.id===pet.id)),f=bodyHeading(owner),side={x:-f.z,y:0,z:f.x},col=[-1,1,0][i%3],row=Math.floor(i/3);
   return{x:owner.pos.x-f.x*(.5+row*1.4)+side.x*col*1.6,y:owner.pos.y+.2,z:owner.pos.z-f.z*(.5+row*1.4)+side.z*col*1.6};}
- revivePet(pet){const owner=this.actors[pet.ownerId];if(!owner||owner.dead||owner.suspended){pet.respawn=1000;return;}
-  pet.dead=false;pet.hp=Math.max(1,Math.round(pet.maxHp*.5));pet.combat=Combat.state();pet.knock=0;pet.petTargetId=null;pet.pos=this.petSlot(pet,owner);pet.previous={...pet.pos};pet.velocity={x:0,y:0,z:0};this.physics.addActor(pet);this.emit('pet-revive',pet);}
  tame(owner,wild){this.progress.tamed=true;wild.ownerId=owner.id;wild.wildState='pet';wild.enemy=false;wild.targetId=null;wild.homePos=null;wild.structureKey=null;wild.fed=0;wild.sit=false;wild.petTargetId=null;this.setPetStage(wild,'baby');wild.hp=wild.maxHp;this.emit('pet-tamed',wild,{owner:owner.id,name:SPECIES[wild.speciesId].name});}
  petAi(actor){
   const owner=this.actors[actor.ownerId],def=this.petDef(actor),idle={move:{x:0,y:0,z:0},speed:0,jump:false};if(!owner||owner.suspended)return idle;
@@ -164,8 +162,8 @@ class Simulation {
  }
  kill(actor,source){
   if(actor.dead)return;
-  // A fallen pet is not lost: it stands up beside its owner after CFG.pets.reviveMs (Simulation.revivePet).
-  if(actor.ownerId){actor.dead=true;Combat.resetCombo(actor.combat);actor.combat.state='dead';actor.combat.action=null;actor.respawn=CFG.pets.reviveMs;actor.petTargetId=null;this.emit('death',actor);this.physics.removeBody(actor);actor.body=null;return;}
+  // A pet that falls is gone for good (like a Minecraft wolf): no loot, the body leaves with the death animation.
+  if(actor.ownerId){actor.dead=true;Combat.resetCombo(actor.combat);actor.combat.state='dead';actor.combat.action=null;actor.respawn=CFG.respawn;actor.petTargetId=null;this.emit('death',actor);this.emit('pet-died',actor,{name:SPECIES[actor.speciesId].name});this.physics.removeBody(actor);actor.body=null;return;}
   actor.dead=true;Combat.resetCombo(actor.combat);actor.combat.state='dead';actor.combat.action=null;actor.respawn=CFG.respawn;this.emit('death',actor);
   if(actor.speciesId){this.physics.removeBody(actor);actor.body=null;if(actor.boss)this.completeBoss(actor,source);else for(const [id,count]of SPECIES[actor.speciesId].wild.loot)this.spawnDrop(id,count,actor.pos);this.clearDungeonIfEmpty(actor.structureKey,actor);}
   else{const i=actor.inventory;for(const s of [...i.slots,...i.grid,i.cursor,...Object.values(i.armor)])if(s)this.spawnDrop(s.id,s.count,actor.pos);actor.inventory=Inventory.empty();const b=this.physics.world.getRigidBody(actor.body);b.setBodyType(this.R.RigidBodyType.Fixed,true);}
@@ -277,7 +275,7 @@ class Simulation {
  step(context){const started=performance.now();this.presentationSequence=0;this.silent=!!(context.recovering||context.replaying);const inputs=new Map(context.inputs.map(i=>[i.playerId,i]));
   const actors=Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id)),playerInputs=new Map();
   for(const e of [...actors,...Object.values(this.drops),...Object.values(this.projectiles)])e.previous={...e.pos};
-  for(const actor of actors){actor.anim+=CFG.stepMs;if(!actor.dead)continue;actor.respawn-=CFG.stepMs;if(actor.respawn<=0){if(actor.ownerId){this.revivePet(actor);continue;}if(actor.enemy||actor.speciesId||actor.boss){delete this.actors[actor.id];continue;}actor.dead=false;actor.hp=actor.maxHp;actor.combat=Combat.state();this.physics.world.getRigidBody(actor.body).setBodyType(this.R.RigidBodyType.Dynamic,true);this.physics.teleport(actor,this.terrain.spawn);}}
+  for(const actor of actors){actor.anim+=CFG.stepMs;if(!actor.dead)continue;actor.respawn-=CFG.stepMs;if(actor.respawn<=0){if(actor.enemy||actor.speciesId||actor.boss){delete this.actors[actor.id];continue;}actor.dead=false;actor.hp=actor.maxHp;actor.combat=Combat.state();this.physics.world.getRigidBody(actor.body).setBodyType(this.R.RigidBodyType.Dynamic,true);this.physics.teleport(actor,this.terrain.spawn);}}
   this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick);
   // Phase 1: deterministic actor-ID order for commands and ALL voxel edits.
   for(const actor of actors){if(actor.dead||actor.suspended||actor.enemy||actor.speciesId||actor.boss)continue;const entry=inputs.get(actor.id),input=entry?decodeInput(entry.input):neutralInput();actor.inventory.selected=input.selected;actor.facing=direction(input.yaw,input.pitch);actor.aimTarget=this.resolveTarget(actor,input);
@@ -320,7 +318,7 @@ class Simulation {
  night(){return Math.cos(TAU*this.dayPhase())<-.25;}
  clock(){const minutes=Math.floor(((.5+this.dayPhase())%1)*24*60);return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');}
 
- applyMembership({epoch,players,activePlayers=players,joined=[],left=[]}){this.epoch=epoch;for(const id of left){const a=this.actors[id];if(a){Inventory.close(a,this);this.physics.removeBody(a);delete this.actors[id];for(const pet of this.petsOf(id)){this.physics.removeBody(pet);delete this.actors[pet.id];}}}
+ applyMembership({epoch,players,activePlayers=players,joined=[],left=[]}){this.epoch=epoch;for(const id of left){const a=this.actors[id];if(a){Inventory.close(a,this);this.physics.removeBody(a);delete this.actors[id];for(const pet of Object.values(this.actors).filter(p=>p.ownerId===id)){if(pet.body!==null)this.physics.removeBody(pet);delete this.actors[pet.id];}}}
   for(const id of [...joined].sort(cmp))this.addPlayer(id);
   for(const id of players){const a=this.actors[id];if(!a)throw Error('참가자 배우 없음');const inactive=!activePlayers.includes(id);if(a.suspended!==inactive){a.suspended=inactive;a.combat=Combat.state();const b=this.physics.world.getRigidBody(a.body);if(b){b.setLinvel({x:0,y:0,z:0},true);b.setBodyType(inactive?this.R.RigidBodyType.Fixed:this.R.RigidBodyType.Dynamic,true);}}}
  }
