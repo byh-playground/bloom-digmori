@@ -54,12 +54,14 @@ class Controls {
   for(const b of document.querySelectorAll('[data-touch]')){const key=b.dataset.touch;b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);if(key==='jump')this.actions.set('move.jump','touch-swim-rise',true);else if(key==='roll')this.actions.set('move.context','touch-context',true);});for(const evt of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(evt,()=>{if(key==='jump')this.actions.set('move.jump','touch-swim-rise',false);else if(key==='roll')this.actions.set('move.context','touch-context',false);});}
   // 0.36.0 on-screen under-feet placement (mobile pillar-up): the same right press with the under-feet bit as a mid-air
   // right click on the player. Shown by updatePlaceButton only while airborne with a placeable block held.
+  const muster=$('mobile-muster');muster.addEventListener('pointerdown',e=>{e.preventDefault();if(app.modal())return;muster.setPointerCapture(e.pointerId);this.pressAction('right','touch',true);});for(const evt of ['pointerup','pointercancel','lostpointercapture'])muster.addEventListener(evt,()=>this.releaseAction('right'));
   const place=$('mobile-place');place.addEventListener('pointerdown',e=>{e.preventDefault();if(app.modal())return;place.setPointerCapture(e.pointerId);this.pressAction('right','touch',true);});
   for(const evt of ['pointerup','pointercancel','lostpointercapture'])place.addEventListener(evt,()=>this.releaseAction('right'));
   $('rotate-request').onclick=async()=>{try{if(document.documentElement.requestFullscreen&&!document.fullscreenElement)await document.documentElement.requestFullscreen();if(screen.orientation?.lock)await screen.orientation.lock('landscape');}catch(err){app.toast('기기 자동 회전을 켜고 가로로 돌려주세요.');}};
  }
  // The under-feet button is contextual: airborne (not swimming), alive, no menu, holding a placeable non-egg block.
- updatePlaceButton(){const a=this.app.actor(),s=a&&Inventory.selected(a.inventory),def=s&&ITEMS[s.id],show=!!a&&!a.dead&&!a.grounded&&!a.swim?.inWater&&!this.app.modal()&&!!def?.block,b=$('mobile-place');if(b.hidden===show)b.hidden=!show;}
+ updatePlaceButton(){const a=this.app.actor(),s=a&&Inventory.selected(a.inventory),def=s&&ITEMS[s.id],show=!!a&&!a.dead&&!a.grounded&&!a.swim?.inWater&&!this.app.modal()&&!!def?.block,b=$('mobile-place');if(b.hidden===show)b.hidden=!show;
+  const staff=!!a&&!a.dead&&!this.app.modal()&&def?.weapon==='staff',m=$('mobile-muster');if(m.hidden===staff)m.hidden=!staff;}
  locked(){return document.pointerLockElement===this.app.renderer.canvas;}
  centerPointer(){const c=this.app.renderer.canvas;this.pointer.x=c.clientWidth/2;this.pointer.y=c.clientHeight/2;this.pointer.shown=true;}
  // The cursor highlight shows for a mouse, and for a touch only while the finger is down (and briefly after).

@@ -80,14 +80,34 @@ try{
  pass('feeding the baby three times grows it into an adult (more health)',{before:tamed,after:grown});
 
  await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor();for(const p of s.petsOf(a.id))p.sit=false;});
- // 7. At most three pets: a fourth wild creature stays wild.
+ // 7. At most CFG.pets.max pets: one more wild creature stays wild.
  const extra=await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor(),w=s.addCreature('root',{x:a.pos.x+2.2*Math.sin(Bloom.app.renderer.camera.yaw),y:a.pos.y+.6,z:a.pos.z+2.2*Math.cos(Bloom.app.renderer.camera.yaw)});w.ai.cooldown=1e9;w.homePos={...w.pos};
-  const owner=a;while(s.petsOf(owner.id).length<3)s.addPet(owner,'rock-chick','adult');return w.id;});
+  const owner=a;while(s.petsOf(owner.id).length<Bloom.CFG.pets.max)s.addPet(owner,'rock-chick','adult');return w.id;});
  await page.evaluate(()=>{Bloom.app.renderer.camera.yaw+=Math.PI;});await pause(page,500);
  const atFull=await aimAt(page,extra);if(atFull){await page.mouse.click(atFull.x,atFull.y,{button:'right'});await pause(page,400);}
- const fullState=await page.evaluate(id=>({owner:Bloom.app.sim.actors[id].ownerId,pets:Bloom.app.sim.petsOf('local').length}),extra);assert.equal(fullState.owner,null);assert.equal(fullState.pets,3);
- pass('with three pets a fourth wild creature cannot be tamed',fullState);
+ const fullState=await page.evaluate(id=>({owner:Bloom.app.sim.actors[id].ownerId,pets:Bloom.app.sim.petsOf('local').length}),extra);assert.equal(fullState.owner,null);assert.equal(fullState.pets,await page.evaluate(()=>Bloom.CFG.pets.max));
+ pass('at the pet limit one more wild creature cannot be tamed',fullState);
  await page.evaluate(()=>{const s=Bloom.app.sim;for(const p of s.petsOf('local').filter(p=>p.speciesId==='rock-chick')){s.physics.removeBody(p);delete s.actors[p.id];}const w=Object.values(s.actors).filter(a=>a.speciesId&&!a.ownerId&&!a.boss);for(const x of w){s.physics.removeBody(x);delete s.actors[x.id];}});
+
+ // 7b. The shepherd's staff (D-247): right click musters the nearest n pets within range (wood: 2 within 12 m), the same click
+ // again sends them to wait, and a strike with it sends the following pets at the target. Fixture: five waiting pets at known
+ // distances (one out of range) and a wooden staff in the bag.
+ await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor();for(const p of Object.values(s.actors).filter(x=>x.ownerId)){s.physics.removeBody(p);delete s.actors[p.id];}
+  for(const [i,d] of [3,5,7,9,20].entries()){const p=s.addPet(a,'root','adult',{x:a.pos.x+d,y:a.pos.y+.3,z:a.pos.z+Math.sin(i)*.5});s.petWaitHere(p);}
+  Bloom.Inventory.addTo(a.inventory.slots,'wood_staff',1);});
+ await hold(page,'wood_staff');await page.evaluate(()=>{Bloom.app.renderer.camera.yaw=0;});
+ const state=()=>page.evaluate(()=>{const a=Bloom.app.actor();return Bloom.app.sim.petsOf(a.id).map(p=>({d:Math.round(Math.hypot(p.pos.x-a.pos.x,p.pos.z-a.pos.z)),sit:p.sit,id:p.id})).sort((x,y)=>x.id<y.id?-1:1);});
+ await page.mouse.click(683,300,{button:'right'});await page.waitForFunction(()=>Bloom.app.sim.petsOf('local').filter(p=>!p.sit).length===2,null,{timeout:3000});
+ const mustered=await state();assert.deepEqual(mustered.map(p=>!p.sit),[true,true,false,false,false],JSON.stringify(mustered));
+ await page.mouse.click(683,300,{button:'right'});await page.waitForFunction(()=>Bloom.app.sim.petsOf('local').every(p=>p.sit),null,{timeout:3000});
+ await page.mouse.click(683,300,{button:'right'});await page.waitForFunction(()=>Bloom.app.sim.petsOf('local').filter(p=>!p.sit).length===2,null,{timeout:3000});
+ await pause(page,1500);
+ const wildFoe=await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor(),w=s.addCreature('root',{x:a.pos.x,y:a.pos.y+.6,z:a.pos.z-2.4});w.ai.cooldown=1e9;w.homePos={...w.pos};return w.id;});
+ const hitAt=await aimAt(page,wildFoe);assert(hitAt,'cannot aim at the target');await page.mouse.move(hitAt.x,hitAt.y);
+ for(let i=0;i<4;i++){await page.mouse.down();await pause(page,60);await page.mouse.up();await pause(page,350);if(!await page.evaluate(id=>Bloom.app.sim.actors[id]?.enemy===true,wildFoe))continue;break;}
+ const focused=await page.waitForFunction(id=>Bloom.app.sim.petsOf('local').filter(p=>!p.sit).some(p=>p.petTargetId===id),wildFoe,{timeout:4000}).then(()=>true,()=>false);assert(focused,'the staff strike did not send the pets at the target');
+ await page.evaluate(id=>{const s=Bloom.app.sim,w=s.actors[id];if(w){s.physics.removeBody(w);delete s.actors[w.id];}for(const p of s.petsOf('local')){s.physics.removeBody(p);delete s.actors[p.id];}const a=Bloom.app.actor();s.addPet(a,'root','adult');},wildFoe);
+ pass('a wooden staff right click musters the 2 nearest pets within 12 m and the rest wait, the same click sends them back to wait, and a staff strike sends the following pets at its target',{mustered});
 
  // 8. Sit: an empty-hand right click on the pet.
  await page.evaluate(()=>{Bloom.app.renderer.camera.yaw=0;});

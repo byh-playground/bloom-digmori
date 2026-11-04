@@ -18,7 +18,26 @@ class Simulation {
  // Where a trailing pet stands: beside the owner (the shoulder camera is behind the owner, so a pet on that line hides it).
  petSlot(pet,owner,index=null){const mine=this.petsOf(owner.id),i=index??Math.max(0,mine.findIndex(p=>p.id===pet.id)),f=bodyHeading(owner),side={x:-f.z,y:0,z:f.x},col=[-1,1,0][i%3],row=Math.floor(i/3);
   return{x:owner.pos.x-f.x*(1.2+row*1.4)+side.x*col*2.2,y:owner.pos.y+.2,z:owner.pos.z-f.z*(1.2+row*1.4)+side.z*col*2.2};}
- tame(owner,wild){this.progress.tamed=true;wild.ownerId=owner.id;wild.wildState='pet';wild.enemy=false;wild.targetId=null;wild.homePos=null;wild.structureKey=null;wild.fed=0;wild.sit=true;wild.petTargetId=null;this.setPetStage(wild,'baby');wild.hp=wild.maxHp;this.emit('pet-tamed',wild,{owner:owner.id,name:SPECIES[wild.speciesId].name});}
+ tame(owner,wild){this.progress.tamed=true;wild.ownerId=owner.id;wild.wildState='pet';wild.enemy=false;wild.targetId=null;wild.homePos={...wild.pos};wild.structureKey=null;wild.fed=0;wild.sit=true;wild.petTargetId=null;this.setPetStage(wild,'baby');wild.hp=wild.maxHp;this.emit('pet-tamed',wild,{owner:owner.id,name:SPECIES[wild.speciesId].name});}
+
+ // A pet told to wait: it keeps its spot, wanders a few metres around it (a flock grazing), and does not fight.
+ petWaitHere(p){if(p.sit)return;p.sit=true;p.homePos={...p.pos};p.petTargetId=null;p.wanderTo=null;p.petMoving=false;}
+ petWait(actor,idle){const home=actor.homePos||(actor.homePos={...actor.pos});
+  if(actor.wanderTo&&this.tick<actor.wanderUntil&&Math.hypot(actor.wanderTo.x-actor.pos.x,actor.wanderTo.z-actor.pos.z)>.5){const d=V.sub({x:actor.wanderTo.x,y:actor.pos.y,z:actor.wanderTo.z},actor.pos),flat=V.norm({x:d.x,y:0,z:d.z});actor.facing=flat;actor.yaw=Math.atan2(-flat.x,-flat.z);
+   return{move:flat,speed:1.3,jump:!this.physics.sight(V.add(actor.pos,{x:0,y:.7,z:0}),V.add(actor.pos,{x:flat.x*1.2,y:.7,z:flat.z*1.2}),actor)};}
+  if(actor.wanderTo&&this.tick<actor.wanderUntil)actor.wanderTo=null;
+  if(this.tick<(actor.wanderUntil||0))return idle;
+  const h=hash3(this.tick,hashStr(actor.id),17,this.terrain.seed);
+  if(h%3===0){actor.wanderTo=null;actor.wanderUntil=this.tick+ticksForMs(1500+(h>>>4)%3000);return idle;}
+  const angle=(h%6283)/1000,radius=(((h>>>10)%100)/100)*CFG.pets.roam;actor.wanderTo={x:home.x+Math.cos(angle)*radius,z:home.z+Math.sin(angle)*radius};actor.wanderUntil=this.tick+ticksForMs(2500+(h>>>16)%3000);return idle;}
+ // Right-click with a shepherd's staff: the nearest `n` tamed pets within `range` of the owner (by the staff's material) gather and
+ // follow; every other pet waits where it is. The same click again, when exactly those pets already follow, sends them all to wait.
+ staffCommand(actor,def){if(def?.weapon!=='staff')return false;const T=CFG.pets.staff[def.material];if(!T)return false;
+  const all=this.petsOf(actor.id).filter(p=>!p.suspended),near=all.map(p=>({p,d:V.len(V.sub(p.pos,actor.pos))})).filter(x=>x.d<=T.range).sort((a,b)=>a.d-b.d||cmp(a.p.id,b.p.id)).slice(0,T.n).map(x=>x.p);
+  if(!near.length){this.emit('pet-muster',actor,{count:0,n:T.n,range:T.range});return true;}
+  const following=all.filter(p=>!p.sit);if(following.length===near.length&&near.every(p=>!p.sit)){for(const p of all)this.petWaitHere(p);this.emit('pet-dismiss',actor,{count:near.length});return true;}
+  const pick=new Set(near.map(p=>p.id));for(const p of all){if(pick.has(p.id)){p.sit=false;p.homePos=null;p.wanderTo=null;p.petMoving=true;}else this.petWaitHere(p);}
+  this.emit('pet-muster',actor,{count:near.length,n:T.n,range:T.range});return true;}
  petAi(actor){
   const owner=this.actors[actor.ownerId],def=this.petDef(actor),idle={move:{x:0,y:0,z:0},speed:0,jump:false};if(!owner||owner.suspended)return idle;
   const hostile=t=>t&&!t.dead&&!t.suspended&&t.enemy&&!t.ownerId&&V.len(V.sub(t.pos,owner.pos))<=CFG.pets.leash;
@@ -26,7 +45,7 @@ class Simulation {
   if(!hostile(target)){target=null;if(!actor.sit&&!owner.dead){let best=Infinity;for(const t of Object.values(this.actors).sort((a,b)=>cmp(a.id,b.id))){if(!hostile(t)||V.len(V.sub(t.pos,owner.pos))>CFG.pets.aggro)continue;const d=V.len(V.sub(t.pos,actor.pos));if(d<best){best=d;target=t;}}}actor.petTargetId=target?target.id:null;}
   if(target)return this.engage(actor,target,def);
   const c=actor.combat;if(c.state==='attack'){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}
-  if(actor.sit)return idle;
+  if(actor.sit)return this.petWait(actor,idle);
   // Loose following (0.41.2): a pet stands still while its owner stays within followStart metres, starts walking when the owner
   // gets further, and stops again once it is near its spot beside the owner (settle).
   const to=this.petSlot(actor,owner),delta=V.sub(to,actor.pos),dist=Math.hypot(delta.x,delta.z),away=Math.hypot(owner.pos.x-actor.pos.x,owner.pos.z-actor.pos.z);
@@ -48,7 +67,7 @@ class Simulation {
    if(holding&&(t.hp<t.maxHp||t.petStage==='baby')){eat();if(t.hp<t.maxHp)t.hp=Math.min(t.maxHp,t.hp+CFG.pets.heal);
     if(t.petStage==='baby'){t.fed=(t.fed||0)+1;if(t.fed>=CFG.pets.growFeeds){t.fed=0;this.setPetStage(t,'adult');t.hp=t.maxHp;this.emit('pet-grow',t,{name:SPECIES[t.speciesId].name});}else this.emit('pet-feed',t,{fed:t.fed,of:CFG.pets.growFeeds,name:SPECIES[t.speciesId].name});}
     else this.emit('pet-feed',t,{heal:true,name:SPECIES[t.speciesId].name});return true;}
-   t.sit=!t.sit;if(t.sit)t.petTargetId=null;this.emit('pet-sit',t,{sit:t.sit,name:SPECIES[t.speciesId].name});return true;}
+   if(t.sit){t.sit=false;t.homePos=null;t.petMoving=true;}else this.petWaitHere(t);this.emit('pet-sit',t,{sit:t.sit,name:SPECIES[t.speciesId].name});return true;}
   if(!t.ownerId&&holding&&!t.enemy){if(this.petsOf(actor.id).length>=CFG.pets.max){this.emit('pet-full',t,{max:CFG.pets.max});return true;}
    eat();t.fed=(t.fed||0)+1;if(t.fed>=CFG.pets.tameFeeds)this.tame(actor,t);else this.emit('tame-progress',t,{fed:t.fed,of:CFG.pets.tameFeeds,name:SPECIES[t.speciesId].name});return true;}
   return false;}
@@ -292,7 +311,7 @@ class Simulation {
    const held=input.enabled&&input.left?(previous.held|0)+1:0,mining=held>0&&(input.hold||held>=CFG.mining.holdTicks);
    const click=input.enabled&&!input.left&&previous.left&&!previous.hold&&(previous.held|0)<CFG.mining.holdTicks;previous.held=held;previous.hold=input.enabled&&input.left&&input.hold;
    const dig=mining?this.rayBlock(actor):null;if(dig)this.mine(actor,dig);else if(actor.mine.target){actor.mine.target=null;actor.mine.elapsed=0;}
-   const petUse=rightPress&&this.creatureInteract(actor);
+   const petUse=rightPress&&(this.staffCommand(actor,selected)||this.creatureInteract(actor));
    if(!petUse&&rightPress&&!selected?.weapon){const aimed=this.aim(actor);
     // Right-click works a gate or uses a station (workbench, furnace, storage chest, sealed chest) before anything is
     // placed against it (Minecraft order).

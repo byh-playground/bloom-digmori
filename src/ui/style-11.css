@@ -41,3 +41,5 @@ body.aim-locked #crosshair{display:block}
 #welcome[hidden]{display:none}
 #welcome p{margin:6px 0}#welcome ul{margin:6px 0 10px;padding-left:18px}#welcome button{pointer-events:auto;width:100%;padding:8px;font-size:14px}
 @media(pointer:coarse){#guide{width:min(220px,40vw);font-size:11px;padding:6px 9px}#welcome{left:auto;right:12px;top:56px;bottom:auto;transform:none;width:min(300px,42vw);font-size:11px;padding:8px 10px}#welcome ul{display:none}#welcome p{margin:4px 0}#welcome button{padding:5px;font-size:12px}}
+
+#mobile-muster{display:none}#mobile-muster:not([hidden]){display:flex;flex-direction:column;align-items:center;justify-content:center;position:fixed;z-index:16;right:calc(max(19px,env(safe-area-inset-right)) + 73px);bottom:calc(max(19px,env(safe-area-inset-bottom)) + 73px);width:61px;height:61px;border-radius:50%;font-size:21px;line-height:1.06;background:#6b5a2fe6;border:2px solid #f0d58c;color:#fff7dc;box-shadow:0 0 0 3px #f0d58c33;touch-action:none}#mobile-muster small{font-size:9px;font-weight:700;white-space:nowrap}

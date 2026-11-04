@@ -78,7 +78,10 @@ const MATERIALS={wood:{name:'나무',tier:1,damageBonus:-10,speed:2,color:'#cfa8
 const WEAPONS={
  sword:{name:'검',icon:'⚔',damage:25,reach:3.3,arc:1.65,weight:5,wind:250,active:125,recovery:375},
  spear:{name:'창',icon:'↟',damage:25,reach:4.2,arc:.3,weight:6,wind:300,active:100,recovery:450},
- axe:{name:'도끼',icon:'🪓',damage:30,reach:3.2,arc:1.4,weight:8,wind:425,active:125,recovery:450}
+ axe:{name:'도끼',icon:'🪓',damage:30,reach:3.2,arc:1.4,weight:8,wind:425,active:125,recovery:450},
+ // The shepherd's staff (0.42.0, D-247): a weak weapon whose strike sends the pets after the target; right-click musters the nearest
+ // tamed pets (how many and how far by its material: CFG.pets.staff).
+ staff:{name:'양치기 지팡이',icon:'⚚',damage:12,reach:3.2,arc:1.3,weight:3,wind:250,active:100,recovery:400}
 };
 const ITEMS={};
 function defineItem(id,name,icon,opts={}){ITEMS[id]={id,name,icon,stack:64,...opts};}
@@ -121,7 +124,7 @@ for(const [mat,ingredient,handle]of [['wood','planks','stick'],['stone','cobble'
  const keys={M:ingredient,S:handle};
  recipe(mat+'_pick',mat+'_pick',1,['MMM',' S ',' S '],keys,3);
  recipe(mat+'_sword',mat+'_sword',1,['M','M','S'],keys,3);
- recipe(mat+'_spear',mat+'_spear',1,['  M',' S ','S  '],keys,3);recipe(mat+'_axe',mat+'_axe',1,['MM','MS',' S'],keys,3);
+ recipe(mat+'_staff',mat+'_staff',1,['M','S','S'],keys,3);recipe(mat+'_spear',mat+'_spear',1,['  M',' S ','S  '],keys,3);recipe(mat+'_axe',mat+'_axe',1,['MM','MS',' S'],keys,3);
 }
 recipe('bark_helmet','bark_helmet',1,['MMM','M M'],{M:'bark'},3);recipe('bark_chest','bark_chest',1,['M M','MMM','MMM'],{M:'bark'},3);recipe('bark_boots','bark_boots',1,['M M','M M'],{M:'bark'},3);
 recipe('iron_helmet','iron_helmet',1,['MMM','MFM'],{M:'iron',F:'fiber'},3);recipe('iron_chest','iron_chest',1,['MFM','MMM','MMM'],{M:'iron',F:'fiber'},3);recipe('iron_boots','iron_boots',1,['MFM','M M'],{M:'iron',F:'fiber'},3);
@@ -170,6 +173,7 @@ const QUESTS=Object.freeze([
  Object.freeze({id:'workbench',title:'제작대',hint:'가방(Tab)에서 판자 → 제작대를 만드세요.'}),
  Object.freeze({id:'wood_pick',title:'나무 곡괭이',hint:'제작대를 놓고 우클릭 · 판자 3 + 나뭇가지 2'}),
  Object.freeze({id:'pet',title:'펫과 싸우기',hint:'곁의 뿌리가 첫 펫이에요 · 적이 오면 알아서 같이 싸워요.'}),
+ Object.freeze({id:'wood_staff',title:'양치기 지팡이',hint:'제작대에서 판자 1 + 나뭇가지 2 · 우클릭=펫 모이기, 때리면=펫도 공격'}),
  Object.freeze({id:'tamed',title:'새 펫 길들이기',hint:'먹이를 들고 야생 생물에 우클릭 3번 · 뿌리 열매 · 병아리 씨앗 · 달팽이 잎'}),
  Object.freeze({id:'stone_pick',title:'석기 도구',hint:'돌을 캐서 돌 곡괭이·돌 검을 만드세요.'}),
  Object.freeze({id:'bossFound',title:'보스 구조물 찾기',hint:'초원의 꽃 고리로 가세요.',toward:'grove'}),
