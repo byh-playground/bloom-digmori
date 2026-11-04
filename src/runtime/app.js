@@ -138,7 +138,7 @@ class App {
   if(e.type==='pet-grow')this.toast(e.name+'이(가) 다 자랐어요!');
   if(e.type==='pet-sit')this.toast(e.name+(e.sit?' · 앉았어요 (싸우지 않아요)':' · 따라와요'));
   if(e.type==='pet-full')this.toast('펫은 최대 '+e.max+'마리까지 데려갈 수 있어요.');
-  if(e.type==='pet-revive')this.toast('펫이 다시 일어났어요.');
+  if(e.type==='pet-died')this.toast(e.name+'이(가) 쓰러졌어요. 먹이를 주고 지켜 주세요.');
   if(e.type==='mine'&&!e.by){this.showCombatFeedback('⛏ 채굴 완료',540);this.blockActionUI('break');this.playSound('mine',.8);}
   if(e.type==='place'){this.showCombatFeedback('▣ 블록 설치',440);this.blockActionUI('place');this.playSound('place',.75);}
   if(e.type==='place-blocked'){this.showCombatFeedback(e.reason==='item'?'블록을 먼저 선택하세요':e.reason==='target'?'블록 면을 조준하세요':e.reason==='gate'?'문 자리에 누가 서 있어요':'설치할 수 없는 위치',520);this.blockActionUI('blocked');}

@@ -7,9 +7,9 @@ import {CURSOR_HELPERS} from './cursor-helpers.mjs';
 
 // Pets (0.41.0, D-227): the Minecraft wolf level. A new player starts with an adult root that follows and fights on its own;
 // a wild creature is tamed by feeding it its food with a real right click (3 times), a tamed baby grows up by being fed
-// (3 times), a right click with an empty hand makes a pet sit, a fallen pet stands up again beside its owner, and pets
+// (3 times), a right click with an empty hand makes a pet sit, a fallen pet is gone for good, and pets
 // survive a save and load. Fixtures (direct state writes): placing a wild creature or a hostile one near the player, killing a
-// pet to see it stand up (its revive timer is shortened), and moving the food into the hotbar. Every aim is the mouse cursor on
+// pet (its removal timer is shortened), and moving the food into the hotbar. Every aim is the mouse cursor on
 // the creature (found with the game's own pick, tests/cursor-helpers.mjs); walking uses WASD.
 const began=Date.now(),report={checks:[]},errors=[],SHOTS=process.env.SHOTS||null;
 let browser,server;
@@ -103,11 +103,13 @@ try{
  const at2=await aimAt(page,petId);assert(at2);await page.mouse.click(at2.x,at2.y,{button:'right'});await page.waitForFunction(id=>Bloom.app.sim.actors[id].sit===false,petId,{timeout:3000});
  pass('an empty-hand right click makes a pet sit (it stays put while the owner walks away) and another makes it follow again',{distanceWhileSitting:stayed.find(p=>p.id===petId).d});
 
- // 9. Falling and standing up again.
- const fell=await page.evaluate(id=>{const s=Bloom.app.sim,p=s.actors[id];s.kill(p,null);const dead=p.dead;p.respawn=400;return{dead,body:p.body};},petId);assert.equal(fell.dead,true);assert.equal(fell.body,null);
- await page.waitForFunction(id=>!Bloom.app.sim.actors[id].dead,petId,{timeout:8000});
- const up=await pets(page);const upPet=up.find(p=>p.id===petId);assert(upPet.d<4&&upPet.hp===Math.round(upPet.max*.5),JSON.stringify(upPet));
- pass('a fallen pet is not lost: it stands up beside its owner at half health',upPet);
+ // 9. A pet that falls is gone for good (no revive, no loot).
+ const before=(await pets(page)).length;
+ const fell=await page.evaluate(id=>{const s=Bloom.app.sim,p=s.actors[id],drops=Object.keys(s.drops).length;s.kill(p,null);p.respawn=300;return{dead:p.dead,body:p.body,drops:Object.keys(s.drops).length-drops};},petId);assert.equal(fell.dead,true);assert.equal(fell.body,null);assert.equal(fell.drops,0);
+ await page.waitForFunction(id=>!Bloom.app.sim.actors[id],petId,{timeout:8000});
+ const left=await pets(page);assert.equal(left.length,before-1);assert(!left.some(p=>p.id===petId));
+ await page.waitForFunction(()=>window.__petEvents.some(e=>e.type==='pet-died'),null,{timeout:3000});
+ pass('a pet that falls is gone for good: it leaves with its death animation, drops nothing, and does not stand up again',{before,after:left.length});
 
  // 10. Save and load keep the pets.
  const saved=await page.evaluate(()=>{const s=Bloom.app.sim,before=Object.values(s.actors).filter(a=>a.ownerId).map(a=>[a.id,a.speciesId,a.petStage,a.sit,a.ownerId]).sort();const bytes=s.save();s.load(bytes);
