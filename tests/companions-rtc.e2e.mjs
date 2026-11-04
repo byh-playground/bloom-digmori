@@ -66,7 +66,7 @@ try{
  const contexts=[await browser.newContext({viewport:{width:1100,height:800}}),await browser.newContext({viewport:{width:1100,height:800}})];
  if(RELAY==='local'){relay=routeLocalNostrRelay();for(const c of contexts)await relay.attach(c);}
  const pages=await Promise.all(contexts.map(async context=>{const p=await context.newPage();p.setDefaultTimeout(10000);p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(CURSOR_HELPERS);
-  await p.goto('http://127.0.0.1:'+server.address().port+'/',{timeout:45000});await p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});return p;}));
+  await p.goto('http://127.0.0.1:'+server.address().port+'/?starterPet=0',{timeout:45000});await p.waitForFunction(()=>window.Bloom?.app?.started&&document.querySelector('#loading').hidden,null,{timeout:45000});return p;}));
  const[host,join]=pages;pass('both Edge clients boot the game',{s:Math.round((Date.now()-began)/1000)});
 
  // Host opens the room; its world is now the room-seed world (connect() replaces the solo world).

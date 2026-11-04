@@ -23,6 +23,11 @@ class Companions {
  hatch(owner,egg){if(this.all().length>=128||!SPECIES[egg.species])return null;const cell={x:egg.x,y:egg.y,z:egg.z},pos={x:egg.x+.5,y:egg.y,z:egg.z+.5};
   const id='unit:'+ ++this.data.sequence;this.data.units[id]={id,owner:owner.id,kind:egg.species,stage:'baby',grade:EGG_RULES.grade,fed:0,location:'ranch',slot:null,phase:'idle',cooldown:0,pending:null,cargo:null,target:null,progress:0,...Companions.ranchState(cell),pos,previous:{...pos},velocity:{x:0,y:0,z:0},yaw:0,type:'companion',body:null,collider:null};
   return this.data.units[id];}
+// The starter pet (0.40.0): a new player begins with one grown root that already follows and fights, so there is
+ // something at their side from the first second. Gifted once per player (progress flag), never to a player who has units.
+ gift(owner,kind){const flag='starter:'+owner.id;if(this.sim.progress[flag]||this.owned(owner.id).length||!SPECIES[kind])return null;this.sim.progress[flag]=true;
+  const pos={...owner.pos},id='unit:'+ ++this.data.sequence;this.data.units[id]={id,owner:owner.id,kind,stage:'adult',grade:EGG_RULES.grade,fed:0,location:'combat',slot:0,phase:'idle',cooldown:0,pending:null,cargo:null,target:null,progress:0,...Companions.ranchState(null),pos,previous:{...pos},velocity:{x:0,y:0,z:0},yaw:0,type:'companion',body:null,collider:null};
+  return this.data.units[id];}
  stopShot(u){for(const p of Object.values(this.sim.projectiles))if(p.companionId===u.id){u.pos={...p.pos};this.sim.physics.removeBody(p);delete this.sim.projectiles[p.id];}}
  toRanch(u){u.location='ranch';u.slot=null;u.phase='idle';u.target=null;u.progress=0;Object.assign(u,Companions.ranchState(null));}
  // A unit called into a combat slot puts down what it carried (as a drop, never lost) and leaves the ranch walk.
@@ -45,7 +50,7 @@ class Companions {
   this.sim.emit('companion-assigned',a,{companionId:u.id,location:u.location});return true;
  }
  command(a,c){
-  if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){a.companionSlot=c.slot;Combat.resetCombo(a.combat);return true;}return false;}
+  if(c.action==='select'){if(c.slot===-1||this.equipped(a,c.slot)){a.companionSlot=c.slot;if(c.slot>=0)this.sim.progress.pet=true;Combat.resetCombo(a.combat);return true;}return false;}
   if(c.action==='assign')return this.assign(a,this.data.units[c.id],{location:c.location,slot:c.slot});
   return false;
  }
@@ -81,8 +86,10 @@ class Companions {
  // Combat units walk after their owner on the owner's ground level (no body, so they never block terrain or attacks).
  // The selected combat unit stands at the strike root beside the owner; the rest trail behind in rows of three.
  // Far behind (teleport, respawn) they rejoin at once.
- follow(a,u,index){const f=bodyHeading(a),side={x:-f.z,y:0,z:f.x},row=Math.floor(index/3),col=[0,-1,1][index%3];
-  const to=index<0?{...companionRoot(a),y:a.pos.y}:{x:a.pos.x-f.x*(1.6+row*1.2)+side.x*col*1.1,y:a.pos.y,z:a.pos.z-f.z*(1.6+row*1.2)+side.z*col*1.1};
+ follow(a,u,index){const f=bodyHeading(a),side={x:-f.z,y:0,z:f.x},row=Math.floor(index/3),col=[-1,1,0][index%3];
+  // Trailing pets stand beside the owner, not on the line to the camera (the shoulder camera is behind the owner: a pet there
+  // fills the screen and hides the owner), 0.5 m back in the first row.
+  const to=index<0?{...companionRoot(a),y:a.pos.y}:{x:a.pos.x-f.x*(.5+row*1.4)+side.x*col*1.6,y:a.pos.y,z:a.pos.z-f.z*(.5+row*1.4)+side.z*col*1.6};
   const delta=V.sub(to,u.pos),dist=V.len(delta),dt=CFG.stepMs/1000;
   if(dist>16){u.pos=to;u.previous={...to};u.velocity={x:0,y:0,z:0};}
   else if(dist>.08){const step=Math.min(dist,(dist>3?7:4.2)*dt);u.velocity=V.scale(delta,step/dist/dt);u.pos=V.add(u.pos,V.scale(delta,step/dist));if(Math.hypot(delta.x,delta.z)>.05)u.yaw=Math.atan2(-delta.x,-delta.z);}

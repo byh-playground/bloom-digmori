@@ -130,7 +130,7 @@ try{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});report.browser=browser.version();
  // 1. A fresh normal world: grassland wildlife (뿌리) spawns as plain wildlife and the panel has no recruit list.
- const normal=await browser.newPage({viewport:{width:1366,height:900}});normal.setDefaultTimeout(15000);normal.on('pageerror',e=>errors.push(e.message));await normal.addInitScript(CURSOR_HELPERS);await normal.goto('http://127.0.0.1:'+server.address().port+'/',{timeout:45000});await boot(normal);
+ const normal=await browser.newPage({viewport:{width:1366,height:900}});normal.setDefaultTimeout(15000);normal.on('pageerror',e=>errors.push(e.message));await normal.addInitScript(CURSOR_HELPERS);await normal.goto('http://127.0.0.1:'+server.address().port+'/?starterPet=0',{timeout:45000});await boot(normal);
  await normal.waitForFunction(()=>!Bloom.app.sim.night()&&Object.values(Bloom.app.sim.actors).some(a=>a.speciesId&&!a.dead),null,{timeout:30000});
  const wild=await normal.evaluate(()=>{const a=Object.values(Bloom.app.sim.actors).find(a=>a.speciesId&&!a.dead),p=Bloom.app.actor();return{id:a.id,pos:{...a.pos},kind:a.speciesId,realm:Bloom.app.sim.terrain.realm(a.pos.x,a.pos.y,a.pos.z),state:a.wildState,hostile:a.enemy,distance:Math.hypot(a.pos.x-p.pos.x,a.pos.z-p.pos.z),verticalDelta:Math.abs(a.pos.y-p.pos.y),spawn:Bloom.CFG.creatures};});
  await faceCamera(normal,wild.pos);assert.equal(wild.kind,'root');assert.equal(wild.realm,'grassland');assert.equal(wild.state,'neutral');assert.equal(wild.hostile,false);assert(wild.verticalDelta<=3.5);assert(wild.distance>=7.5);
@@ -143,7 +143,7 @@ try{
  assert(population.total<=wild.spawn.maxWild);assert(population.nearby<=wild.spawn.perPlayer);pass('live exploration keeps wildlife within the world/player caps',population);await normal.close();
 
  const pc=await browser.newPage({viewport:{width:1366,height:768}});pc.setDefaultTimeout(15000);pc.on('pageerror',e=>errors.push(e.message));await pc.addInitScript(CURSOR_HELPERS);
- await pc.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(pc);
+ await pc.goto('http://127.0.0.1:'+server.address().port+'/?debug=1&starterPet=0',{timeout:45000});await boot(pc);
  // 2. Deterministic world checks for seed 190725: one of each boss structure within reach of spawn, the voxels they are
  // built from, the boss each wakes, the cave realm's rock chicks, and the D-107 egg rule.
  const world=await pc.evaluate(()=>{const base=Bloom.app.sim,test=new Bloom.Simulation(base.R,190725),again=new Bloom.Simulation(base.R,190725);try{
@@ -299,7 +299,7 @@ try{
  pass('same-version saves migrate shell/leaf wildlife and units to the new species, retire the warden boss, the candidate field and the sigil',migrated);
 
  // 9. Landscape touch UI keeps the panel inside the viewport; assign and remove by ID survive reload.
- const mobileContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true});const mobile=await mobileContext.newPage();mobile.setDefaultTimeout(15000);mobile.on('pageerror',e=>errors.push(e.message));await mobile.addInitScript(CURSOR_HELPERS);await mobile.goto('http://127.0.0.1:'+server.address().port+'/?debug=1',{timeout:45000});await boot(mobile);
+ const mobileContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true});const mobile=await mobileContext.newPage();mobile.setDefaultTimeout(15000);mobile.on('pageerror',e=>errors.push(e.message));await mobile.addInitScript(CURSOR_HELPERS);await mobile.goto('http://127.0.0.1:'+server.address().port+'/?debug=1&starterPet=0',{timeout:45000});await boot(mobile);
  await mobile.locator('#debug-kit').dispatchEvent('click');const mobileUnit=(await placeAndHatch(mobile,'mushroomSnailEgg',true)).unit.id;await mobile.locator('#debug-adult').dispatchEvent('click');await mobile.locator('#companions-btn').tap();await assign(mobile,mobileUnit,0,true);
  let fit=await panelFit(mobile);assert(fit.rect.x>=0&&fit.rect.x+fit.rect.w<=845&&fit.scroll<=fit.client+1&&fit.buttons.every(b=>b.h>=44),JSON.stringify(fit));
  let mobileSaved=await saveAndReload(mobile,mobileUnit,0);await mobile.locator('#companions-btn').tap();await mobile.locator('[data-companion-remove="'+mobileUnit+'"]').tap();await mobile.waitForFunction(id=>Bloom.app.sim.companions.data.units[id]?.location==='ranch',mobileUnit,{timeout:8000});mobileSaved=await saveAndReload(mobile,mobileUnit,null);
