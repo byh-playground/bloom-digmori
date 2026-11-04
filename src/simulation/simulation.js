@@ -1,7 +1,7 @@
 'use strict';
 class Simulation {
  constructor(R,seed=CFG.worldSeed){this.R=R;this.terrain=new VoxelWorld(seed);this.physics=new Physics(R,this.terrain);this.tick=0;this.epoch=0;this.actors={};this.drops={};this.projectiles={};this.furnaces={};this.chests={};this.progress={};this.sequence=0;this.actionSequence=0;this.effects=[];this.nextSpawn=CFG.creatures.initialEncounterTicks;this.aiSequence=0;this.presentationSequence=0;this.silent=false;this.revision=0;}
- createActor(id,pos,speciesId=null,boss=false){const d=speciesId?(boss?SPECIES[speciesId]?.boss:SPECIES[speciesId]?.wild):null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},...(speciesId?{}:{heading:{x:0,z:-1}}),aimTarget:null,yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,ownerId:null,petStage:null,fed:0,sit:false,petTargetId:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
+ createActor(id,pos,speciesId=null,boss=false){const d=speciesId?(boss?SPECIES[speciesId]?.boss:SPECIES[speciesId]?.wild):null;return{id,pos:{...pos},previous:{...pos},velocity:{x:0,y:0,z:0},facing:{x:0,y:0,z:-1},...(speciesId?{}:{heading:{x:0,z:-1}}),aimTarget:null,yaw:0,pitch:0,hp:d?.hp||CFG.player.hp,maxHp:d?.hp||CFG.player.hp,rpg:d?null:RPG.create(),scale:d?.size||1,enemy:false,kind:speciesId,speciesId,wildState:speciesId?'neutral':null,targetId:null,homePos:null,ownerId:null,petStage:null,fed:0,sit:false,petMoving:false,petTargetId:null,boss,suspended:false,dead:false,respawn:0,grounded:false,knock:0,inventory:Inventory.empty(),combat:Combat.state(),mine:{target:null,elapsed:0},ai:{cooldown:500,phase:1,pattern:0},inputPrevious:{jump:false,roll:false,right:false,left:false},anim:0,motion:motionState(),sprinting:false,swim:{inWater:false,underwater:false,depth:0,immersion:0,surface:-1,flow:{x:0,y:0,z:0}}};}
  addPlayer(id){if(this.actors[id])return;const count=Object.values(this.actors).filter(a=>!a.enemy&&!a.speciesId&&!a.boss).length,p={x:.5+count*1.7,y:5.1,z:.5};const a=this.createActor(id,p);this.actors[id]=a;this.physics.syncTerrain(Object.values(this.actors),Object.values(this.drops),Object.values(this.projectiles),this.tick);this.physics.addActor(a);if(this.starterPet!==false)this.addPet(a,'root','adult');return a;}
  addCreature(speciesId,pos,structureKey=null){if(!SPECIES[speciesId]||!structureKey&&Object.values(this.actors).filter(a=>a.speciesId&&!a.boss&&!a.dead&&!a.structureKey&&!a.ownerId).length>=CFG.creatures.maxWild)return null;const id='creature:'+ ++this.sequence,a=this.createActor(id,pos,speciesId);a.homePos={...pos};a.structureKey=structureKey;a.ai.cooldown=0;this.actors[id]=a;this.physics.addActor(a);return a;}
  // A structure boss is the species body x3 with its hat (rig stage 'boss'); one live boss per structure, at most four at once.
@@ -17,8 +17,8 @@ class Simulation {
   a.ownerId=owner.id;a.petStage=stage;a.wildState='pet';a.enemy=false;a.homePos=null;a.ai.cooldown=0;a.maxHp=this.petDef(a).hp;a.hp=a.maxHp;this.actors[id]=a;this.physics.addActor(a);return a;}
  // Where a trailing pet stands: beside the owner (the shoulder camera is behind the owner, so a pet on that line hides it).
  petSlot(pet,owner,index=null){const mine=this.petsOf(owner.id),i=index??Math.max(0,mine.findIndex(p=>p.id===pet.id)),f=bodyHeading(owner),side={x:-f.z,y:0,z:f.x},col=[-1,1,0][i%3],row=Math.floor(i/3);
-  return{x:owner.pos.x-f.x*(.5+row*1.4)+side.x*col*1.6,y:owner.pos.y+.2,z:owner.pos.z-f.z*(.5+row*1.4)+side.z*col*1.6};}
- tame(owner,wild){this.progress.tamed=true;wild.ownerId=owner.id;wild.wildState='pet';wild.enemy=false;wild.targetId=null;wild.homePos=null;wild.structureKey=null;wild.fed=0;wild.sit=false;wild.petTargetId=null;this.setPetStage(wild,'baby');wild.hp=wild.maxHp;this.emit('pet-tamed',wild,{owner:owner.id,name:SPECIES[wild.speciesId].name});}
+  return{x:owner.pos.x-f.x*(1.2+row*1.4)+side.x*col*2.2,y:owner.pos.y+.2,z:owner.pos.z-f.z*(1.2+row*1.4)+side.z*col*2.2};}
+ tame(owner,wild){this.progress.tamed=true;wild.ownerId=owner.id;wild.wildState='pet';wild.enemy=false;wild.targetId=null;wild.homePos=null;wild.structureKey=null;wild.fed=0;wild.sit=true;wild.petTargetId=null;this.setPetStage(wild,'baby');wild.hp=wild.maxHp;this.emit('pet-tamed',wild,{owner:owner.id,name:SPECIES[wild.speciesId].name});}
  petAi(actor){
   const owner=this.actors[actor.ownerId],def=this.petDef(actor),idle={move:{x:0,y:0,z:0},speed:0,jump:false};if(!owner||owner.suspended)return idle;
   const hostile=t=>t&&!t.dead&&!t.suspended&&t.enemy&&!t.ownerId&&V.len(V.sub(t.pos,owner.pos))<=CFG.pets.leash;
@@ -27,9 +27,13 @@ class Simulation {
   if(target)return this.engage(actor,target,def);
   const c=actor.combat;if(c.state==='attack'){Combat.resetCombo(c);c.state='idle';c.elapsed=0;c.action=null;}
   if(actor.sit)return idle;
-  const to=this.petSlot(actor,owner),delta=V.sub(to,actor.pos),dist=Math.hypot(delta.x,delta.z);
-  if(dist>CFG.pets.teleport){this.physics.teleport(actor,to);return idle;}
-  if(dist<CFG.pets.settle)return idle;
+  // Loose following (0.41.2): a pet stands still while its owner stays within followStart metres, starts walking when the owner
+  // gets further, and stops again once it is near its spot beside the owner (settle).
+  const to=this.petSlot(actor,owner),delta=V.sub(to,actor.pos),dist=Math.hypot(delta.x,delta.z),away=Math.hypot(owner.pos.x-actor.pos.x,owner.pos.z-actor.pos.z);
+  if(away>CFG.pets.teleport){this.physics.teleport(actor,to);actor.petMoving=false;return idle;}
+  if(!actor.petMoving&&away>CFG.pets.followStart)actor.petMoving=true;
+  if(actor.petMoving&&dist<CFG.pets.settle)actor.petMoving=false;
+  if(!actor.petMoving)return idle;
   const flat=V.norm({x:delta.x,y:0,z:delta.z}),speed=clamp(dist*2.2,1.2,CFG.pets.runSpeed);actor.facing=V.norm({x:flat.x,y:0,z:flat.z});actor.yaw=Math.atan2(-flat.x,-flat.z);
   const blocked=!this.physics.sight(V.add(actor.pos,{x:0,y:.7,z:0}),V.add(actor.pos,{x:flat.x*1.2,y:.7,z:flat.z*1.2}),actor);
   return{move:flat,speed,jump:blocked};

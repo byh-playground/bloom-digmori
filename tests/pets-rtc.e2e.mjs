@@ -80,7 +80,7 @@ try{
  // 1. The host walks with real keys; its pet follows, on both peers at the same place.
  await host.keyboard.down('KeyW');await pause(host,2200);await host.keyboard.up('KeyW');await pause(host,1500);
  const follow=await Promise.all(pages.map(p=>p.evaluate(id=>{const a=Bloom.app.sim.actors[id],pet=Object.values(Bloom.app.sim.actors).find(x=>x.ownerId===id);return{owner:{x:+a.pos.x.toFixed(2),z:+a.pos.z.toFixed(2)},pet:{x:+pet.pos.x.toFixed(2),z:+pet.pos.z.toFixed(2)},d:+Math.hypot(a.pos.x-pet.pos.x,a.pos.z-pet.pos.z).toFixed(2)};},ids[0])));
- assert.deepEqual(follow[0],follow[1],'host pet position differs between peers');assert(follow[0].d<4,'the pet did not follow: '+JSON.stringify(follow[0]));
+ assert.deepEqual(follow[0],follow[1],'host pet position differs between peers');assert(follow[0].d<7,'the pet did not follow: '+JSON.stringify(follow[0]));
  pass('the host walks and its pet follows within '+follow[0].d+' m, at the same place on both peers',{follow:follow[0],sync:await syncCheck(pages,2)});
 
  // 2. Hold-to-mine (D-123): put the cursor on another ground block 2–3 m away (inside CFG.reach) and hold the left button

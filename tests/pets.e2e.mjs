@@ -42,8 +42,8 @@ try{
 
  // 2. It follows.
  await page.locator('#world').focus();await page.keyboard.down('KeyW');await pause(page,2600);await page.keyboard.up('KeyW');await pause(page,1500);
- const after=await pets(page);assert(after[0].d<4.5,'the pet did not follow: '+JSON.stringify(after));
- pass('walking away, the pet follows and stays within '+after[0].d+' m',after[0]);
+ const after=await pets(page);assert(after[0].d<7,'the pet did not follow: '+JSON.stringify(after));
+ pass('walking away, the pet follows (loosely: it starts when the owner is 5 m away) and stays within '+after[0].d+' m',after[0]);
 
  // 3. It fights hostile creatures near its owner on its own.
  const foe=await page.evaluate(()=>{const s=Bloom.app.sim,a=Bloom.app.actor(),w=s.addCreature('root',{x:a.pos.x+3,y:a.pos.y+1,z:a.pos.z-3});w.wildState='retaliating';w.enemy=true;w.targetId=a.id;w.hp=w.maxHp=60;return w.id;});
@@ -68,10 +68,10 @@ try{
  for(let i=1;i<=3;i++){const at=await aimAt(page,wild);assert(at,'cannot aim at the wild creature');await page.mouse.click(at.x,at.y,{button:'right'});
   await page.waitForFunction(({id,i})=>{const w=Bloom.app.sim.actors[id];return w.ownerId?i===3:(w.fed||0)===i;},{id:wild,i},{timeout:3000});await pause(page,250);}
  const tamed=await page.evaluate(id=>{const w=Bloom.app.sim.actors[id];return{owner:w.ownerId,stage:w.petStage,state:w.wildState,hp:w.hp,max:w.maxHp};},wild);
- assert.equal(tamed.owner,'local');assert.equal(tamed.stage,'baby');assert.equal(await count(page,'food'),foodBefore-3);
+ assert.equal(tamed.owner,'local');assert.equal(tamed.stage,'baby');assert.equal(await page.evaluate(id=>Bloom.app.sim.actors[id].sit,wild),true,'a tamed pet waits where it is');assert.equal(await count(page,'food'),foodBefore-3);
  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('펫이 됐어요')||window.__petEvents.some(e=>e.type==='pet-tamed'),null,{timeout:3000});
  await shot(page,'03-tamed');
- pass('three right clicks with its fruit tame a wild root into a baby pet (3 fruit used)',tamed);
+ pass('three right clicks with its fruit tame a wild root into a baby pet that waits where it is (3 fruit used)',tamed);
 
  // 6. Raising: a baby grows up by being fed three times.
  for(let i=1;i<=3;i++){const at=await aimAt(page,wild);assert(at,'cannot aim at the baby pet');await page.mouse.click(at.x,at.y,{button:'right'});

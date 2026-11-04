@@ -133,10 +133,10 @@ class App {
   if(e.type==='whiff')this.showCombatFeedback('공격 빗나감',620);
   // Pets (0.41.0): taming, feeding, sitting and revival feedback.
   if(e.type==='tame-progress')this.toast(e.name+' 길들이는 중 ('+e.fed+'/'+e.of+') · 먹이를 더 주세요');
-  if(e.type==='pet-tamed')this.toast(e.name+'이(가) 펫이 됐어요! 먹이를 3번 주면 다 자라요.');
+  if(e.type==='pet-tamed')this.toast(e.name+'이(가) 펫이 됐어요! 여기서 기다려요 · 우클릭하면 따라오고, 먹이를 3번 주면 다 자라요.');
   if(e.type==='pet-feed')this.toast(e.heal?e.name+' 체력 회복':e.name+' 먹는 중 ('+e.fed+'/'+e.of+')');
   if(e.type==='pet-grow')this.toast(e.name+'이(가) 다 자랐어요!');
-  if(e.type==='pet-sit')this.toast(e.name+(e.sit?' · 앉았어요 (싸우지 않아요)':' · 따라와요'));
+  if(e.type==='pet-sit')this.toast(e.name+(e.sit?' · 여기서 기다려요 (싸우지 않아요)':' · 따라와요'));
   if(e.type==='pet-full')this.toast('펫은 최대 '+e.max+'마리까지 데려갈 수 있어요.');
   if(e.type==='pet-died')this.toast(e.name+'이(가) 쓰러졌어요. 먹이를 주고 지켜 주세요.');
   if(e.type==='mine'&&!e.by){this.showCombatFeedback('⛏ 채굴 완료',540);this.blockActionUI('break');this.playSound('mine',.8);}
