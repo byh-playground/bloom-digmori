@@ -17,7 +17,7 @@ const DEPENDENCIES=Object.freeze({
 // 기하·물리 수치는 목적에 따른 연속값이고 스탯 양자화의 대상이 아니다.
 const STAT_SCALE=Object.freeze({hp:25,damage:5});
 const statStep=(value,step)=>Math.max(step,Math.round(value/step)*step);
-const VERSION='0.42.0',SNAPSHOT_VERSION='0.26.0';
+const VERSION='0.42.1',SNAPSHOT_VERSION='0.26.0';
 const SIMULATION_TPS=30;
 const ticksForMs=ms=>Math.max(1,Math.round(ms*SIMULATION_TPS/1000));
 const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chunk:16,bottom:-32,top:48,sea:1,view:3,reach:4.5,dayMs:480000,
@@ -43,7 +43,7 @@ const CFG=Object.freeze({tickRate:SIMULATION_TPS,stepMs:1000/SIMULATION_TPS,chun
   // (n pets within range metres, nearest first, 0.42.0), how far from the owner a hostile creature draws them in (aggro) and how far they chase (leash),
   // follow distances, speeds, feeds to tame a wild creature and to grow a tamed baby, healing per food.
   chestSlots:9,
-  pets:{max:8,roam:4,staff:Object.freeze({wood:Object.freeze({n:2,range:12}),stone:Object.freeze({n:3,range:16}),iron:Object.freeze({n:4,range:20}),diamond:Object.freeze({n:6,range:24})}),aggro:10,leash:16,settle:2,followStart:5,teleport:22,speed:4.2,runSpeed:5.4,tameFeeds:3,growFeeds:3,heal:25,babyFactor:.6,babyHp:.9,adultHp:1.5,reach:3.6,aimRadius:.75},
+  pets:{max:8,roam:4,staff:Object.freeze({wood:Object.freeze({n:1,range:12}),stone:Object.freeze({n:2,range:16}),iron:Object.freeze({n:4,range:20}),diamond:Object.freeze({n:8,range:24})}),aggro:10,leash:16,settle:2,followStart:5,teleport:22,speed:4.2,runSpeed:5.4,tameFeeds:3,growFeeds:3,heal:25,babyFactor:.6,babyHp:.9,adultHp:1.5,reach:3.6,aimRadius:.75},
   creatures:{initialEncounterTicks:ticksForMs(6000),encounterCheckTicks:ticksForMs(2000),spawnTicks:ticksForMs(6000),maxWild:6,perPlayer:3,encounterRadius:32,nightAggro:10,despawnRadius:64,leash:26,dungeonPackSize:3,bossTrigger:22,bossAggro:14,bossLeash:24,bossRespawnMs:240000},
   worldgen:{caveSpacing:48,caveLength:34,mineSpacing:64,dungeonSpacing:112,resourceGuideRadius:128,rooms:6},rpg:{maxLevel:25,xp:{boss:250},mining:{coalOre:3,ironOre:5,goldOre:8,diamondOre:15,crystalBloom:12},dungeonClear:120,chest:18},
   // D-165 shoulder camera (Valheim/Enshrouded convention): mouse (pointer lock) or touch drag turns yaw and pitch; pitch
