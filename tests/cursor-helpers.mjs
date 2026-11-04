@@ -21,7 +21,7 @@ window.__mineScreen=b=>{const r=Bloom.app.renderer,sim=Bloom.app.sim,a=Bloom.app
 // The local player on screen: its centre, or (camera pulled in close, the centre off screen) any point the pick calls self.
 window.__selfScreen=()=>{const r=Bloom.app.renderer,a=Bloom.app.actor(),W=r.canvas.clientWidth,H=r.canvas.clientHeight,s=r.projected({x:a.pos.x,y:a.pos.y+.9,z:a.pos.z});
  if(s&&s.x>2&&s.y>2&&s.x<W-2&&s.y<H-2&&r.pickAt(s.x,s.y)?.self)return s;
- for(let y=12;y<H-2;y+=24)for(let x=12;x<W-2;x+=24)if(r.pickAt(x,y)?.self)return{x,y};return s;};
+ let best=null,bd=1e9;for(let y=12;y<H-2;y+=24)for(let x=12;x<W-2;x+=24)if(r.pickAt(x,y)?.self){const d=Math.hypot(x-W/2,y-H/2);if(d<bd){bd=d;best={x,y};}}return best||s;};
 window.__pointScreen=p=>Bloom.app.renderer.projected(p);
 // Turn the shoulder camera through the real locked-mouse path: lock, relative mousemove events, unlock (the cursor aim
 // is back afterwards). __look takes radians (yaw left +, pitch down +); __turnToward faces a world point.
