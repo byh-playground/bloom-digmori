@@ -83,11 +83,11 @@ try{
   variants.push(await page.evaluate(id=>{const s=Bloom.app.renderer.playerRig.samples.find(s=>s.key===id);return{view:s.view,flip:s.flip};},playerId));
  } assert.equal(new Set(variants.map(v=>v.view+':'+v.flip)).size,4,'the live player camera mapping should cover front, back and both mirrored side drawings');
  pass('camera sampling maps all eight facings onto the rig front/back/side drawings and the side mirror',variants);
- // Wild individuals, a boss and an egg block all route through the unit rig in the world pass with depth testing.
+ // Wild individuals, a boss and the starter pet all route through the unit rig in the world pass with depth testing.
  // 0.35.2 (D-113/D-114): no first-person camera. The fixture puts the unit on flat ground in front of the fixed
  // third-person camera (yaw step 0 looks toward -z), facing the camera, with a clear camera ray to it.
  const fixture=await page.evaluate(()=>{
-  const app=Bloom.app,sim=app.sim,p=app.actor(),terrain=sim.terrain,r=app.renderer;for(const a of Object.values(sim.actors).filter(a=>a.speciesId)){sim.physics.removeBody(a);delete sim.actors[a.id];}
+  const app=Bloom.app,sim=app.sim,p=app.actor(),terrain=sim.terrain,r=app.renderer;for(const a of Object.values(sim.actors).filter(a=>a.speciesId&&!a.ownerId)){sim.physics.removeBody(a);delete sim.actors[a.id];}
   const eye=r.eye,normalize=v=>{const n=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/n,y:v.y/n,z:v.z/n};};let candidate=null,details=null;
   outer:for(let forward=3;forward<=7;forward++)for(const side of [0,1,-1,2,-2]){
    const cx=Math.floor(p.pos.x)+side,cz=Math.floor(p.pos.z)-forward,h=terrain.height(cx,cz);if(h<Bloom.CFG.sea+1||h>19)continue;
@@ -97,14 +97,13 @@ try{
    candidate=sim.addCreature('rock-chick',pos);if(!candidate)continue;candidate.ai.cooldown=1e9;candidate.homePos={...pos};candidate.facing={x:0,y:0,z:1};details={id:candidate.id,pos:{...candidate.pos},target,eye:{...eye},block:{x:bx,y:by,z:bz},distance,dir};break outer;}
   if(!candidate)throw Error('no flat, directly visible fixture site');
   const boss=sim.addBoss('root',{x:p.pos.x-5,y:p.pos.y+.4,z:p.pos.z-6},null);boss.ai.cooldown=1e9;details.bossId=boss.id;
-  const ex=Math.floor(p.pos.x)+2,ez=Math.floor(p.pos.z)-2,ey=terrain.height(ex,ez)+1;terrain.set(ex,ey,ez,Bloom.BID.mushroomSnailEgg);sim.eggs[ex+','+ey+','+ez]={key:ex+','+ey+','+ez,x:ex,y:ey,z:ez,species:'mushroom-snail',owner:p.id,placedTick:sim.tick,hatchTick:sim.tick+1e6};details.egg=ex+','+ey+','+ez;
+  const pet=Object.values(sim.actors).find(a=>a.ownerId);details.petId=pet.id;
   app.localScheduler.stop();app.scene.reset();return details;});
- await page.waitForFunction(({id,bossId})=>{const s=Bloom.app.renderer.unitRig.samples;return s.some(v=>v.key===id&&v.role==='wild')&&s.some(v=>v.key===bossId&&v.role==='boss');},fixture,{timeout:15000});
- await page.waitForFunction(key=>Bloom.app.renderer.unitRig.samples.some(v=>v.key==='egg/'+key&&v.egg),fixture.egg,{timeout:15000});
- const routed=await page.evaluate(({id,bossId,egg})=>{const r=Bloom.app.renderer,s=r.unitRig.samples,pick=k=>{const v=s.find(v=>v.key===k);return v&&{mode:v.mode,role:v.role,species:v.species,stage:v.stage,anim:v.anim,view:v.view,depthTest:v.depthTest,depthWrite:v.depthWrite,parts:v.parts};};return{wild:pick(id),boss:pick(bossId),egg:pick('egg/'+egg),player:r.playerRig.samples.filter(v=>v.key===Bloom.app.localId).length};},fixture);
+ await page.waitForFunction(({id,bossId,petId})=>{const s=Bloom.app.renderer.unitRig.samples;return s.some(v=>v.key===id&&v.role==='wild')&&s.some(v=>v.key===bossId&&v.role==='boss')&&s.some(v=>v.key===petId&&v.role==='pet');},fixture,{timeout:15000});
+ const routed=await page.evaluate(({id,bossId,petId})=>{const r=Bloom.app.renderer,s=r.unitRig.samples,pick=k=>{const v=s.find(v=>v.key===k);return v&&{mode:v.mode,role:v.role,species:v.species,stage:v.stage,anim:v.anim,view:v.view,depthTest:v.depthTest,depthWrite:v.depthWrite,parts:v.parts};};return{wild:pick(id),boss:pick(bossId),pet:pick(petId),player:r.playerRig.samples.filter(v=>v.key===Bloom.app.localId).length};},fixture);
  assert.equal(routed.wild.species,'rock-chick');assert.equal(routed.wild.stage,'adult');assert.equal(routed.wild.depthTest,true);assert.equal(routed.wild.depthWrite,false);assert.equal(routed.wild.view,'front');
- assert.equal(routed.boss.species,'root');assert.equal(routed.boss.stage,'boss');assert.equal(routed.egg.species,'mushroom-snail');assert.equal(routed.egg.anim,'egg');
- pass('a wild rock chick, a root boss (stage boss, ×3 with hat) and a placed egg block are drawn by the cut-out unit rig in the 3D depth-tested pass',routed);
+ assert.equal(routed.boss.species,'root');assert.equal(routed.boss.stage,'boss');assert.equal(routed.pet.species,'root');assert.equal(routed.pet.role,'pet');assert.equal(routed.pet.stage,'adult');
+ pass('a wild rock chick, a root boss (stage boss, ×3 with hat) and the starter pet (role pet) are drawn by the cut-out unit rig in the 3D depth-tested pass',routed);
  // Turning the shoulder camera 180° around the player shows the rig's back.
  await page.evaluate(()=>Bloom.app.renderer.look(Math.PI,0));
  await page.waitForFunction(id=>Bloom.app.renderer.unitRig.samples.some(s=>s.key===id&&s.view==='back'),fixture.id,{timeout:5000});

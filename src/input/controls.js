@@ -17,7 +17,7 @@ class Controls {
   document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select,[contenteditable]'))return;const active=!app.modal(),bag=e.code==='Tab'||e.code==='KeyI';
    if(['KeyF','KeyG','KeyI','KeyJ','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9'].includes(e.code)||bag&&(active||!$('inventory').hidden))e.preventDefault();
    if(e.code==='Escape'){app.closeAll();return;}if(e.repeat)return;
-   if(e.code==='KeyK'){app.companionPanel.toggle();return;}if(['KeyZ','KeyX','KeyC'].includes(e.code)&&active){app.command({op:'companion',action:'select',slot:['KeyZ','KeyX','KeyC'].indexOf(e.code)});return;}
+   
    // Tab or I opens and closes the bag; Tab keeps moving focus inside other menus.
    if(bag&&(active||!$('inventory').hidden)){app.toggleInventory();return;}if(e.code==='KeyJ'){app.toggleJournal();return;}if(!active)return;
    // G throws the held item forward (Ctrl+G the stack).
@@ -59,7 +59,7 @@ class Controls {
   $('rotate-request').onclick=async()=>{try{if(document.documentElement.requestFullscreen&&!document.fullscreenElement)await document.documentElement.requestFullscreen();if(screen.orientation?.lock)await screen.orientation.lock('landscape');}catch(err){app.toast('기기 자동 회전을 켜고 가로로 돌려주세요.');}};
  }
  // The under-feet button is contextual: airborne (not swimming), alive, no menu, holding a placeable non-egg block.
- updatePlaceButton(){const a=this.app.actor(),s=a&&Inventory.selected(a.inventory),def=s&&ITEMS[s.id],show=!!a&&!a.dead&&!a.grounded&&!a.swim?.inWater&&!this.app.modal()&&!!def?.block&&!eggSpecies(def.block)&&a.companionSlot<0,b=$('mobile-place');if(b.hidden===show)b.hidden=!show;}
+ updatePlaceButton(){const a=this.app.actor(),s=a&&Inventory.selected(a.inventory),def=s&&ITEMS[s.id],show=!!a&&!a.dead&&!a.grounded&&!a.swim?.inWater&&!this.app.modal()&&!!def?.block,b=$('mobile-place');if(b.hidden===show)b.hidden=!show;}
  locked(){return document.pointerLockElement===this.app.renderer.canvas;}
  centerPointer(){const c=this.app.renderer.canvas;this.pointer.x=c.clientWidth/2;this.pointer.y=c.clientHeight/2;this.pointer.shown=true;}
  // The cursor highlight shows for a mouse, and for a touch only while the finger is down (and briefly after).
@@ -68,7 +68,7 @@ class Controls {
  primary(x,y,source){const a=this.app.actor();if(!a||a.dead)return;this.pressAction('left',source);}
  // A touch tap: the right click when it places or uses something, else the basic attack (left press and release).
  tap(x,y){const app=this.app,a=app.actor();if(!a||a.dead)return;const pick=app.renderer.pickAt(x,y),item=Inventory.stats(a).item,def=pick?.block&&BLOCKS[pick.block.id];
-  const use=a.companionSlot<0&&(!!item?.throwable||item?.id==='bucket'||item?.id==='waterBucket'||!pick?.entity&&(!!item?.block||!item?.weapon&&!!(def?.gate||def?.station)));
+  const use=(!!item?.throwable||item?.id==='bucket'||item?.id==='waterBucket'||!pick?.entity&&(!!item?.block||!item?.weapon&&!!(def?.gate||def?.station)));
   if(use){this.secondary(x,y,'touch');this.releaseAction('right');}else{this.primary(x,y,'touch');this.releaseAction('left');}}
  // Right click: place/use at the cursor face; in mid-air with the cursor on (or next to) the player, under the feet.
  secondary(x,y,source){const app=this.app,a=app.actor();if(!a||a.dead)return;const pick=app.renderer.pickAt(x,y);this.pressAction('right',source,!!pick?.self&&!a.grounded);}

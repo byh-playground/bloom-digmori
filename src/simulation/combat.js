@@ -8,7 +8,6 @@ const BASIC_CHAIN=Object.freeze([
 ]);
 const OVERHEAD_ARC=Object.freeze({from:1.02,to:-.72});
 function attackMotion(action){
- if(isMeleeAction(action))return 'clamp';
  if(action.motion)return action.motion;
  if(action.kind==='overhead'||action.kind==='slam')return 'overhead';
  if(action.kind==='lunge'||action.weapon==='spear')return 'thrust';
@@ -28,9 +27,6 @@ const IDENTITY_ROTATION=Object.freeze({x:0,y:0,z:0,w:1}),ZERO_VECTOR=Object.free
 function rotateByQuaternion(v,q){const tx=2*(q.y*v.z-q.z*v.y),ty=2*(q.z*v.x-q.x*v.z),tz=2*(q.x*v.y-q.y*v.x);return{x:v.x+q.w*tx+q.y*tz-q.z*ty,y:v.y+q.w*ty+q.z*tx-q.x*tz,z:v.z+q.w*tz+q.x*ty-q.y*tx};}
 function weaponHitRadius(action,scale=1){const widths={fist:.30,spear:.18,axe:.29};return (widths[action.weapon]||CFG.combat.hit.radius)*Math.min(scale,2);}
 function attackSamples(actor,action,from,to){
- if(isMeleeAction(action)){const out=[],count=Math.max(1,Math.ceil(Math.abs(to-from)*12));for(let n=1;n<=count;n++){
-  const previous=meleeWorldPose(actor,action,action.wind+lerp(from,to,(n-1)/count)*action.active),pose=meleeWorldPose(actor,action,action.wind+lerp(from,to,n/count)*action.active);
-  for(let i=0;i<pose.tips.length;i++)out.push({phase:lerp(from,to,n/count),pose:{origin:pose.origin},from:previous.tips[i],to:pose.tips[i],radius:.16});}return out;}
  const radius=weaponHitRadius(action,actor.scale||1),span=Math.abs(to-from),angle=(attackMotion(action)==='overhead'?OVERHEAD_ARC.from-OVERHEAD_ARC.to:Math.abs(action.arc||0))*span,
   step=Math.min(CFG.combat.hit.angularStep,radius/Math.max(.1,action.reach)*.85),count=clamp(Math.ceil(angle/step),1,CFG.combat.hit.maxSamples),out=[];
  for(let i=0;i<=count;i++){const phase=lerp(from,to,i/count),pose=attackPose(actor,action,phase);out.push({phase,pose,from:V.add(pose.origin,V.scale(pose.dir,Math.min(.25,pose.reach))),to:pose.tip,radius});}
@@ -59,11 +55,11 @@ function aimDirection(a){const f=a.facing,h=Math.hypot(f.x,f.z);if(h<.2)return b
 class Combat {
  static state(){return {state:'idle',elapsed:0,action:null,left:false,combo:0,comboUntil:0,comboWeapon:null,queued:false,airRollUsed:false,invul:0};}
  static canAct(c){return c.state==='idle'||(c.state==='attack'&&c.elapsed>=c.action.wind+c.action.active+c.action.recovery*.68);}
- static weapon(a,sim=null){const companion=sim?.companions.equipped(a);if(companion){const def=SPECIES[companion.kind];return{...def.capabilities.attack,name:def.name,wind:300,active:def.capabilities.attack.mode==='ball'?80:280,recovery:350,arc:1.9};}const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,reach:3.0,arc:1.25,weight:0,wind:200,active:100,recovery:350};}
+ static weapon(a,sim=null){const st=Inventory.stats(a);return st.weapon||{name:'맨손',damage:10,reach:3.0,arc:1.25,weight:0,wind:200,active:100,recovery:350};}
  static resetCombo(c){c.combo=0;c.comboUntil=0;c.comboWeapon=null;c.queued=false;}
- static equipmentKey(a,sim=null){return sim?.companions.equipped(a)?.id||Inventory.stats(a).item?.id||'fist';}
+ static equipmentKey(a,sim=null){return Inventory.stats(a).item?.id||'fist';}
  // The only player action is the basic chain: three melee stages for fists, sword, spear and axe.
- static makeAction(a,sim=null){if(sim&&!a.enemy&&a.companionSlot>=0)return sim.companions.action(a);const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
+ static makeAction(a,sim=null){const st=Inventory.stats(a),w=this.weapon(a),c=a.combat,damageBonus=st.material?.damageBonus??0,weapon=st.item?.weapon||'fist',weaponKey=st.item?.id||'fist';
   const count=BASIC_CHAIN.length;
   const continuing=c.comboWeapon===weaponKey&&(c.comboUntil>0||c.state==='attack'&&c.action?.name==='light');
   const combo=continuing?c.combo%count:0,stage=BASIC_CHAIN[combo];
@@ -76,7 +72,7 @@ class Combat {
    arc:w.arc,damage:statStep(Math.max(STAT_SCALE.damage,w.damage+damageBonus+(a.rpg?.skills.might||0)*5)*(1+combo*.1),STAT_SCALE.damage),heavy:false,
    impulse:(CFG.combat.knockback.weapons[weapon]||5)*(1+combo*.08),enemy:a.enemy,dir:aimDirection(a),hits:[],touched:[],fired:false,sequence:0};
  }
- static start(a,action,sim){const c=a.combat;if(!action||!this.canAct(c)||action.companionId&&sim.companions.ready(a)?.id!==action.companionId)return false;if(action.companionId&&!sim.companions.start(a,action))return false;
+ static start(a,action,sim){const c=a.combat;if(!action||!this.canAct(c)){return false;}
   action.sequence=++sim.actionSequence;action.enemy=a.enemy;c.state='attack';c.elapsed=0;c.action=action;c.queued=false;
   if(action.name==='light'){c.combo=action.combo+1;c.comboUntil=0;c.comboWeapon=action.weaponKey;}else this.resetCombo(c);
   sim.emit('windup',a,{kind:action.kind,weapon:action.weapon,combo:action.combo,comboCount:action.comboCount,label:action.comboLabel});return true;
@@ -118,16 +114,16 @@ class Combat {
   // against authoritative water state on this simulation tick.
   const submerged=sim.terrain.water.bodyState(a.pos,CFG.player.eyeHeight,CFG.player.radius*(a.scale||1)).inWater;
   if(input.roll&&!submerged)this.roll(a,move,sim);
-  if(c.state==='attack'&&ld&&!c.action?.companionId)c.queued=true; // One buffered successor; repeated taps never create a hidden multi-hit queue.
+  if(c.state==='attack'&&ld)c.queued=true; // One buffered successor; repeated taps never create a hidden multi-hit queue.
   // A press starts the next basic attack immediately; there is no hold-to-charge stage.
-  if(ld&&c.state!=='attack'&&this.canAct(c)&&(a.companionSlot<0||sim.companions.ready(a))&&!this.start(a,this.makeAction(a,sim),sim))this.resetCombo(c);
+  if(ld&&c.state!=='attack'&&this.canAct(c)&&!this.start(a,this.makeAction(a,sim),sim))this.resetCombo(c);
   c.left=input.left;
   if(c.state==='attack')speed*=.32;
   if(c.state==='roll'){move=c.action.dir;speed=rollSpeed(c.action,c.elapsed);}
   if(c.state==='dead'){speed=0;move={x:0,y:0,z:0};}
   const sprinting=input.sprint&&c.state==='idle'&&a.knock<=0&&Math.hypot(move.x,move.z)>.05;
   if(sprinting){speed=CFG.player.run;a.sprinting=true;}
-  const turn=c.state==='attack'&&c.action&&!c.action.companionId?c.action.dir:Math.hypot(move.x,move.z)>.1?move:null,th=turn?Math.hypot(turn.x,turn.z):0;if(th>.05)a.heading={x:turn.x/th,z:turn.z/th};
+  const turn=c.state==='attack'&&c.action?c.action.dir:Math.hypot(move.x,move.z)>.1?move:null,th=turn?Math.hypot(turn.x,turn.z):0;if(th>.05)a.heading={x:turn.x/th,z:turn.z/th};
   return{move,speed,jump:input.jump&&c.state==='idle',autoJump:c.state==='idle',swimRise:input.swimRise,swimDive:input.swimDive&&submerged};
  }
  static tick(a,sim){const c=a.combat,dt=CFG.stepMs;if(a.dead)return;c.elapsed+=dt;if(c.state!=='attack'){c.comboUntil=Math.max(0,c.comboUntil-dt);if(c.comboUntil===0&&c.combo>0)this.resetCombo(c);}c.invul=Math.max(0,c.invul-dt);a.knock=Math.max(0,(a.knock||0)-dt);
@@ -135,7 +131,7 @@ class Combat {
   if(c.state!=='attack')return;const act=c.action,prev=c.elapsed-dt,end=act.wind+act.active;
   if(c.elapsed>act.wind&&prev<end){
    if(!act.swung){act.swung=true;sim.emit('swing',a,{weapon:act.weapon,kind:act.kind,sequence:act.sequence,combo:act.combo,comboCount:act.comboCount,label:act.comboLabel});}
-   if(['companionBall','spit'].includes(act.kind)){
+   if(act.kind==='spit'){
     if(!act.fired){act.fired=true;sim.fire(a,act);}
    }else if(act.kind==='burst'){
     if(!act.fired){act.fired=true;for(const t of Object.values(sim.actors).sort((a,b)=>cmp(a.id,b.id))){if(t.id===a.id||t.dead||t.suspended)continue;const d=V.sub(t.pos,a.pos);if(V.len(d)<act.reach&&sim.physics.sight(V.add(a.pos,{x:0,y:1,z:0}),V.add(t.pos,{x:0,y:1,z:0}),a))this.hit(a.id,t,act,sim);}sim.emit('burst',a,{radius:act.reach});}
@@ -152,9 +148,13 @@ class Combat {
   // Do not bypass canAct for rolls: this dedicated transition only links a buffered basic attack.
   if(link||c.elapsed>=end+act.recovery)this.finish(a,sim);
  }
+ // A pet and its owner (and the owner's other pets) never hurt each other.
+ static allied(a,b){return !!(a.ownerId&&(a.ownerId===b.id||a.ownerId===b.ownerId)||b.ownerId&&b.ownerId===a.id);}
  static hit(sourceId,target,payload,sim,contact=null){
   if(target.dead||target.suspended||sourceId===target.id)return false;
   const source=sim.actors[sourceId];
+  if(source&&this.allied(source,target))return false;
+  if(source?.ownerId)sim.progress.pet=true;
   const c=target.combat,point=contact?.point||V.add(target.pos,{x:0,y:target.offset||.9,z:0});
   if(c.invul>0||c.state==='roll'&&c.elapsed>=CFG.iframes.start&&c.elapsed<CFG.iframes.end){sim.emit('evade',target,{point,sourceId});return false;}
   const stats=target.boss||target.speciesId||target.enemy?{defense:target.boss?25:0}:Inventory.stats(target),projectile=payload.type==='shot';
@@ -162,11 +162,11 @@ class Combat {
   // 0.35.1 equipment progression (Gear): a player's own strike uses its realm attack factor (무기 below tier ×0.4, diamond
   // ×1.6); a player hit takes its realm armor factor (below tier ×2, diamond ×0.6). Unit strikes are not scaled.
   const isPlayer=a=>a&&!a.enemy&&!a.speciesId&&!a.boss;
-  if(isPlayer(source)&&!payload.companionId)damage=Gear.scale(damage,Gear.status(source,sim.terrain).attack);
+  if(isPlayer(source))damage=Gear.scale(damage,Gear.status(source,sim.terrain).attack);
   if(isPlayer(target))damage=Gear.scale(damage,Gear.status(target,sim.terrain).taken);
   target.hp=Math.max(0,target.hp-damage);if(isPlayer(target))target.hurtTick=sim.tick;
   const heavy=!!payload.heavy,lethal=target.hp<=0;
-  if(target.speciesId&&source){target.wildState='retaliating';target.enemy=true;target.targetId=source.id;}
+  if(target.speciesId&&source&&!target.ownerId){target.wildState='retaliating';target.enemy=true;target.targetId=source.id;}
   if(!target.enemy)c.invul=200;
   let push=projectile?V.norm({x:(payload.flightVelocity||payload.velocity||payload.dir).x,y:0,z:(payload.flightVelocity||payload.velocity||payload.dir).z}):source?V.norm({x:target.pos.x-source.pos.x,y:0,z:target.pos.z-source.pos.z}):V.norm({x:payload.dir.x,y:0,z:payload.dir.z});
   if(V.len(push)<.001)push=V.norm({x:payload.dir.x,y:0,z:payload.dir.z});

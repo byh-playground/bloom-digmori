@@ -1,4 +1,5 @@
 'use strict';
+const FENCE_DIRS=Object.freeze([[1,0],[-1,0],[0,1],[0,-1]]);
 /* three.js world renderer. Presentation reads simulation/display state only.
  * Every draw is submitted in the legacy pass order (sky → terrain → props → characters → sprites →
  * drops → water → effects → late characters): one ordered list via renderOrder with
@@ -54,19 +55,17 @@ class Renderer {
   this.atlas=createSpriteAtlas(this.three.capabilities.maxTextureSize);this.atlas.texture=this.canvasTexture(this.atlas.canvas);
   this.meshes=new Map();this.meshBuilder=new MeshBuilder();this.worldRef=null;this.streamSignature=null;this.streamComplete=false;this.visibleChunks=new Set();this.readyChunks=new Set();this.visibleColumns=new Set();this.visibleY={min:0,max:-1};this.particles=[];this.blockFx=null;this.mineFxStep=-1;this.actionFx=null;this.blockFxStats={mines:0,places:0,chips:0,blocked:0};this.vp=null;this.eye=null;this.frame=0;this.fov=65;this.ambient=1;this.fog=new Float32Array([.69,.85,.86]);this.frameLights=NO_LIGHTS;this.stats={drawCalls:0,vertices:0};
   const blockAtlas=buildBlockAtlas(),blockTexture=new T.DataTexture(blockAtlas.data,blockAtlas.width,blockAtlas.height,T.RGBAFormat,T.UnsignedByteType);this.pixelTexture(blockTexture,false);this.blockAtlas={...blockAtlas,texture:blockTexture};
-  this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.eggIcons(unitRigs);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
+  this.iconCanvases=new Map();this.blockIcons=createBlockIcons(this.blockAtlas,this.iconCanvases);this.itemIcons=createItemIcons(this.iconCanvases);this.dropAtlas=createDropAtlas(this.iconCanvases);this.dropAtlas.texture=this.canvasTexture(this.dropAtlas.canvas);
   this.combatFx=new CombatVisuals(this);this.healthHud=new EnemyHealthHUD(this);
   this.terrainMaterial=this.material(RENDER_GLSL.terrainVertex,RENDER_GLSL.terrainFragment,{vp:{value:new Float32Array(16)},eye:{value:new Float32Array(3)},fog:{value:new Float32Array(3)},lights:{value:new Float32Array(32)},ambient:{value:1},textured:{value:1},tiles:{value:blockTexture}});
   this.waterMaterial=this.material(RENDER_GLSL.waterVertex,RENDER_GLSL.waterFragment,{vp:{value:new Float32Array(16)},phase:{value:0}},{blend:'alpha',depthWrite:false});this.waterMeshes=new Map();this.waterDrawList=[];
   const skyGeometry=new T.BufferGeometry();skyGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),2));
   this.sky=this.worldObject(new T.Mesh(skyGeometry,this.material(RENDER_GLSL.skyVertex,RENDER_GLSL.skyFragment,{yaw:{value:0},daylight:{value:1},twilight:{value:0},sun:{value:new Float32Array(3)},moon:{value:new Float32Array(3)}},{depthTest:false,depthWrite:false})));
   this.playerRig=new PlayerRigRenderer(this,playerRig);
-  // Companion species (wild, boss, owned, eggs) are the cut-out unit rig; UnitPresenter maps display state to looks.
+  // Creature species (wild, boss, pets) are the cut-out unit rig; UnitPresenter maps display state to looks.
   this.unitRig=new UnitRigRenderer(this,unitRigs);this.units=new UnitPresenter(this);
  }
- // Egg items, drops and inventory slots show the species' authored egg PNG instead of a textured cube.
- eggIcons(unitRigs){for(const block of BLOCKS){if(!block.egg)continue;const id=BID[block.id],image=unitRigs[block.egg].images.egg,c=document.createElement('canvas');c.width=40;c.height=44;const ctx=c.getContext('2d'),k=Math.min(36/image.width,40/image.height);ctx.drawImage(image,(40-image.width*k)/2,42-image.height*k,image.width*k,image.height*k);this.blockIcons[id]=c.toDataURL('image/png');this.iconCanvases.set('block:'+id,c);}}
- // Players are the cut-out player rig; companion species go through UnitPresenter (this.units).
+ // Players are the cut-out player rig; creature species go through UnitPresenter (this.units).
  hasCharacter(kind){return kind==='player';}
  queueCharacter(item){this.playerRig.queue(item);}
  // Nearest-filtered, unmipmapped, clamped textures exactly like the legacy atlases.
@@ -224,7 +223,7 @@ class Renderer {
   const eye={x:actor.pos.x,y:actor.pos.y+CFG.player.eyeHeight,z:actor.pos.z},d=V.sub(cursor.point,eye),len=V.len(d);if(len<=.05)return cursor;
   const ray=sim.rayBlock({pos:actor.pos,facing:aimFacing(Math.atan2(-d.x,-d.z),Math.asin(clamp(-d.y/len,-1,1)))});return{...cursor,block:ray&&{...ray,point:cursor.point,distance:len}};}
  render(sim,authority,dt,displayFrame){
-  const view={actors:{},drops:{},projectiles:{},companions:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':model.displayKind==='companion'?'companions':'projectiles'][model.id]=value;});
+  const view={actors:{},drops:{},projectiles:{}};displayFrame.forEach(model=>{const value=model.displayKind==='actor'?{...model,facing:direction(model.yaw,model.pitch)}:model;view[model.displayKind==='actor'?'actors':model.displayKind==='drop'?'drops':'projectiles'][model.id]=value;});
   const actor=view.actors[authority.id];if(!actor)return;this.displayTimeMs=displayFrame.timeMs;
   if(this.worldRef!==sim.terrain){this.combatFx.reset();this.particles.length=0;this.blockFx=null;this.actionFx=null;}
   this.combatFx.advance(dt);this.frame++;this.resize();const viewPos=actor.pos;this.simRef=sim;this.localId=authority.id;this.lastActors=view.actors;this.updateCamera(actor,sim,viewPos,dt);this.stream(sim,authority);const daylight=sim.daylight(),phase=sim.dayPhase(),alt=Math.cos(TAU*phase),twilight=Math.pow(1-Math.abs(alt),3);
@@ -250,7 +249,7 @@ class Renderer {
     const bob=Math.sin(d.age*.007+(hashStr(d.id)%37)*.12)*.045;
     this.sprite(dropSprites,{x:dp.x,y:dp.y-.075+bob,z:dp.z},.72,.72,frame,[1,1,1,1]);}
 
-  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(s.companionId||!this.worldVisualReady(sp,.08))continue;
+  for(const s of Object.values(view.projectiles)){const sp=s.pos;if(!this.worldVisualReady(sp,.08))continue;
    // A thrown item (the merge potion) spins as its item sprite; arrows and spit stay beams.
    if(s.item&&this.dropAtlas.frames[s.item]){this.sprite(dropSprites,{x:sp.x,y:sp.y-.2,z:sp.z},.42,.42,this.dropAtlas.frames[s.item],[1,1,1,1],false,(s.age||0)*.012);continue;}
    this.box(dyn,sp,{x:.08,y:.08,z:.55},s.enemy?[.75,.42,.73]:[.9,.79,.4],s.dir);}
@@ -296,7 +295,7 @@ class Renderer {
    fx.time+=dt;if(fx.time>=fx.duration)this.blockFx=null;
   }
   if(this.actionFx){this.actionFx.elapsed+=dt;if(this.actionFx.elapsed>=this.actionFx.duration)this.actionFx=null;}
-  this.units.prepare(view,sim,actor,dyn);this.drawFences(dyn,sim);
+  this.drawFences(dyn,sim);
   this.drawColored(dyn);
   this.playerRig.draw('world');this.unitRig.draw('world');
   this.drawSprites(sprites,this.atlas.texture,{depthWrite:false});
@@ -316,7 +315,7 @@ class Renderer {
   const joins=(x,y,z)=>{const id=t.get(x,y,z),b=BLOCKS[id];return !!id&&!!b&&(b.fence||!!b.gate||t.isSolid(id)&&b.mesh!==false);};
   for(const f of this.fenceIndex(t).values()){const c={x:f.x+.5,y:f.y,z:f.z+.5};if(Math.abs(c.x-eye.x)>44||Math.abs(c.z-eye.z)>44||!this.worldVisualReady(c,.2))continue;const b=BLOCKS[f.id];
    if(!b.gate){this.box(out,c,{x:.25,y:1,z:.25},wood);
-    for(const [dx,dz]of RANCH_DIRS){if(!joins(f.x+dx,f.y,f.z+dz))continue;for(const y of [.36,.74])this.box(out,{x:c.x+dx*.31,y:c.y+y,z:c.z+dz*.31},dx?{x:.38,y:.12,z:.09}:{x:.09,y:.12,z:.38},rail);}continue;}
+    for(const [dx,dz]of FENCE_DIRS){if(!joins(f.x+dx,f.y,f.z+dz))continue;for(const y of [.36,.74])this.box(out,{x:c.x+dx*.31,y:c.y+y,z:c.z+dz*.31},dx?{x:.38,y:.12,z:.09}:{x:.09,y:.12,z:.38},rail);}continue;}
    const alongX=joins(f.x+1,f.y,f.z)||joins(f.x-1,f.y,f.z)||!(joins(f.x,f.y,f.z+1)||joins(f.x,f.y,f.z-1)),u=alongX?{x:1,z:0}:{x:0,z:1},n=alongX?{x:0,z:1}:{x:1,z:0},S=(a,b)=>alongX?{x:a,y:.12,z:b}:{x:b,y:.12,z:a};
    for(const s of [-1,1]){const end={x:c.x+u.x*s*.44,y:c.y+.08,z:c.z+u.z*s*.44};this.box(out,end,{x:.1,y:.92,z:.1},wood);
     if(b.gate==='closed'){for(const y of [.3,.74])this.box(out,{x:c.x+u.x*s*.22,y:c.y+y,z:c.z+u.z*s*.22},S(.44,.08),gate);this.box(out,{x:c.x+u.x*s*.04,y:c.y+.3,z:c.z+u.z*s*.04},{x:.08,y:.56,z:.08},gate);}

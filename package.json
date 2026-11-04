@@ -7,12 +7,11 @@
     "test": "node tests/core.e2e.mjs && node tests/camera.e2e.mjs",
     "test:camera": "node tests/camera.e2e.mjs",
     "test:companion-svg": "node tests/companion-svg.e2e.mjs",
-    "test:companions": "node tests/companions.e2e.mjs",
-    "test:companions:rtc": "node tests/companions-rtc.e2e.mjs",
+    "test:pets": "node tests/pets.e2e.mjs",
+    "test:pets:rtc": "node tests/pets-rtc.e2e.mjs",
     "test:unit-rig": "node tests/unit-rig.e2e.mjs",
     "test:player-poses": "node tests/player-poses.e2e.mjs",
-    "test:progression": "node tests/progression.e2e.mjs",
-    "test:playthrough": "node tests/playthrough.e2e.mjs"
+    "test:progression": "node tests/progression.e2e.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

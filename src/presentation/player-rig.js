@@ -150,7 +150,7 @@ function rigAttackProgress(action,elapsed){const {strikeStart:ts,strikeEnd:te,re
  if(elapsed<w)return ts*clamp(elapsed/w,0,1);if(elapsed<w+a)return lerp(ts,te,(elapsed-w)/a);return lerp(te,rest,clamp((elapsed-w-a)/r,0,1));}
 // Display actor state → rig look. `lastFlip` keeps the side drawing's mirror while the facing is near the camera axis.
 function playerRigLook(a,cameraYaw,reaction,lastFlip=false){
- const c=a.combat,act=c.action,rolling=c.state==='roll'&&!!act,attacking=c.state==='attack'&&!!act&&!act.companionId,item=Inventory.stats(a).item;
+ const c=a.combat,act=c.action,rolling=c.state==='roll'&&!!act,attacking=c.state==='attack'&&!!act,item=Inventory.stats(a).item;
  const held=attacking?ITEMS[act.weaponKey]||null:item,weaponId=rigWeaponOf(held),weapon=RIG_WEAPONS.includes(weaponId)?weaponId:null;
  const worn=slot=>{const s=a.inventory.armor[slot];return s?ITEMS[s.id].material:null};
  const f=rolling||attacking?act.dir:a.facing,sx=f.x*Math.cos(cameraYaw)-f.z*Math.sin(cameraYaw),toward=f.x*Math.sin(cameraYaw)+f.z*Math.cos(cameraYaw);
